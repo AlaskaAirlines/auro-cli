@@ -1,0 +1,24 @@
+{
+  "name": "auro-cli",
+  "version": "0.0.1",
+  "description": "A cli tool for common Auro design system tasks.",
+  "type": "module",
+  "bin": {
+    "auro": "./bin/index.js"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Ryan Menner",
+  "license": "ISC",
+  "dependencies": {
+    "@open-wc/dev-server-hmr": "^0.1.2-next.0",
+    "@web/dev-server": "^0.4.6",
+    "chalk": "^5.3.0",
+    "commander": "^12.1.0",
+    "figlet": "^1.8.0",
+    "gradient-string": "^3.0.0",
+    "inquirer": "^12.0.1",
+    "ora": "^8.1.1"
+  }
+}
