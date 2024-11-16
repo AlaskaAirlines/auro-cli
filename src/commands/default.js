@@ -3,7 +3,7 @@ import chalk from "chalk";
 import inquirer from "inquirer";
 import ora from "ora";
 
-export default program.action((options) => {
+export default program.action(() => {
   inquirer
     .prompt([
       {
