@@ -52,31 +52,29 @@ The default graphite width of 10mm is always used for performance reasons.
 ```
 
 #### MINOR
-
 ```
 feat(pencil): add 'graphiteWidth' option
 ```
 
 #### PATCH
-
 ```
 fix(pencil): stop graphite breaking when too much pressure applied
 ```
 
 #### Other commit types
 
-| type            | description                                                                                                 |
-| --------------- | ----------------------------------------------------------------------------------------------------------- |
-| build           | Changes that affect the build system or external dependencies (example scopes: gulp, broccoli, npm)         |
-| ci              | Changes to our CI configuration files and scripts (example scopes: Travis, Circle, BrowserStack, SauceLabs) |
-| docs            | Documentation only changes                                                                                  |
-| feat            | A new feature (this correlates with `MINOR` in semantic versioning)                                         |
-| fix             | A bug fix (this correlates with `PATCH` in semantic versioning)                                             |
-| perf            | A code change that improves performance                                                                     |
-| BREAKING CHANGE | A code change that is not backwards compatible (correlating with `MAJOR` in semantic versioning)            |
-| refactor        | A code change that neither fixes a bug nor adds a feature                                                   |
-| style           | Changes that do not affect the meaning of the code (white-space, formatting, missing semi-colons, etc)      |
-| test            | Adding missing tests or correcting existing tests                                                           |
+| type | description |
+|---|---|
+| build | Changes that affect the build system or external dependencies (example scopes: gulp, broccoli, npm) |
+| ci | Changes to our CI configuration files and scripts (example scopes: Travis, Circle, BrowserStack, SauceLabs) |
+| docs | Documentation only changes |
+| feat | A new feature (this correlates with `MINOR` in semantic versioning) |
+| fix | A bug fix (this correlates with `PATCH` in semantic versioning) |
+| perf | A code change that improves performance |
+| BREAKING CHANGE | A code change that is not backwards compatible (correlating with `MAJOR` in semantic versioning) |
+| refactor | A code change that neither fixes a bug nor adds a feature |
+| style | Changes that do not affect the meaning of the code (white-space, formatting, missing semi-colons, etc) |
+| test | Adding missing tests or correcting existing tests  |
 
 #### Git commit messages
 
@@ -84,9 +82,9 @@ Once you have completed your feature update, please commit all changes to the br
 
 Imperative mood simply means _“spoken or written as if giving a command or instruction”_. A few examples are:
 
-- Clean your room
-- Close the door
-- Take out the trash
+* Clean your room
+* Close the door
+* Take out the trash
 
 A properly formed Git commit subject line should always be able to complete the following sentence:
 
@@ -94,8 +92,8 @@ _"If applied, this commit will (your subject line here)."_
 
 For example:
 
-- If applied, this commit will `refactor component X for accessibility`
-- If applied, this commit will `add feature Y to component X`
+* If applied, this commit will `refactor component X for accessibility`
+* If applied, this commit will `add feature Y to component X`
 
 Example messages when using Conventional Commits:
 
