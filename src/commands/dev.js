@@ -7,9 +7,11 @@ export default program
   .option("-o, --open <type>", "Open server to a specific directory")
   .option("-p, --port <type>", "Change the server port")
   .action((options) => {
+    const port = options.port ? `--port ${options.port}` : "";
+
     shell("npx web-dev-server", [
       `--open ${options.open || "demo/"}`,
-      `--port ${options.port || "8000"}`,
+      `${port}`,
       "--node-resolve",
       "--watch",
     ]);
