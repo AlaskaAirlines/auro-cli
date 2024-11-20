@@ -11,7 +11,7 @@ export default program
 
     shell("npx web-dev-server", [
       `--open ${options.open || "demo/"}`,
-      `${port}`,
+      port,
       "--node-resolve",
       "--watch",
     ]);
