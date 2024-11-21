@@ -1,6 +1,6 @@
 import { program } from "commander";
 import { startDevServer } from "@web/dev-server";
-import { hmrPlugin, presets } from "@open-wc/dev-server-hmr";
+import { hmrPlugin } from "@open-wc/dev-server-hmr";
 
 export default program
   .command("dev")
@@ -9,19 +9,16 @@ export default program
   .option("-p, --port <type>", "Change the server port")
   .action((options) => {
     const config = {
-      ...(options.port && { port: options.port }),
-      ...{
-        open: options.open || "demo",
-        watch: true,
-        nodeResolve: true,
-        basePath: "/",
-        plugins: [
-          hmrPlugin({
-            include: ["src/**/*", "demo/**/*", "apiExamples/**/*", "docs/**/*"],
-            presets: [presets.lit, presets.litElement],
-          }),
-        ],
-      },
+      port: Number(options.port) || undefined,
+      open: options.open || "demo/",
+      watch: true,
+      nodeResolve: true,
+      basePath: "/",
+      plugins: [
+        hmrPlugin({
+          include: ["src/**/*", "demo/**/*", "apiExamples/**/*", "docs/**/*"],
+        }),
+      ],
     };
 
     startDevServer({
