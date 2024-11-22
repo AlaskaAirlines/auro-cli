@@ -1,14 +1,29 @@
 import { program } from "commander";
-import { shell } from "../utils/shell.js";
+import { startDevServer } from "@web/dev-server";
+import { hmrPlugin } from "@open-wc/dev-server-hmr";
 
 export default program
   .command("dev")
   .description("Runs web-dev-server command")
-  .option("-p, --path <type>", "Customize the path")
+  .option("-o, --open <type>", "Open server to a specific directory")
+  .option("-p, --port <type>", "Change the server port")
   .action((options) => {
-    shell("npx web-dev-server", [
-      `--open ${options.path || "demo/"}`,
-      "--node-resolve",
-      "--watch",
-    ]);
+    const config = {
+      port: Number(options.port) || undefined,
+      open: options.open || "demo/",
+      watch: true,
+      nodeResolve: true,
+      basePath: "/",
+      plugins: [
+        hmrPlugin({
+          include: ["src/**/*", "demo/**/*", "apiExamples/**/*", "docs/**/*"],
+        }),
+      ],
+    };
+
+    startDevServer({
+      config,
+      readCliArgs: false,
+      readFileConfig: false,
+    });
   });
