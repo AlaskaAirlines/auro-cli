@@ -49,7 +49,8 @@
   },
   "scripts": {
     "lint": "npx eslint --fix",
-    "prepare": "husky"
+    "prepare": "husky",
+    "test": "echo \"Notice: no tests available\" && exit 0"
   },
   "type": "module",
   "version": "0.0.1"
