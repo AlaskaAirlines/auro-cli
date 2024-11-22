@@ -1,0 +1,9 @@
+# standard ignore
+*config*
+*conf*
+LICENSE
+NOTICE
+
+.github/
+.gitignore
+eslint.config.js

@@ -1,6 +1,6 @@
 name: Bug report
 description: Create a report to help us improve
-title: '[issue summary] Please verify version before submitting new issue'
+title: "[issue summary] Please verify version before submitting new issue"
 labels:
   - auro-cli
 body:
@@ -31,7 +31,8 @@ body:
     id: expected
     attributes:
       label: Expected behavior
-      description: Please add a clear and concise description of what you expected to
+      description:
+        Please add a clear and concise description of what you expected to
         happen.
   - type: dropdown
     id: os

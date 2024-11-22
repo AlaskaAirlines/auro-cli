@@ -99,73 +99,74 @@ labels:
   - name: good first issue
     description: Good for newcomers
     aliases:
-    - beginner-friendly
-    - beginner
-    - good-starter-issue
-    - good for beginner
-    - Good for beginners
-    - starter-issue
-    - starter
+      - beginner-friendly
+      - beginner
+      - good-starter-issue
+      - good for beginner
+      - Good for beginners
+      - starter-issue
+      - starter
   - name: help wanted
-    description: Extra attention is needed, this user requires assistance to complete
+    description:
+      Extra attention is needed, this user requires assistance to complete
       the work
   - name: released
     description: Completed work has been released
-  - name: 'Status: Work In Progress'
+  - name: "Status: Work In Progress"
     description: Issue or Pull Request work is in Progress
-  - name: 'Status: Review Needed'
+  - name: "Status: Review Needed"
     description: Work is completed, user is requesting feedback
-  - name: 'Status: Complete'
+  - name: "Status: Complete"
     description: Owner has completed work and considers it ready to be merged
-  - name: 'Status: Blocked'
+  - name: "Status: Blocked"
     description: Progress on the issue is Blocked, immediate attention is required
     aliases:
-    - blocked
-  - name: 'Abandoned'
+      - blocked
+  - name: "Abandoned"
     description: The author of this issue or Pull Request is not responding
     aliases:
-    - wontfix
-    - invalid
-  - name: 'Type: Bug'
+      - wontfix
+      - invalid
+  - name: "Type: Bug"
     description: Bug or Bug fixes
     aliases:
-    - bug
-  - name: 'Type: Feature'
+      - bug
+  - name: "Type: Feature"
     description: New Feature
     aliases:
-    - enhancement
-  - name: 'Type: Design'
+      - enhancement
+  - name: "Type: Design"
     description: New Design
     aliases:
-    - enhancement
-  - name: 'Type: Content'
+      - enhancement
+  - name: "Type: Content"
     description: Adding or editing content
     aliases:
-    - enhancement
-  - name: 'Type: Refactoring'
+      - enhancement
+  - name: "Type: Refactoring"
     description: A code change that neither fixes a bug nor adds a feature
     aliases:
-    - refactor
-  - name: 'Type: Documentation'
+      - refactor
+  - name: "Type: Documentation"
     description: Documentation only changes
     aliases:
-    - documents
-    - document
-  - name: 'Type: CI'
+      - documents
+      - document
+  - name: "Type: CI"
     description: Changes to CI configuration files and scripts
     aliases:
-    - ci
-  - name: 'Type: Perf'
+      - ci
+  - name: "Type: Perf"
     description: Performance update to existing code
-  - name: 'Question'
+  - name: "Question"
     description: Further information is requested
     aliases:
-    - question
-  - name: 'Type: Dependencies'
+      - question
+  - name: "Type: Dependencies"
     description: Pull requests that update a dependency file
     aliases:
-    - dependencies
-  - name: 'Type: UI Update'
+      - dependencies
+  - name: "Type: UI Update"
     description: Changes to the user interface
     aliases:
-    - dependencies
+      - dependencies
