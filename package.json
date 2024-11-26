@@ -1,6 +1,6 @@
 {
   "bin": {
-    "auro": "./bin/index.js"
+    "auro": "bin/index.js"
   },
   "dependencies": {
     "@babel/eslint-parser": "^7.25.9",
