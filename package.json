@@ -8,7 +8,8 @@
   },
   "scripts": {
     "lint": "eslint --cache --fix && prettier . --write",
-    "prepare": "husky install"
+    "prepare": "husky install",
+    "test": "echo \"Notice: no tests available\" && exit 0"
   },
   "author": "Ryan Menner",
   "license": "ISC",
