@@ -43,7 +43,7 @@
       "prettier --write"
     ]
   },
-  "name": "auro-cli",
+  "name": "@aurodesignsystem/auro-cli",
   "publishConfig": {
     "access": "public"
   },
