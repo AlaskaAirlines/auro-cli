@@ -12,7 +12,8 @@
     "figlet": "^1.8.0",
     "gradient-string": "^3.0.0",
     "inquirer": "^12.1.0",
-    "ora": "^8.1.1"
+    "ora": "^8.1.1",
+    "simple-git": "^3.27.0"
   },
   "description": "A cli tool to support the Auro Design System",
   "devDependencies": {
