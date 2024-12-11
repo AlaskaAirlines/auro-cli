@@ -1,7 +1,9 @@
 import fs from "fs";
-import chalk from "chalk";
 import { promisify } from "util";
 import simpleGit from "simple-git";
+import { Logger } from "@aurodesignsystem/auro-library/scripts/utils/logger.mjs";
+
+import "../commands/sync.js";
 
 const appendFile = promisify(fs.appendFile);
 const git = simpleGit();
@@ -10,9 +12,9 @@ const git = simpleGit();
 const addToGitignore = async (pattern) => {
   try {
     await appendFile(".gitignore", `\n${pattern}`);
-    console.log(chalk.green(`${pattern} added to .gitignore`));
+    Logger.success(`${pattern} added to .gitignore`);
   } catch (err) {
-    console.log(chalk.red(err));
+    Logger.error(err);
   }
 };
 
@@ -20,9 +22,9 @@ const addToGitignore = async (pattern) => {
 const removeFromGitCache = async (files) => {
   try {
     await git.rmKeepLocal(files);
-    console.log(chalk.green(`${files.join(", ")} are removed from git cache`));
+    Logger.success(`${files.join(", ")} are removed from git cache`);
   } catch (err) {
-    console.log(chalk.red(err));
+    Logger.error(err);
   }
 };
 
@@ -38,4 +40,4 @@ const run = async () => {
   ]);
 };
 
-run();
+run().catch(Logger.error);
