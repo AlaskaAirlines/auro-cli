@@ -3,6 +3,7 @@ node_modules/
 docTemplates/
 .cache/
 .eslintcache
+dist/
 
 ## Code coverage reports
 coverage/
