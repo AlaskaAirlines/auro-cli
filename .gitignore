@@ -5,5 +5,7 @@ docTemplates/
 .eslintcache
 dist/
 
+.idea/
+
 ## Code coverage reports
 coverage/
