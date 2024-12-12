@@ -1,21 +1,38 @@
-import fs from "node:fs";
-import { promisify } from "node:util";
 import simpleGit from "simple-git";
 import { Logger } from "@aurodesignsystem/auro-library/scripts/utils/logger.mjs";
+import { readFile, appendFile } from "node:fs/promises";
 
-const appendFile = promisify(fs.appendFile);
 // @ts-ignore - something about the call signature is not happy. it works so we don't care too much
 const git = simpleGit();
 
 export class Git {
-  // Function to add file to .gitignore
-  static async addToGitignore(pattern: string) {
+  static async checkGitignore(pattern: string) {
+    if (pattern === "") return false;
     try {
-      await appendFile(".gitignore", `\n${pattern}`);
-      Logger.success(`${pattern} added to .gitignore`);
-    } catch (err) {
-      Logger.error(err);
+      const fileContent = await readFile(".gitignore", "utf-8");
+      return fileContent.includes(pattern);
+    } catch (err: any) {
+      Logger.error(`Error reading file: ${err}`);
+      return false;
     }
+  }
+
+  // Function to add file to .gitignore
+  static async addToGitignore(pattern: string, log = true) {
+    await Git.checkGitignore(pattern).then(async (result) => {
+      if (result) {
+        Logger.warn(`${pattern} already exists`);
+      } else {
+        try {
+          await appendFile(".gitignore", `\n${pattern}`);
+          if (log) {
+            Logger.success(`${pattern} added to .gitignore`);
+          }
+        } catch (err) {
+          Logger.error(err);
+        }
+      }
+    });
   }
 
   // Function to remove file from git cache

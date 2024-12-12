@@ -145,5 +145,8 @@ export async function syncDotGithubDir(rootDir) {
     })
     .catch((error) => {
       Logger.error(`Error processing files: ${error.message}`);
+
+      // eslint-disable-next-line no-undef
+      process.exit(1);
     });
 }
