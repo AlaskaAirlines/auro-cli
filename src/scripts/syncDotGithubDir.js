@@ -6,7 +6,12 @@ import { Logger } from "@aurodesignsystem/auro-library/scripts/utils/logger.mjs"
 
 const REMOTE_TEMPLATE_BASE_URL =
   "https://raw.githubusercontent.com/AlaskaAirlines/auro-templates";
+
+// Constants for configuring sync branch and template selection
+// ------------------------------------------------------------
 const BRANCH_BASE = "main";
+const TARGET_BRANCH_TO_COPY = "dhook/init-github-templates";
+const CONFIG_TEMPLATE = "default";
 
 /**
  * @typedef {Object} GithubDirectory
@@ -67,12 +72,10 @@ const githubDirShape = {
 /**
  * Take a branch or tag name and return the URL for the README file.
  * @param {string} branchOrTag - The git branch or tag to use for the README source.
- * @param {string} _filePath - The path to the file in the remote repository.
+ * @param {string} filePath - The path to the file in the remote repository.
  * @return {string}
  */
-function branchNameToRemoteUrl(branchOrTag, _filePath) {
-  const filePath = _filePath.replace(".github", "dot-github");
-
+function branchNameToRemoteUrl(branchOrTag, filePath) {
   // check if tag starts with 'vX' since our tags are `v4.0.0`
   const isTag =
     branchOrTag.startsWith("v") &&
@@ -97,7 +100,6 @@ function branchNameToRemoteUrl(branchOrTag, _filePath) {
  * @returns {FileProcessorConfig}
  */
 function filePathToRemoteInput(filePath, branchOrTag, outputPath) {
-  console.log(filePath, branchNameToRemoteUrl(branchOrTag, filePath));
   return {
     // identifier is only used for logging
     identifier: filePath.split("/").pop(),
@@ -130,8 +132,8 @@ export async function syncDotGithubDir(rootDir) {
       const outputPath = `${rootDir}/.github/${inputPath}`;
 
       const fileConfig = filePathToRemoteInput(
-        `.github/${inputPath}`,
-        "dhook/init-github-templates",
+        `templates/${CONFIG_TEMPLATE}/.github/${inputPath}`,
+        TARGET_BRANCH_TO_COPY,
         outputPath,
       );
 
