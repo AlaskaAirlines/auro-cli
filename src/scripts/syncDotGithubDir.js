@@ -10,7 +10,7 @@ const REMOTE_TEMPLATE_BASE_URL =
 // Constants for configuring sync branch and template selection
 // ------------------------------------------------------------
 const BRANCH_BASE = "main";
-const TARGET_BRANCH_TO_COPY = "dhook/init-github-templates";
+const TARGET_BRANCH_TO_COPY = "main";
 const CONFIG_TEMPLATE = "default";
 
 /**
