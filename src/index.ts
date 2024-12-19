@@ -9,6 +9,7 @@ import auroSplash from "./utils/auro-splash.js";
 import "./commands/dev.js";
 import "./commands/migrate.js";
 import "./commands/sync.js";
+import "./commands/demo.js";
 
 auroSplash();
 
