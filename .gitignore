@@ -3,6 +3,9 @@ node_modules/
 docTemplates/
 .cache/
 .eslintcache
+dist/
+.gitter-temp/
+.idea/
 
 ## Code coverage reports
 coverage/
