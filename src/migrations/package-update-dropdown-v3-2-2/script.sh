@@ -9,3 +9,4 @@ npm install $PACKAGE@$VERSION
 
 # Run build
 npm run build
+npm run build:version
