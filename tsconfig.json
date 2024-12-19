@@ -111,5 +111,5 @@
 
   },
 
-  "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.js"],
+  "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.js", "src/**/*.yml", "src/**/*.sh", "src/migrations/**/*"],
 }
