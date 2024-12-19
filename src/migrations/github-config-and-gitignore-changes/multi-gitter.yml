@@ -44,7 +44,7 @@ conflict-strategy: skip
 draft: false
 
 # Run without pushing changes or creating pull requests.
-dry-run:
+dry-run: true
 
 # Limit fetching to the specified number of commits. Set to 0 for no limit.
 fetch-depth: 1
