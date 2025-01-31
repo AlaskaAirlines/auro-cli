@@ -3,6 +3,7 @@ import {
   templateFiller,
 } from "@aurodesignsystem/auro-library/scripts/utils/sharedFileProcessorUtils.mjs";
 import { Logger } from "@aurodesignsystem/auro-library/scripts/utils/logger.mjs";
+import fs from "fs/promises";
 
 const REMOTE_TEMPLATE_BASE_URL =
   "https://raw.githubusercontent.com/AlaskaAirlines/auro-templates";
@@ -101,7 +102,7 @@ function filePathToRemoteInput(filePath, branchOrTag, outputPath) {
   const remoteUrl = branchNameToRemoteUrl(branchOrTag, filePath);
 
   return {
-    // identifier is only used for logging
+    // Identifier is only used for logging
     identifier: filePath.split("/").pop(),
     input: {
       remoteUrl,
@@ -111,6 +112,22 @@ function filePathToRemoteInput(filePath, branchOrTag, outputPath) {
     output: outputPath,
     overwrite: true,
   };
+}
+
+/**
+ * Recursively removes a directory and all its contents.
+ * @param {string} dirPath - The path to the directory to remove.
+ * @returns {Promise<void>} A promise that resolves when the directory is removed or rejects if an error occurs.
+ * @throws {Error} If the directory cannot be removed.
+ */
+async function removeDirectory(dirPath) {
+  try {
+    await fs.rm(dirPath, { recursive: true, force: true });
+    Logger.log(`Successfully removed directory: ${dirPath}`);
+  } catch (error) {
+    Logger.error(`Error removing directory ${dirPath}: ${error.message}`);
+    throw error;
+  }
 }
 
 /**
@@ -125,7 +142,19 @@ export async function syncDotGithubDir(rootDir) {
     process.exit(1);
   }
 
-  // setup
+  // Remove .github directory if it exists
+  const githubPath = ".github";
+
+  try {
+    await removeDirectory(githubPath);
+    Logger.log(".github directory removed successfully");
+  } catch (error) {
+    Logger.error(`Error removing .github directory: ${error.message}`);
+    // eslint-disable-next-line no-undef
+    process.exit(1);
+  }
+
+  // Setup
   await templateFiller.extractNames();
 
   const fileConfigs = [];
