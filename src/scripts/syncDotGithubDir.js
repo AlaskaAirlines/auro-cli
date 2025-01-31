@@ -25,23 +25,21 @@ const CONFIG_TEMPLATE = "default";
  */
 const githubDirShape = {
   ISSUE_TEMPLATE: [
-    "bug_report.yml",
+    "bug_report.yaml",
     "config.yml",
-    "feature_request.yml",
-    "general-support.yml",
+    "feature_request.yaml",
+    "general-support.yaml",
+    "group.yaml",
+    "story.yaml",
+    "task.yaml",
   ],
-  workflows: [
-    "addToProject.yml",
-    "autoAssign.yml",
-    "codeql.yml",
-    "publishDemo.yml",
-    "testPublish.yml",
-  ],
+  workflows: ["codeql.yml", "publishDemo.yml", "testPublish.yml"],
   _root: [
     "CODEOWNERS",
     "CODE_OF_CONDUCT.md",
     "CONTRIBUTING.md",
     "PULL_REQUEST_TEMPLATE.md",
+    "SECURITY.md",
     "settings.yml",
     "stale.yml",
   ],
