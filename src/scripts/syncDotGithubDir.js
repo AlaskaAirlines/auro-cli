@@ -73,7 +73,7 @@ const githubDirShape = {
  * Take a branch or tag name and return the URL for the README file.
  * @param {string} branchOrTag - The git branch or tag to use for the README source.
  * @param {string} filePath - The path to the file in the remote repository.
- * @return {string}
+ * @returns {string} The complete URL for the remote file.
  */
 function branchNameToRemoteUrl(branchOrTag, filePath) {
   // check if tag starts with 'vX' since our tags are `v4.0.0`
@@ -97,14 +97,16 @@ function branchNameToRemoteUrl(branchOrTag, filePath) {
  * @param {string} filePath - The name of the file to fetch.
  * @param {string} branchOrTag - The git branch or tag to use for the README source.
  * @param {string} outputPath - The path to the file in the local repository.
- * @returns {FileProcessorConfig}
+ * @returns {FileProcessorConfig} Configuration object for file processing.
  */
 function filePathToRemoteInput(filePath, branchOrTag, outputPath) {
+  const remoteUrl = branchNameToRemoteUrl(branchOrTag, filePath);
+
   return {
     // identifier is only used for logging
     identifier: filePath.split("/").pop(),
     input: {
-      remoteUrl: branchNameToRemoteUrl(branchOrTag, filePath),
+      remoteUrl,
       fileName: outputPath,
       overwrite: true,
     },
@@ -116,15 +118,20 @@ function filePathToRemoteInput(filePath, branchOrTag, outputPath) {
 /**
  * Sync the .github directory with the remote repository.
  * @param {string} rootDir - The root directory of the local repository.
+ * @returns {Promise<void>} A promise that resolves when syncing is complete.
  */
 export async function syncDotGithubDir(rootDir) {
+  if (!rootDir) {
+    Logger.error("Root directory must be specified");
+    // eslint-disable-next-line no-undef
+    process.exit(1);
+  }
+
   // setup
   await templateFiller.extractNames();
 
-  /**
-   * @type {Promise<unknown>[]}
-   */
-  const fileOperations = [];
+  const fileConfigs = [];
+  const missingFiles = [];
 
   for (const dir of Object.keys(githubDirShape)) {
     for (const file of githubDirShape[dir]) {
@@ -136,19 +143,47 @@ export async function syncDotGithubDir(rootDir) {
         TARGET_BRANCH_TO_COPY,
         outputPath,
       );
-
-      fileOperations.push(processContentForFile(fileConfig));
+      fileConfigs.push(fileConfig);
     }
   }
 
-  await Promise.all(fileOperations)
-    .then(() => {
-      Logger.log("All files processed.");
-    })
-    .catch((error) => {
-      Logger.error(`Error processing files: ${error.message}`);
+  // Check if files exist
+  await Promise.all(
+    fileConfigs.map(async (config) => {
+      try {
+        const response = await fetch(config.input.remoteUrl, {
+          method: "HEAD",
+        });
+        if (!response.ok) {
+          missingFiles.push(config.input.remoteUrl);
+        }
+      } catch {
+        missingFiles.push(config.input.remoteUrl);
+      }
+    }),
+  );
 
-      // eslint-disable-next-line no-undef
-      process.exit(1);
-    });
+  // If missing, log and exit
+  if (missingFiles.length > 0) {
+    const errorMessage = missingFiles
+      .map((file) => `File not found: ${file}`)
+      .join("\n");
+    Logger.error(
+      `Failed to sync .github directory. Confirm githubDirShape object is up to date:\n${errorMessage}`,
+    );
+    // eslint-disable-next-line no-undef
+    process.exit(1);
+  }
+
+  // Process all files
+  try {
+    await Promise.all(
+      fileConfigs.map((config) => processContentForFile(config)),
+    );
+    Logger.log("All files processed.");
+  } catch (error) {
+    Logger.error(`Error processing files: ${error.message}`);
+    // eslint-disable-next-line no-undef
+    process.exit(1);
+  }
 }
