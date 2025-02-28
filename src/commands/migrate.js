@@ -46,14 +46,14 @@ export default program
 
       if (answers.dryRun) {
         shell(
-          `multi-gitter run ${scriptPath}/script.sh --config "${scriptPath}/multi-gitter.yml" --dry-run`,
+          `multi-gitter run "bash ${scriptPath}/script.sh" --config "${scriptPath}/multi-gitter.yml" --dry-run`,
         );
       } else {
         shell(
-          `multi-gitter run ${scriptPath}/script.sh --config "${scriptPath}/multi-gitter.yml"`,
+          `multi-gitter run "bash ${scriptPath}/script.sh" --config "${scriptPath}/multi-gitter.yml"`,
         );
       }
     } else {
-      shell(`${scriptPath}/script.sh`);
+      shell(`bash ${scriptPath}/script.sh`);
     }
   });

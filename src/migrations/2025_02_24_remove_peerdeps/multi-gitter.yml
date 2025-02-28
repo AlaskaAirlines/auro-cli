@@ -38,7 +38,7 @@ commit-message: |
     Why not just make them regular dependencies? This is what this PR does :)
 
 # The maximum number of concurrent runs.
-concurrent: 2
+concurrent: 1
 
 # What should happen if the branch already exist.
 # Available values:
@@ -123,15 +123,9 @@ push-only: false
 
 # The name, including owner of a GitHub repository in the format "ownerName/repoName".
 repo:
-  - AlaskaAirlines/auro-popover
-#  - AlaskaAirlines/auro-icon
-#  - AlaskaAirlines/auro-header
-#  - AlaskaAirlines/auro-loader
-#  - AlaskaAirlines/auro-datetime
-#  - AlaskaAirlines/auro-table
-#  - AlaskaAirlines/auro-lockup
-#  - AlaskaAirlines/auro-background
-#  - AlaskaAirlines/auro-skeleton
+  - AlaskaAirlines/auro-sidenav
+  - AlaskaAirlines/auro-flightline
+
 
 #  - AlaskaAirlines/auro-accordion
 #  - AlaskaAirlines/auro-alert
