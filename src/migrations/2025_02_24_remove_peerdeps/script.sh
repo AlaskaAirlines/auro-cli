@@ -43,6 +43,49 @@ if grep -q "peerDependencies" package.json; then
   jq '.peerDependencies' package.json
 fi
 
+# TOP LEVEL UPDATES
+# ========================================
+
+# set design-tokens version to 5.0.2 (no carat)
+if jq -e --arg key "@aurodesignsystem/design-tokens" '.dependencies | has($key)' package.json > /dev/null; then
+  jq --arg key "@aurodesignsystem/design-tokens" --arg value "5.0.2" '.dependencies[$key] = $value' package.json > package.tmp.json && mv package.tmp.json package.json
+fi
+
+# set @alaskaairux/icons version to 5.2.0 (no carat)
+if jq -e --arg key "@alaskaairux/icons" '.dependencies | has($key)' package.json > /dev/null; then
+  jq --arg key "@alaskaairux/icons" --arg value "5.2.0" '.dependencies[$key] = $value' package.json > package.tmp.json && mv package.tmp.json package.json
+fi
+
+# set @aurodesignsystem/webcorestylesheets version to 6.0.2 (no carat)
+if jq -e --arg key "@aurodesignsystem/webcorestylesheets" '.dependencies | has($key)' package.json > /dev/null; then
+  jq --arg key "@aurodesignsystem/webcorestylesheets" --arg value "6.1.0" '.dependencies[$key] = $value' package.json > package.tmp.json && mv package.tmp.json package.json
+fi
+
+# BATCH 1 UPDATES
+# ========================================
+
+# install latest version of eslint-config
+if jq -e --arg key "@aurodesignsystem/eslint-config" '.devDependencies | has($key)' package.json > /dev/null; then
+  jq --arg key "@aurodesignsystem/eslint-config" --arg value "1.3.4" '.devDependencies[$key] = $value' package.json > package.tmp.json && mv package.tmp.json package.json
+fi
+
+# BATCH 2 UPDATES
+# ========================================
+
+# install latest version of @aurodesignsystem/auro-library
+if jq -e --arg key "@aurodesignsystem/auro-library" '.dependencies | has($key)' package.json > /dev/null; then
+  jq --arg key "@aurodesignsystem/auro-library" --arg value "3.0.11" '.dependencies[$key] = $value' package.json > package.tmp.json && mv package.tmp.json package.json
+fi
+
+# BATCH 3 UPDATES
+# ========================================
+
+# TODO: do this tomorrow :)
+
+
+echo "Removing package-lock.json"
+rm -f package-lock.json
+
 echo "Updating package-lock.json via npm install"
 npm install
 

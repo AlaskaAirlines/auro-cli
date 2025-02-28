@@ -18,7 +18,7 @@ base-branch: main
 base-url:
 
 # The name of the branch where changes are committed.
-branch: dhook/2025_02_24_remove_peerdeps
+branch: dhook/2025_02_27_move_peerdeps_to_dependencies
 
 # The temporary directory where the repositories will be cloned. If not set, the default os temporary directory will be used.
 clone-dir: .gitter-temp
@@ -28,11 +28,17 @@ code-search:
 
 # The commit message. Will default to title + body if none is set.
 commit-message: |
-  chore!: remove unused peer dependencies
-  BREAKING CHANGE: removes peer dependencies, cannot guarantee backwards compatibility :)
+  feat!: move peer dependencies to "real" dependencies
+
+  BREAKING CHANGE: last change was breaking _on a patch version_ because of peer dependencies
+
+  Summary:
+    Our current build process relies on peer dependencies being present, but
+    the peer dependency pipeline is causing far more issues than it's worth.
+    Why not just make them regular dependencies? This is what this PR does :)
 
 # The maximum number of concurrent runs.
-concurrent: 4
+concurrent: 2
 
 # What should happen if the branch already exist.
 # Available values:
@@ -41,7 +47,7 @@ concurrent: 4
 conflict-strategy: replace
 
 # Create pull request(s) as draft.
-draft: true
+draft: false
 
 # Run without pushing changes or creating pull requests.
 dry-run: false
@@ -104,10 +110,10 @@ plain-output: false
 platform: github
 
 # The body of the commit message. Will default to everything but the first line of the commit message if none is set.
-pr-body: "Resolves AlaskaAirlines/auro-cli#37 by removing unused peer dependencies."
+pr-body: "Resolves AlaskaAirlines/auro-cli#37 by updating eslint config to latest version (uses node >=18 for LTS support)."
 
 # The title of the PR. Will default to the first line of the commit message if none is set.
-pr-title: "AURO MIGRATION: Remove unused peer dependencies"
+pr-title: "AURO-MIGRATION: Update dependencies to support latest node version(s)"
 
 # The name, including owner of a GitLab project in the format "ownerName/repoName".
 project:
@@ -117,41 +123,51 @@ push-only: false
 
 # The name, including owner of a GitHub repository in the format "ownerName/repoName".
 repo:
-  - AlaskaAirlines/auro-accordion
-  - AlaskaAirlines/auro-alert
-  - AlaskaAirlines/auro-avatar
-  - AlaskaAirlines/auro-background
-  - AlaskaAirlines/auro-backtotop
-  - AlaskaAirlines/auro-button
-  - AlaskaAirlines/auro-badge
-  - AlaskaAirlines/auro-banner
-  - AlaskaAirlines/auro-card
-  - AlaskaAirlines/auro-carousel
-  - AlaskaAirlines/auro-checkbox
-  - AlaskaAirlines/auro-combobox
-  - AlaskaAirlines/auro-datepicker
-  - AlaskaAirlines/auro-datetime
-  - AlaskaAirlines/auro-dialog
-  - AlaskaAirlines/auro-drawer
-  - AlaskaAirlines/auro-dropdown
-  - AlaskaAirlines/auro-flight
-  - AlaskaAirlines/auro-flightline
-  - AlaskaAirlines/auro-header
-  - AlaskaAirlines/auro-hyperlink
-  - AlaskaAirlines/auro-icon
-  - AlaskaAirlines/auro-input
-  - AlaskaAirlines/auro-loader
-  - AlaskaAirlines/auro-lockup
-  - AlaskaAirlines/auro-menu
-  - AlaskaAirlines/auro-nav
-  - AlaskaAirlines/auro-pane
   - AlaskaAirlines/auro-popover
-  - AlaskaAirlines/auro-radio
-  - AlaskaAirlines/auro-select
-  - AlaskaAirlines/auro-sidenav
-  - AlaskaAirlines/auro-skeleton
-  - AlaskaAirlines/auro-table
-  - AlaskaAirlines/auro-toast
+#  - AlaskaAirlines/auro-icon
+#  - AlaskaAirlines/auro-header
+#  - AlaskaAirlines/auro-loader
+#  - AlaskaAirlines/auro-datetime
+#  - AlaskaAirlines/auro-table
+#  - AlaskaAirlines/auro-lockup
+#  - AlaskaAirlines/auro-background
+#  - AlaskaAirlines/auro-skeleton
+
+#  - AlaskaAirlines/auro-accordion
+#  - AlaskaAirlines/auro-alert
+#  - AlaskaAirlines/auro-avatar
+#  - AlaskaAirlines/auro-background
+#  - AlaskaAirlines/auro-backtotop
+#  - AlaskaAirlines/auro-button
+#  - AlaskaAirlines/auro-badge
+#  - AlaskaAirlines/auro-banner
+#  - AlaskaAirlines/auro-card
+#  - AlaskaAirlines/auro-carousel
+#  - AlaskaAirlines/auro-checkbox
+#  - AlaskaAirlines/auro-combobox
+#  - AlaskaAirlines/auro-datepicker
+#  - AlaskaAirlines/auro-datetime
+#  - AlaskaAirlines/auro-dialog
+#  - AlaskaAirlines/auro-drawer
+#  - AlaskaAirlines/auro-dropdown
+#  - AlaskaAirlines/auro-flight
+#  - AlaskaAirlines/auro-flightline
+#  - AlaskaAirlines/auro-header
+#  - AlaskaAirlines/auro-hyperlink
+#  - AlaskaAirlines/auro-icon
+#  - AlaskaAirlines/auro-input
+#  - AlaskaAirlines/auro-loader
+#  - AlaskaAirlines/auro-lockup
+#  - AlaskaAirlines/auro-menu
+#  - AlaskaAirlines/auro-nav
+#  - AlaskaAirlines/auro-pane
+#  - AlaskaAirlines/auro-popover
+#  - AlaskaAirlines/auro-radio
+#  - AlaskaAirlines/auro-select
+#  - AlaskaAirlines/auro-sidenav
+#  - AlaskaAirlines/auro-skeleton
+#  - AlaskaAirlines/auro-table
+#  - AlaskaAirlines/auro-toast
 
 # Exclude repositories that match with a given Regular Expression
 repo-exclude:
