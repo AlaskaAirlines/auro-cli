@@ -18,7 +18,7 @@ base-branch: main
 base-url:
 
 # The name of the branch where changes are committed.
-branch: dhook/2025_02_27_move_peerdeps_to_dependencies
+branch: deprecations/2025_03_05_add_deprecation_warnings
 
 # The temporary directory where the repositories will be cloned. If not set, the default os temporary directory will be used.
 clone-dir: .gitter-temp
@@ -28,14 +28,9 @@ code-search:
 
 # The commit message. Will default to title + body if none is set.
 commit-message: |
-  feat!: move peer dependencies to "real" dependencies
+  perf(deprecation): add deprecation warning to this package
 
-  BREAKING CHANGE: last change was breaking _on a patch version_ because of peer dependencies
-
-  Summary:
-    Our current build process relies on peer dependencies being present, but
-    the peer dependency pipeline is causing far more issues than it's worth.
-    Why not just make them regular dependencies? This is what this PR does :)
+  As part of the new formkit release, all old form element repositories are being deprecated.
 
 # The maximum number of concurrent runs.
 concurrent: 1
@@ -110,10 +105,10 @@ plain-output: false
 platform: github
 
 # The body of the commit message. Will default to everything but the first line of the commit message if none is set.
-pr-body: "Resolves AlaskaAirlines/auro-cli#37 by updating eslint config to latest version (uses node >=18 for LTS support)."
+pr-body: "Resolves AlaskaAirlines/auro-formkit#394, adding deprecation warning to old form element repositories."
 
 # The title of the PR. Will default to the first line of the commit message if none is set.
-pr-title: "AURO-MIGRATION: Update dependencies to support latest node version(s)"
+pr-title: "DEPRECATION: add deprecation warning to this package"
 
 # The name, including owner of a GitLab project in the format "ownerName/repoName".
 project:
@@ -123,8 +118,14 @@ push-only: false
 
 # The name, including owner of a GitHub repository in the format "ownerName/repoName".
 repo:
-  - AlaskaAirlines/auro-flight
-npm i @aurodesignsystem/auro-accordion @aurodesignsystem/auro-alert @aurodesignsystem/auro-avatar @aurodesignsystem/auro-background @aurodesignsystem/auro-backtotop @aurodesignsystem/auro-button @aurodesignsystem/auro-badge @aurodesignsystem/auro-banner @aurodesignsystem/auro-card @aurodesignsystem/auro-carousel @aurodesignsystem/auro-datetime @aurodesignsystem/auro-dialog @aurodesignsystem/auro-drawer @aurodesignsystem/auro-flight @aurodesignsystem/auro-flightline @aurodesignsystem/auro-header @aurodesignsystem/auro-hyperlink @aurodesignsystem/auro-icon @aurodesignsystem/auro-loader @aurodesignsystem/auro-lockup @aurodesignsystem/auro-nav @aurodesignsystem/auro-pane @aurodesignsystem/auro-popover @aurodesignsystem/auro-sidenav @aurodesignsystem/auro-skeleton @aurodesignsystem/auro-table @aurodesignsystem/auro-toast
+  - AlaskaAirlines/auro-checkbox
+  - AlaskaAirlines/auro-combobox
+  - AlaskaAirlines/auro-datepicker
+  - AlaskaAirlines/auro-dropdown
+  - AlaskaAirlines/auro-input
+  - AlaskaAirlines/auro-menu
+#  - AlaskaAirlines/auro-radio
+  - AlaskaAirlines/auro-select
 
 # Exclude repositories that match with a given Regular Expression
 repo-exclude:
