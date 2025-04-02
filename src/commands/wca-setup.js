@@ -1,4 +1,4 @@
-/* eslint-disable no-await-in-loop, line-comment-position, no-inline-comments, jsdoc/require-jsdoc, no-undef, prettier/prettier */
+/* eslint-disable no-await-in-loop, line-comment-position, no-inline-comments, jsdoc/require-jsdoc, no-undef */
 
 import { program } from "commander";
 import fs from "fs";
