@@ -10,6 +10,7 @@ import "./commands/dev.js";
 import "./commands/migrate.js";
 import "./commands/sync.js";
 import "./commands/demo.js";
+import "./commands/wca-setup.js";
 
 auroSplash();
 
