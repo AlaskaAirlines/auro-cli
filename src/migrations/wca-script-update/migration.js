@@ -1,4 +1,4 @@
-/* eslint-disable jsdoc/require-jsdoc, prettier/prettier, no-magic-numbers */
+/* eslint-disable jsdoc/require-jsdoc, no-magic-numbers */
 
 import { Logger } from "@aurodesignsystem/auro-library/scripts/utils/logger.mjs";
 
