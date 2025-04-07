@@ -19,11 +19,10 @@ function updateBuildApiScript() {
       `${JSON.stringify(packageJson, null, 2)}\n`,
       "utf8",
     );
+    Logger.success(`build:api script updated in package.json`);
   } catch (error) {
     Logger.error(`Failed to update build:api script in package.json: ${error}`);
   }
-
-  Logger.success(`build:api script updated in package.json`);
 }
 
 updateBuildApiScript();
