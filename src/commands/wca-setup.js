@@ -5,7 +5,7 @@ import fs from "fs";
 import path from "path";
 import glob from "glob";
 import util from "util";
-import getTemplatedComponentCode from "../scripts/prepWcaCompatibleCode.mjs";
+import getTemplatedComponentCode from "#scripts/prepWcaCompatibleCode.mjs";
 import { Logger } from "@aurodesignsystem/auro-library/scripts/utils/logger.mjs";
 
 const promisifiedGlob = util.promisify(glob);
