@@ -13,7 +13,7 @@ on:
 jobs:
   test:
     # Skip push events when there's an associated PR
-    if: github.event_name == 'pull_request' || github.event.pull_request == null
+    if: ${{ github.event_name != 'push' || github.event.pull_request }}
     
     runs-on: ${{ matrix.os }}
 
