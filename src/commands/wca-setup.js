@@ -3,20 +3,17 @@
 import { program } from "commander";
 import fs from "fs";
 import path from "path";
-import glob from "glob";
-import util from "util";
-import getTemplatedComponentCode from "../scripts/prepWcaCompatibleCode.mjs";
+import { glob } from "glob";
+import getTemplatedComponentCode from "#scripts/prepWcaCompatibleCode.mjs";
 import { Logger } from "@aurodesignsystem/auro-library/scripts/utils/logger.mjs";
 
-const promisifiedGlob = util.promisify(glob);
+// Use glob directly as it's already promised-based in newer versions
 
 const WAC_DIR = path.resolve(process.cwd(), "./scripts/wca");
 
 async function globPath(sources) {
   try {
-    const fileArrays = await Promise.all(
-      sources.map((source) => promisifiedGlob(source)),
-    );
+    const fileArrays = await Promise.all(sources.map((source) => glob(source)));
     return fileArrays.flat();
   } catch (err) {
     console.error("Error processing glob patterns:", err);

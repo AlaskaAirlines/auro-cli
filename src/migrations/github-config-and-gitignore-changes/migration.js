@@ -1,6 +1,6 @@
 import { Logger } from "@aurodesignsystem/auro-library/scripts/utils/logger.mjs";
 
-import { Git } from "../../utils/gitUtils.js";
+import { Git } from "#utils/gitUtils.js";
 
 // Run tasks sequentially
 const run = async () => {

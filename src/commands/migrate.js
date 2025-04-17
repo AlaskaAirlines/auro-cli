@@ -1,5 +1,5 @@
 import { program } from "commander";
-import { shell } from "../utils/shell.js";
+import { shell } from "#utils/shell.js";
 import path from "node:path";
 import { fileURLToPath } from "url";
 import { exec } from "child_process";
@@ -11,17 +11,17 @@ export default program
   .command("migrate")
   .description("Script runner to perform repetitive code change tasks")
   .requiredOption(
-    "-id, --id <string>",
+    "-i, --id <string>",
     "Select the migration you would like to run by id",
   )
   .option(
-    "-mg, --multi-gitter",
+    "-m, --multi-gitter",
     "Run the migration on all repositories in the multi-gitter config",
   )
   .action(async (options) => {
     const filename = fileURLToPath(import.meta.url);
     const dirname = path.dirname(filename);
-    const scriptPath = path.resolve(dirname, "../migrations", options.id);
+    const scriptPath = path.resolve(dirname, "migrations", options.id);
 
     if (options.multiGitter) {
       // Check if multi-gitter CLI command is available

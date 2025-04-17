@@ -1,19 +1,15 @@
-#!/usr/bin/env node
-
 import { program } from "commander";
-
-// @ts-ignore
-import auroSplash from "./utils/auro-splash.js";
+import auroSplash from "#utils/auroSplash.js";
+import getPackageVersion from "#utils/packageVersion.js";
 
 // Register commands (importing them will register them)
-import "./commands/dev.js";
-import "./commands/migrate.js";
-import "./commands/sync.js";
-import "./commands/demo.js";
-import "./commands/wca-setup.js";
+import "#commands/dev.js";
+import "#commands/migrate.js";
+import "#commands/sync.js";
+import "#commands/wca-setup.js";
 
-auroSplash();
+program.name('auro').version(getPackageVersion()).description("A cli tool to support the Auro Design System");
 
-program.name("auro-cli").version("0.0.1").description("Auro CLI");
+program.addHelpText("beforeAll", auroSplash());
 
 program.parse();
