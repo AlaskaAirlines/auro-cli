@@ -115,7 +115,7 @@ push-only: false
 
 # The name, including owner of a GitHub repository in the format "ownerName/repoName".
 repo:
-  # - AlaskaAirlines/auro-button
+  - AlaskaAirlines/auro-button
   # - AlaskaAirlines/auro-hyperlink
   # - AlaskaAirlines/auro-table
   # - AlaskaAirlines/auro-carousel
