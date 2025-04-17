@@ -1,6 +1,6 @@
 {
   "name": "@aurodesignsystem/auro-cli",
-  "version": "2.0.0-rc.1",
+  "version": "2.0.0",
   "description": "A cli tool to support the Auro Design System",
   "scripts": {
     "lint": "npx eslint --fix",
