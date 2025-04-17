@@ -6,11 +6,15 @@ on:
   workflow_dispatch:
   pull_request:
     branches: [ main, rc/** ]
+  push:
+    branches: [ main, rc/** ]
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
   test:
     runs-on: [ubuntu-latest, macos-latest, windows-latest]
+    outputs:
+      is_complete: ${{ steps.set_output.outputs.result }}
 
     strategy:
       matrix:
@@ -30,3 +34,6 @@ jobs:
         run: npm run build
       - name: Test
         run: npm run test
+      - name: Set output
+        id: set_output
+        run: echo "result=true" >> $GITHUB_OUTPUT

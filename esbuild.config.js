@@ -1,4 +1,4 @@
-/* eslint-disable no-underscore-dangle, no-await-in-loop, no-magic-numbers, no-undef, jsdoc/require-param */
+/* eslint-disable no-underscore-dangle, no-await-in-loop, no-magic-numbers, no-undef */
 import { build } from "esbuild";
 import { fileURLToPath } from "url";
 import { dirname, join, resolve } from "path";
@@ -108,9 +108,9 @@ async function runBuild() {
     // Find all JS files in the migrations folder
     const migrationJsFiles = [];
 
-    // Helper function to recursively find JS files
     /**
-     *
+     * Recursively finds all JavaScript files in a given directory.
+     * @param {string} dir - The directory to search for JavaScript files.
      */
     function findJsFiles(dir) {
       const files = fs.readdirSync(dir);
