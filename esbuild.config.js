@@ -1,7 +1,7 @@
 /* eslint-disable no-underscore-dangle, no-await-in-loop, no-magic-numbers, no-undef, jsdoc/require-param */
 import { build } from "esbuild";
 import { fileURLToPath } from "url";
-import { dirname, path } from "path";
+import { dirname, join, resolve } from "path";
 import fs from "fs";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -57,7 +57,7 @@ async function runBuild() {
     const preserveMigrations = (item) => item !== "migrations";
     const items = fs.readdirSync("dist").filter(preserveMigrations);
     for (const item of items) {
-      const itemPath = path.join("dist", item);
+      const itemPath = join("dist", item);
       if (fs.existsSync(itemPath)) {
         if (fs.lstatSync(itemPath).isDirectory()) {
           fs.rmSync(itemPath, { recursive: true, force: true });
@@ -98,9 +98,9 @@ async function runBuild() {
       legalComments: "none",
       // Support aliased imports from package.json
       alias: {
-        "#commands": path.resolve(__dirname, "src/commands"),
-        "#scripts": path.resolve(__dirname, "src/scripts"),
-        "#utils": path.resolve(__dirname, "src/utils"),
+        "#commands": resolve(__dirname, "src/commands"),
+        "#scripts": resolve(__dirname, "src/scripts"),
+        "#utils": resolve(__dirname, "src/utils"),
       },
     });
 
@@ -115,7 +115,7 @@ async function runBuild() {
     function findJsFiles(dir) {
       const files = fs.readdirSync(dir);
       files.forEach((file) => {
-        const filePath = path.join(dir, file);
+        const filePath = join(dir, file);
         if (fs.statSync(filePath).isDirectory()) {
           findJsFiles(filePath);
         } else if (file.endsWith(".js")) {
@@ -140,7 +140,7 @@ async function runBuild() {
       );
 
       // Ensure directory exists
-      const outputDir = path.dirname(outputFile);
+      const outputDir = dirname(outputFile);
       if (!fs.existsSync(outputDir)) {
         fs.mkdirSync(outputDir, { recursive: true });
       }
@@ -161,7 +161,7 @@ async function runBuild() {
         treeShaking: true,
         // Support utils/ imports and other local imports
         alias: {
-          "#utils": path.resolve(__dirname, "src/utils"),
+          "#utils": resolve(__dirname, "src/utils"),
         },
       });
     }
