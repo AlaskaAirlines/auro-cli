@@ -35,7 +35,7 @@ jobs:
 
   release:
     # only run on push to main or rc branches
-    if: ${{ ( github.event_name == 'push' && github.ref == 'refs/heads/main') || startsWith(github.ref, 'refs/heads/rc/') }}
+    if: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/rc/') )}}
     name: Release
     runs-on: ubuntu-latest
     needs: test
