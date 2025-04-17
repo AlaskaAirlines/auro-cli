@@ -3,7 +3,8 @@ on:
   workflow_run:
     workflows: ["Test"]
     branches: [main, rc/**]
-    types: [completed]
+    types:
+      - completed
 permissions:
   contents: read # for checkout
 
