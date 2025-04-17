@@ -159,9 +159,12 @@ async function runBuild() {
         sourcemap: false,
         legalComments: "none",
         treeShaking: true,
+        allowOverwrite: true,
         // Support utils/ imports and other local imports
         alias: {
           "#utils": resolve(__dirname, "src/utils"),
+          "#scripts": resolve(__dirname, "src/scripts"),
+          "#commands": resolve(__dirname, "src/commands"),
         },
       });
     }
