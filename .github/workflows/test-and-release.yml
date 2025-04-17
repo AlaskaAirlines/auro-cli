@@ -12,8 +12,7 @@ on:
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
   test:
-    # Skip push events when there's an associated PR
-    if: ${{ github.event_name != 'push' || github.event.pull_request }}
+    # Run on both PR events and push events to main/rc branches
     
     runs-on: ${{ matrix.os }}
 
@@ -39,7 +38,8 @@ jobs:
 
   release:
     # only run on push to main or rc branches
-    if: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/rc/') }}
+    if: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/rc/')) }}
+    needs: test
     name: Release
     runs-on: ubuntu-latest
     permissions:
