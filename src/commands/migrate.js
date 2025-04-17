@@ -21,7 +21,7 @@ export default program
   .action(async (options) => {
     const filename = fileURLToPath(import.meta.url);
     const dirname = path.dirname(filename);
-    const scriptPath = path.resolve(dirname, "../migrations", options.id);
+    const scriptPath = path.resolve(dirname, "migrations", options.id);
 
     if (options.multiGitter) {
       // Check if multi-gitter CLI command is available
