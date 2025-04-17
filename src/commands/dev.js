@@ -7,13 +7,26 @@ export default program
   .description("Runs web-dev-server command")
   .option("-o, --open <type>", "Open server to a specific directory")
   .option("-p, --port <type>", "Change the server port")
+  .option("-c, --closed", "Prevent the server from opening a browser window")
   .action((options) => {
     const config = {
       port: Number(options.port) || undefined,
-      open: options.open || "demo/",
+      open: options.closed ? undefined : options.open || "/",
       watch: true,
       nodeResolve: true,
       basePath: "/",
+      rootDir: "./demo",
+      middleware: [
+        function rewriteIndex(context, next) {
+          if (context.url === "/" || context.url === "/index.html") {
+            context.url = "/index.html";
+          }
+          if (!context.url.endsWith("/") && !context.url.includes(".")) {
+            context.url += ".html";
+          }
+          return next();
+        },
+      ],
       plugins: [
         hmrPlugin({
           include: ["src/**/*", "demo/**/*", "apiExamples/**/*", "docs/**/*"],
