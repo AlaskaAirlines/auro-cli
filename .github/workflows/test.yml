@@ -12,6 +12,8 @@ on:
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
   test:
+    # Skip push events when there's an associated PR
+    if: github.event_name == 'pull_request' || github.event.pull_request == null
     runs-on: ${{ matrix.os }}
     outputs:
       is_complete: ${{ steps.set_output.outputs.result }}
