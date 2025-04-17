@@ -37,6 +37,7 @@
         ],
         "noVerify": true
       }
-    ]
+    ],
+    "@semantic-release/github"
   ]
 }
