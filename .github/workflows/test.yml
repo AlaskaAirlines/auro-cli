@@ -11,8 +11,6 @@ on:
 jobs:
   test:
     runs-on: ${{ matrix.os }}
-    outputs:
-      is_complete: ${{ steps.set_output.outputs.result }}
 
     strategy:
       matrix:
@@ -33,7 +31,3 @@ jobs:
         run: npm run build
       - name: Test
         run: npm run test
-      - name: Set output
-        id: set_output
-        shell: bash
-        run: echo "result=true" >> $GITHUB_OUTPUT
