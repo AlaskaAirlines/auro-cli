@@ -2,27 +2,27 @@
 
 import { Logger } from "@aurodesignsystem/auro-library/scripts/utils/logger.mjs";
 
-import fs from "fs";
+import fs from "node:fs";
 
 function updateBuildApiScript() {
-  try {
-    const newScript = "wca analyze 'scripts/wca/*' --outFiles docs/api.md";
-    const packageJsonPath = "package.json";
+	try {
+		const newScript = "wca analyze 'scripts/wca/*' --outFiles docs/api.md";
+		const packageJsonPath = "package.json";
 
-    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
+		const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
 
-    packageJson.scripts["build:api"] = newScript;
+		packageJson.scripts["build:api"] = newScript;
 
-    // Write the updated package.json back to the file
-    fs.writeFileSync(
-      packageJsonPath,
-      `${JSON.stringify(packageJson, null, 2)}\n`,
-      "utf8",
-    );
-    Logger.success(`build:api script updated in package.json`);
-  } catch (error) {
-    Logger.error(`Failed to update build:api script in package.json: ${error}`);
-  }
+		// Write the updated package.json back to the file
+		fs.writeFileSync(
+			packageJsonPath,
+			`${JSON.stringify(packageJson, null, 2)}\n`,
+			"utf8",
+		);
+		Logger.success("build:api script updated in package.json");
+	} catch (error) {
+		Logger.error(`Failed to update build:api script in package.json: ${error}`);
+	}
 }
 
 updateBuildApiScript();
