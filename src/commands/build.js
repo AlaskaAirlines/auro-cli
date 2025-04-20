@@ -1,9 +1,28 @@
+import { rmSync } from "node:fs";
+import { join } from "node:path";
 import { nodeResolve } from "@rollup/plugin-node-resolve";
 import { program } from "commander";
 import ora from "ora";
 import { rollup, watch } from "rollup";
 import { dts } from "rollup-plugin-dts";
 import { litScss } from "rollup-plugin-scss-lit";
+
+/**
+ * Clean up the dist folder
+ */
+function cleanupDist() {
+  const distPath = join("./dist");
+
+  try {
+    rmSync(distPath, { recursive: true, force: true });
+    ora().succeed("Cleaned up dist/ folder");
+  } catch (error) {
+    ora().fail(`Failed to cleanup dist/ folder: ${error.message}`);
+    console.error(error);
+    process.exit(1);
+  }
+}
+
 /**
  * Generates the Rollup configuration for the main bundle.
  * @param {string} modulePath - Path to the node_modules folder.
@@ -238,6 +257,8 @@ export default program
       }
 
       build.start();
+
+      cleanupDist();
 
       await buildWithRollup(options);
 
