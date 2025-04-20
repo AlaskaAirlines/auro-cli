@@ -1,6 +1,7 @@
 import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { nodeResolve } from "@rollup/plugin-node-resolve";
+import terser from "@rollup/plugin-terser";
 import { program } from "commander";
 import ora from "ora";
 import { rollup, watch } from "rollup";
@@ -149,6 +150,12 @@ async function buildWithRollup(options) {
   const { dev: isDevMode } = options;
 
   const mainBundleConfig = getMainBundleConfig(options);
+
+  // Add terser plugin for minification in production mode
+  if (!isDevMode) {
+    mainBundleConfig.plugins.push(terser());
+  }
+
   const dtsConfig = getDtsConfig();
 
   // Common output config for the main bundle
