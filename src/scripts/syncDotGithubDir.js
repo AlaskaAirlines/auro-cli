@@ -1,12 +1,12 @@
 import fs from "node:fs/promises";
 import { Logger } from "@aurodesignsystem/auro-library/scripts/utils/logger.mjs";
 import {
-	processContentForFile,
-	templateFiller,
+  processContentForFile,
+  templateFiller,
 } from "@aurodesignsystem/auro-library/scripts/utils/sharedFileProcessorUtils.mjs";
 
 const REMOTE_TEMPLATE_BASE_URL =
-	"https://raw.githubusercontent.com/AlaskaAirlines/auro-templates";
+  "https://raw.githubusercontent.com/AlaskaAirlines/auro-templates";
 
 // Constants for configuring sync branch and template selection
 // ------------------------------------------------------------
@@ -25,25 +25,25 @@ const CONFIG_TEMPLATE = "default";
  * @type {GithubDirectory} githubDirectory
  */
 const githubDirShape = {
-	ISSUE_TEMPLATE: [
-		"bug_report.yaml",
-		"config.yml",
-		"feature_request.yaml",
-		"general-support.yaml",
-		"group.yaml",
-		"story.yaml",
-		"task.yaml",
-	],
-	workflows: ["codeql.yml", "publishDemo.yml", "testPublish.yml"],
-	_root: [
-		"CODEOWNERS",
-		"CODE_OF_CONDUCT.md",
-		"CONTRIBUTING.md",
-		"PULL_REQUEST_TEMPLATE.md",
-		"SECURITY.md",
-		"settings.yml",
-		"stale.yml",
-	],
+  ISSUE_TEMPLATE: [
+    "bug_report.yaml",
+    "config.yml",
+    "feature_request.yaml",
+    "general-support.yaml",
+    "group.yaml",
+    "story.yaml",
+    "task.yaml",
+  ],
+  workflows: ["codeql.yml", "publishDemo.yml", "testPublish.yml"],
+  _root: [
+    "CODEOWNERS",
+    "CODE_OF_CONDUCT.md",
+    "CONTRIBUTING.md",
+    "PULL_REQUEST_TEMPLATE.md",
+    "SECURITY.md",
+    "settings.yml",
+    "stale.yml",
+  ],
 };
 
 // BELOW TYPES ARE COPIED DIRECTLY FROM THE LIBRARY
@@ -75,20 +75,20 @@ const githubDirShape = {
  * @returns {string} The complete URL for the remote file.
  */
 function branchNameToRemoteUrl(branchOrTag, filePath) {
-	// check if tag starts with 'vX' since our tags are `v4.0.0`
-	const isTag =
-		branchOrTag.startsWith("v") &&
-		/^\d+\.\d+\.\d+(?<_>-.*)?$/u.test(branchOrTag.slice(1));
+  // check if tag starts with 'vX' since our tags are `v4.0.0`
+  const isTag =
+    branchOrTag.startsWith("v") &&
+    /^\d+\.\d+\.\d+(?<_>-.*)?$/u.test(branchOrTag.slice(1));
 
-	if (isTag) {
-		return `${REMOTE_TEMPLATE_BASE_URL}/refs/tags/${branchOrTag}/${filePath}`;
-	}
+  if (isTag) {
+    return `${REMOTE_TEMPLATE_BASE_URL}/refs/tags/${branchOrTag}/${filePath}`;
+  }
 
-	if (branchOrTag !== BRANCH_BASE) {
-		return `${REMOTE_TEMPLATE_BASE_URL}/refs/heads/${branchOrTag}/${filePath}`;
-	}
+  if (branchOrTag !== BRANCH_BASE) {
+    return `${REMOTE_TEMPLATE_BASE_URL}/refs/heads/${branchOrTag}/${filePath}`;
+  }
 
-	return `${REMOTE_TEMPLATE_BASE_URL}/${BRANCH_BASE}/${filePath}`;
+  return `${REMOTE_TEMPLATE_BASE_URL}/${BRANCH_BASE}/${filePath}`;
 }
 
 /**
@@ -99,19 +99,19 @@ function branchNameToRemoteUrl(branchOrTag, filePath) {
  * @returns {FileProcessorConfig} Configuration object for file processing.
  */
 function filePathToRemoteInput(filePath, branchOrTag, outputPath) {
-	const remoteUrl = branchNameToRemoteUrl(branchOrTag, filePath);
+  const remoteUrl = branchNameToRemoteUrl(branchOrTag, filePath);
 
-	return {
-		// Identifier is only used for logging
-		identifier: filePath.split("/").pop(),
-		input: {
-			remoteUrl,
-			fileName: outputPath,
-			overwrite: true,
-		},
-		output: outputPath,
-		overwrite: true,
-	};
+  return {
+    // Identifier is only used for logging
+    identifier: filePath.split("/").pop(),
+    input: {
+      remoteUrl,
+      fileName: outputPath,
+      overwrite: true,
+    },
+    output: outputPath,
+    overwrite: true,
+  };
 }
 
 /**
@@ -121,13 +121,13 @@ function filePathToRemoteInput(filePath, branchOrTag, outputPath) {
  * @throws {Error} If the directory cannot be removed.
  */
 async function removeDirectory(dirPath) {
-	try {
-		await fs.rm(dirPath, { recursive: true, force: true });
-		Logger.log(`Successfully removed directory: ${dirPath}`);
-	} catch (error) {
-		Logger.error(`Error removing directory ${dirPath}: ${error.message}`);
-		throw error;
-	}
+  try {
+    await fs.rm(dirPath, { recursive: true, force: true });
+    Logger.log(`Successfully removed directory: ${dirPath}`);
+  } catch (error) {
+    Logger.error(`Error removing directory ${dirPath}: ${error.message}`);
+    throw error;
+  }
 }
 
 /**
@@ -136,81 +136,81 @@ async function removeDirectory(dirPath) {
  * @returns {Promise<void>} A promise that resolves when syncing is complete.
  */
 export async function syncDotGithubDir(rootDir) {
-	if (!rootDir) {
-		Logger.error("Root directory must be specified");
-		// eslint-disable-next-line no-undef
-		process.exit(1);
-	}
+  if (!rootDir) {
+    Logger.error("Root directory must be specified");
+    // eslint-disable-next-line no-undef
+    process.exit(1);
+  }
 
-	// Remove .github directory if it exists
-	const githubPath = ".github";
+  // Remove .github directory if it exists
+  const githubPath = ".github";
 
-	try {
-		await removeDirectory(githubPath);
-		Logger.log(".github directory removed successfully");
-	} catch (error) {
-		Logger.error(`Error removing .github directory: ${error.message}`);
-		// eslint-disable-next-line no-undef
-		process.exit(1);
-	}
+  try {
+    await removeDirectory(githubPath);
+    Logger.log(".github directory removed successfully");
+  } catch (error) {
+    Logger.error(`Error removing .github directory: ${error.message}`);
+    // eslint-disable-next-line no-undef
+    process.exit(1);
+  }
 
-	// Setup
-	await templateFiller.extractNames();
+  // Setup
+  await templateFiller.extractNames();
 
-	const fileConfigs = [];
-	const missingFiles = [];
+  const fileConfigs = [];
+  const missingFiles = [];
 
-	for (const dir of Object.keys(githubDirShape)) {
-		for (const file of githubDirShape[dir]) {
-			const inputPath = `${dir === "_root" ? "" : `${dir}/`}${file}`;
-			const outputPath = `${rootDir}/.github/${inputPath}`;
+  for (const dir of Object.keys(githubDirShape)) {
+    for (const file of githubDirShape[dir]) {
+      const inputPath = `${dir === "_root" ? "" : `${dir}/`}${file}`;
+      const outputPath = `${rootDir}/.github/${inputPath}`;
 
-			const fileConfig = filePathToRemoteInput(
-				`templates/${CONFIG_TEMPLATE}/.github/${inputPath}`,
-				TARGET_BRANCH_TO_COPY,
-				outputPath,
-			);
-			fileConfigs.push(fileConfig);
-		}
-	}
+      const fileConfig = filePathToRemoteInput(
+        `templates/${CONFIG_TEMPLATE}/.github/${inputPath}`,
+        TARGET_BRANCH_TO_COPY,
+        outputPath,
+      );
+      fileConfigs.push(fileConfig);
+    }
+  }
 
-	// Check if files exist
-	await Promise.all(
-		fileConfigs.map(async (config) => {
-			try {
-				const response = await fetch(config.input.remoteUrl, {
-					method: "HEAD",
-				});
-				if (!response.ok) {
-					missingFiles.push(config.input.remoteUrl);
-				}
-			} catch {
-				missingFiles.push(config.input.remoteUrl);
-			}
-		}),
-	);
+  // Check if files exist
+  await Promise.all(
+    fileConfigs.map(async (config) => {
+      try {
+        const response = await fetch(config.input.remoteUrl, {
+          method: "HEAD",
+        });
+        if (!response.ok) {
+          missingFiles.push(config.input.remoteUrl);
+        }
+      } catch {
+        missingFiles.push(config.input.remoteUrl);
+      }
+    }),
+  );
 
-	// If missing, log and exit
-	if (missingFiles.length > 0) {
-		const errorMessage = missingFiles
-			.map((file) => `File not found: ${file}`)
-			.join("\n");
-		Logger.error(
-			`Failed to sync .github directory. Confirm githubDirShape object is up to date:\n${errorMessage}`,
-		);
-		// eslint-disable-next-line no-undef
-		process.exit(1);
-	}
+  // If missing, log and exit
+  if (missingFiles.length > 0) {
+    const errorMessage = missingFiles
+      .map((file) => `File not found: ${file}`)
+      .join("\n");
+    Logger.error(
+      `Failed to sync .github directory. Confirm githubDirShape object is up to date:\n${errorMessage}`,
+    );
+    // eslint-disable-next-line no-undef
+    process.exit(1);
+  }
 
-	// Process all files
-	try {
-		await Promise.all(
-			fileConfigs.map((config) => processContentForFile(config)),
-		);
-		Logger.log("All files processed.");
-	} catch (error) {
-		Logger.error(`Error processing files: ${error.message}`);
-		// eslint-disable-next-line no-undef
-		process.exit(1);
-	}
+  // Process all files
+  try {
+    await Promise.all(
+      fileConfigs.map((config) => processContentForFile(config)),
+    );
+    Logger.log("All files processed.");
+  } catch (error) {
+    Logger.error(`Error processing files: ${error.message}`);
+    // eslint-disable-next-line no-undef
+    process.exit(1);
+  }
 }
