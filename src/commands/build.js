@@ -16,7 +16,7 @@ function cleanupDist() {
 
   try {
     rmSync(distPath, { recursive: true, force: true });
-    ora().succeed("Cleaned up dist/ folder");
+    ora().succeed("Cleaned up dist folder");
   } catch (error) {
     ora().fail(`Failed to cleanup dist/ folder: ${error.message}`);
     console.error(error);
@@ -144,6 +144,89 @@ async function handleWatcherEvents(watcher) {
 }
 
 /**
+ * Creates output configuration objects for different bundle types
+ * @returns {object} Configuration objects for main and d.ts outputs
+ */
+function getOutputConfigs() {
+  return {
+    // Configuration for the main bundle output
+    mainOutputConfig: {
+      format: "esm",
+      dir: "./dist",
+      entryFileNames: "[name].js",
+    },
+    // Configuration for the d.ts files output
+    dtsOutputConfig: {
+      format: "esm",
+      dir: "./dist",
+      entryFileNames: "[name].d.ts",
+    },
+  };
+}
+
+/**
+ * Builds the main JavaScript bundle
+ * @param {object} config - Rollup config for the main bundle
+ * @param {object} outputConfig - Output configuration for the main bundle
+ */
+async function buildMainBundle(config, outputConfig) {
+  const mainBundleSpinner = ora("Building main bundle...").start();
+
+  try {
+    const create_dist = await rollup(config);
+    await create_dist.write(outputConfig);
+    await create_dist.close();
+
+    mainBundleSpinner.succeed("Main bundle built successfully");
+  } catch (error) {
+    mainBundleSpinner.fail("Failed to build main bundle");
+    console.error("Error building main bundle:", error);
+    throw new Error(`Main bundle build failed: ${error.message}`);
+  }
+}
+
+/**
+ * Builds the TypeScript definition files
+ * @param {object} config - Rollup config for d.ts generation
+ * @param {object} outputConfig - Output configuration for d.ts files
+ */
+async function buildTypeDefinitions(config, outputConfig) {
+  const dtsSpinner = ora("Generating type definitions...").start();
+
+  try {
+    const create_dts = await rollup(config);
+    await create_dts.write(outputConfig);
+    await create_dts.close();
+
+    dtsSpinner.succeed("Type definitions generated successfully");
+  } catch (error) {
+    dtsSpinner.fail("Failed to generate type definitions");
+    console.error("Error building d.ts files:", error);
+    throw new Error(`Type definitions build failed: ${error.message}`);
+  }
+}
+
+/**
+ * Generates the Rollup configuration for watch mode.
+ * @param {object} mainBundleConfig - The main bundle configuration
+ * @param {object} mainOutputConfig - The output configuration
+ * @returns {object} - Watch configuration for Rollup
+ */
+function getWatcherConfig(mainBundleConfig, mainOutputConfig) {
+  return {
+    ...mainBundleConfig,
+    output: [mainOutputConfig],
+    watch: {
+      clearScreen: false,
+      buildDelay: 200,
+      chokidar: {
+        ignoreInitial: true,
+      },
+    },
+  };
+}
+
+/**
  * Build the component using Rollup.
  */
 async function buildWithRollup(options) {
@@ -157,67 +240,19 @@ async function buildWithRollup(options) {
   }
 
   const dtsConfig = getDtsConfig();
-
-  // Common output config for the main bundle
-  const mainOutputConfig = {
-    format: "esm",
-    dir: "./dist",
-    entryFileNames: "[name].js",
-  };
-
-  // Common output config for the d.ts files
-  const dtsOutputConfig = {
-    format: "esm",
-    dir: "./dist",
-    entryFileNames: "[name].d.ts",
-  };
+  const { mainOutputConfig, dtsOutputConfig } = getOutputConfigs();
 
   try {
     if (!isDevMode) {
-      // Main bundle spinner
-      const mainBundleSpinner = ora("Building main bundle...").start();
-
-      try {
-        const create_dist = await rollup(mainBundleConfig);
-        await create_dist.write(mainOutputConfig);
-        await create_dist.close();
-
-        mainBundleSpinner.succeed("Main bundle built successfully");
-      } catch (error) {
-        mainBundleSpinner.fail("Failed to build main bundle");
-        console.error("Error building main bundle:", error);
-        throw error;
-      }
-
-      // D.ts files spinner
-      const dtsSpinner = ora("Generating type definitions...").start();
-
-      try {
-        const create_dts = await rollup(dtsConfig);
-        await create_dts.write(dtsOutputConfig);
-        await create_dts.close();
-
-        dtsSpinner.succeed("Type definitions generated successfully");
-      } catch (error) {
-        dtsSpinner.fail("Failed to generate type definitions");
-        console.error("Error building d.ts files:", error);
-        throw error;
-      }
+      await buildMainBundle(mainBundleConfig, mainOutputConfig);
+      await buildTypeDefinitions(dtsConfig, dtsOutputConfig);
     } else {
       const watchModeSpinner = ora("Starting watch mode...").start();
 
-      const watcherConfig = {
-        ...mainBundleConfig,
-        output: [mainOutputConfig],
-        watch: {
-          clearScreen: false,
-          buildDelay: 200,
-          chokidar: {
-            ignoreInitial: true,
-          },
-        },
-      };
-
+      const watcherConfig = getWatcherConfig(
+        mainBundleConfig,
+        mainOutputConfig,
+      );
       const watcher = watch(watcherConfig);
 
       try {
