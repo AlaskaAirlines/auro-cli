@@ -39,6 +39,7 @@ const externalDependencies = [
   "inquirer",
   "simple-git",
   "glob",
+  "web-component-analyzer",
 ];
 
 // Create the final list of external packages

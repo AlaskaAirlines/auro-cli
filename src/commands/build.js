@@ -10,6 +10,7 @@ import ora from "ora";
 import { rollup, watch } from "rollup";
 import { dts } from "rollup-plugin-dts";
 import { litScss } from "rollup-plugin-scss-lit";
+import { analyzeComponents } from "#scripts/analyze.js";
 
 /**
  * Clean up the dist folder
@@ -86,14 +87,16 @@ function createDemoConfig(options) {
   const { modulePaths = [] } = options;
   return {
     input: Object.fromEntries(
-      glob.sync("./demo/*.js").map((file) => {
+      glob.sync("./demo/*.js", { ignore: ["./demo/*.min.js"] }).map((file) => {
         const name = basename(file, ".js");
-        return [`${name}.min`, file];
+        return [name, file];
       }),
     ),
     output: {
       format: "esm",
       dir: "./demo/",
+      entryFileNames: "[name].min.js",
+      chunkFileNames: "[name].min.js",
     },
     plugins: getPluginsConfig(modulePaths),
   };
@@ -270,6 +273,25 @@ async function buildDemoFiles(options) {
 }
 
 /**
+ * Analyzes web components and generates API documentation.
+ */
+async function generateApiDocs(options) {
+  const { sourceFiles, outFile } = options;
+  const analyzeSpinner = ora(
+    "Analyzing components and generating API documentation...",
+  ).start();
+
+  try {
+    await analyzeComponents(sourceFiles, outFile);
+    analyzeSpinner.succeed("API documentation generated successfully");
+  } catch (error) {
+    analyzeSpinner.fail("Failed to generate API documentation");
+    console.error("Error generating API documentation:", error);
+    throw new Error(`API documentation generation failed: ${error.message}`);
+  }
+}
+
+/**
  * Generates the Rollup configuration for watch mode.
  * @param {object} mainBundleConfig - The main bundle configuration
  * @param {object} mainOutputConfig - The output configuration
@@ -309,6 +331,7 @@ async function buildWithRollup(options) {
     if (!isDevMode) {
       await buildMainBundle(mainBundleConfig, mainOutputConfig);
       await buildTypeDefinitions(dtsConfig, dtsOutputConfig);
+      await generateApiDocs(options); // Generate API documentation
       await buildDemoFiles(options); // Build demo files in production mode
     } else {
       const watchModeSpinner = ora("Starting watch mode...").start();
@@ -324,6 +347,7 @@ async function buildWithRollup(options) {
         watchModeSpinner.succeed("Watch mode started successfully");
 
         // Build demo files initially in dev mode
+        await generateApiDocs(options); // Generate API documentation
         await buildDemoFiles(options);
 
         // Start dev server in dev mode
@@ -390,13 +414,18 @@ export default program
   .command("build")
   .description("Builds auro components")
   .option("-m, --module-paths [paths...]", "Path(s) to node_modules folder")
-  .option("-d, --dev", "Development mode: rebuilds on file changes", false)
+  .option("-d, --dev", "Development mode: rebuilds on file changes")
   .option("-p, --port <number>", "Port for the dev server")
   .option(
     "-b, --open <path>",
     "Path to open in the browser when dev server starts",
   )
   .option("-c, --closed", "Prevent browser from opening automatically")
+  .option(
+    "--wca-input [files...]",
+    "Source file(s) to analyze for API documentation",
+  )
+  .option("--wca-output [files...]", "Output file(s) for API documentation")
   .action(async (options) => {
     try {
       const build = ora("Initializing...");
