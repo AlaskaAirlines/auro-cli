@@ -8,7 +8,6 @@ import "#commands/build.js";
 import "#commands/migrate.js";
 import "#commands/sync.js";
 import "#commands/wca-setup.js";
-import "#commands/build-vite.js";
 
 program
   .name("auro")

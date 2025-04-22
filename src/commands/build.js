@@ -1,10 +1,11 @@
 import { rmSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { nodeResolve } from "@rollup/plugin-node-resolve";
 import terser from "@rollup/plugin-terser";
 import { startDevServer } from "@web/dev-server";
 import { hmrPlugin } from "@web/dev-server-hmr";
 import { program } from "commander";
+import { glob } from "glob";
 import ora from "ora";
 import { rollup, watch } from "rollup";
 import { dts } from "rollup-plugin-dts";
@@ -27,13 +28,39 @@ function cleanupDist() {
 }
 
 /**
+ * Creates Rollup plugins configuration.
+ * @param {string[]} loadPaths - Paths to include in litScss.
+ * @returns {object[]} - Array of Rollup plugins.
+ */
+function getPluginsConfig(modulePaths = []) {
+  return [
+    nodeResolve({
+      dedupe: ["lit", "lit-element", "lit-html"],
+      preferBuiltins: false,
+      moduleDirectories: ["node_modules"],
+    }),
+    litScss({
+      minify: { fast: true },
+      options: {
+        loadPaths: [
+          "../../node_modules",
+          "../node_modules",
+          "node_modules",
+          ...modulePaths,
+        ],
+      },
+    }),
+  ];
+}
+
+/**
  * Generates the Rollup configuration for the main bundle.
  * @param {object} options - Build options.
- * @param {string} options.modulePath - Path to the node_modules folder.
+ * @param {string[]} options.modulePath - Path to the node_modules folder.
  * @returns {object} - Rollup configuration object.
  */
 function getMainBundleConfig(options) {
-  const { modulePath } = options;
+  const { modulePaths = [] } = options;
   return {
     input: ["./src/index.js", "./src/registered.js"],
     external: [
@@ -46,17 +73,7 @@ function getMainBundleConfig(options) {
       "lit/directives/class-map.js",
       "lit/directives/if-defined.js",
     ],
-    plugins: [
-      nodeResolve({
-        dedupe: ["lit", "lit-element", "lit-html"],
-        preferBuiltins: false,
-        moduleDirectories: ["node_modules"],
-      }),
-      litScss({
-        minify: { fast: true },
-        options: { loadPaths: [modulePath] },
-      }),
-    ],
+    plugins: getPluginsConfig(modulePaths),
   };
 }
 
@@ -65,24 +82,20 @@ function getMainBundleConfig(options) {
  * @param {string} entryPoint - The entry point file name without extension.
  * @returns {object} - Rollup configuration object.
  */
-function createDemoConfig(entryPoint) {
+function createDemoConfig(options) {
+  const { modulePaths = [] } = options;
   return {
-    input: {
-      [`${entryPoint}.min`]: `./demo/${entryPoint}.js`,
-    },
+    input: Object.fromEntries(
+      glob.sync("./demo/*.js").map((file) => {
+        const name = basename(file, ".js");
+        return [`${name}.min`, file];
+      }),
+    ),
     output: {
       format: "esm",
       dir: "./demo/",
     },
-    plugins: [
-      nodeResolve(),
-      litScss({
-        minify: { fast: true },
-        options: {
-          loadPaths: ["../../node_modules", "../node_modules", "node_modules"],
-        },
-      }),
-    ],
+    plugins: getPluginsConfig(modulePaths),
   };
 }
 
@@ -239,20 +252,14 @@ async function buildTypeDefinitions(config, outputConfig) {
  * Builds the demo files
  * @param {Array<string>} demoFiles - Array of demo entry points
  */
-async function buildDemoFiles(demoFiles = ["index", "api"]) {
+async function buildDemoFiles(options) {
   const demoSpinner = ora("Building demo files...").start();
 
   try {
-    for (const entryPoint of demoFiles) {
-      const config = createDemoConfig(entryPoint);
-      const bundle = await rollup({
-        input: config.input,
-        plugins: config.plugins,
-      });
+    const bundle = await rollup(createDemoConfig(options));
 
-      await bundle.write(config.output);
-      await bundle.close();
-    }
+    await bundle.write(createDemoConfig(options).output);
+    await bundle.close();
 
     demoSpinner.succeed("Demo files built successfully");
   } catch (error) {
@@ -302,7 +309,7 @@ async function buildWithRollup(options) {
     if (!isDevMode) {
       await buildMainBundle(mainBundleConfig, mainOutputConfig);
       await buildTypeDefinitions(dtsConfig, dtsOutputConfig);
-      await buildDemoFiles(); // Build demo files in production mode
+      await buildDemoFiles(options); // Build demo files in production mode
     } else {
       const watchModeSpinner = ora("Starting watch mode...").start();
 
@@ -317,7 +324,7 @@ async function buildWithRollup(options) {
         watchModeSpinner.succeed("Watch mode started successfully");
 
         // Build demo files initially in dev mode
-        await buildDemoFiles();
+        await buildDemoFiles(options);
 
         // Start dev server in dev mode
         const serverSpinner = ora("Starting dev server...").start();
@@ -382,11 +389,7 @@ async function buildWithRollup(options) {
 export default program
   .command("build")
   .description("Builds auro components")
-  .option(
-    "-m, --module-path <string>",
-    "Path to node_modules folder",
-    "node_modules",
-  )
+  .option("-m, --module-paths [paths...]", "Path(s) to node_modules folder")
   .option("-d, --dev", "Development mode: rebuilds on file changes", false)
   .option("-p, --port <number>", "Port for the dev server")
   .option(
