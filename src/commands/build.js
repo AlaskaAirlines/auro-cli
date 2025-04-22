@@ -2,6 +2,8 @@ import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { nodeResolve } from "@rollup/plugin-node-resolve";
 import terser from "@rollup/plugin-terser";
+import { startDevServer } from "@web/dev-server";
+import { hmrPlugin } from "@web/dev-server-hmr";
 import { program } from "commander";
 import ora from "ora";
 import { rollup, watch } from "rollup";
@@ -26,7 +28,8 @@ function cleanupDist() {
 
 /**
  * Generates the Rollup configuration for the main bundle.
- * @param {string} modulePath - Path to the node_modules folder.
+ * @param {object} options - Build options.
+ * @param {string} options.modulePath - Path to the node_modules folder.
  * @returns {object} - Rollup configuration object.
  */
 function getMainBundleConfig(options) {
@@ -52,6 +55,32 @@ function getMainBundleConfig(options) {
       litScss({
         minify: { fast: true },
         options: { loadPaths: [modulePath] },
+      }),
+    ],
+  };
+}
+
+/**
+ * Creates Rollup configuration for demo files.
+ * @param {string} entryPoint - The entry point file name without extension.
+ * @returns {object} - Rollup configuration object.
+ */
+function createDemoConfig(entryPoint) {
+  return {
+    input: {
+      [`${entryPoint}.min`]: `./demo/${entryPoint}.js`,
+    },
+    output: {
+      format: "esm",
+      dir: "./demo/",
+    },
+    plugins: [
+      nodeResolve(),
+      litScss({
+        minify: { fast: true },
+        options: {
+          loadPaths: ["../../node_modules", "../node_modules", "node_modules"],
+        },
       }),
     ],
   };
@@ -207,6 +236,33 @@ async function buildTypeDefinitions(config, outputConfig) {
 }
 
 /**
+ * Builds the demo files
+ * @param {Array<string>} demoFiles - Array of demo entry points
+ */
+async function buildDemoFiles(demoFiles = ["index", "api"]) {
+  const demoSpinner = ora("Building demo files...").start();
+
+  try {
+    for (const entryPoint of demoFiles) {
+      const config = createDemoConfig(entryPoint);
+      const bundle = await rollup({
+        input: config.input,
+        plugins: config.plugins,
+      });
+
+      await bundle.write(config.output);
+      await bundle.close();
+    }
+
+    demoSpinner.succeed("Demo files built successfully");
+  } catch (error) {
+    demoSpinner.fail("Failed to build demo files");
+    console.error("Error building demo files:", error);
+    throw new Error(`Demo files build failed: ${error.message}`);
+  }
+}
+
+/**
  * Generates the Rollup configuration for watch mode.
  * @param {object} mainBundleConfig - The main bundle configuration
  * @param {object} mainOutputConfig - The output configuration
@@ -246,6 +302,7 @@ async function buildWithRollup(options) {
     if (!isDevMode) {
       await buildMainBundle(mainBundleConfig, mainOutputConfig);
       await buildTypeDefinitions(dtsConfig, dtsOutputConfig);
+      await buildDemoFiles(); // Build demo files in production mode
     } else {
       const watchModeSpinner = ora("Starting watch mode...").start();
 
@@ -258,6 +315,51 @@ async function buildWithRollup(options) {
       try {
         handleWatcherEvents(watcher);
         watchModeSpinner.succeed("Watch mode started successfully");
+
+        // Build demo files initially in dev mode
+        await buildDemoFiles();
+
+        // Start dev server in dev mode
+        const serverSpinner = ora("Starting dev server...").start();
+        try {
+          const config = {
+            port: Number(options.port) || undefined,
+            open: options.closed ? undefined : options.open || "/",
+            watch: true,
+            nodeResolve: true,
+            basePath: "/",
+            rootDir: "./demo",
+            middleware: [
+              function rewriteIndex(context, next) {
+                if (!context.url.endsWith("/") && !context.url.includes(".")) {
+                  context.url += ".html";
+                }
+                return next();
+              },
+            ],
+            plugins: [
+              hmrPlugin({
+                include: [
+                  "src/**/*",
+                  "demo/**/*",
+                  "apiExamples/**/*",
+                  "docs/**/*",
+                ],
+              }),
+            ],
+          };
+
+          await startDevServer({
+            config,
+            readCliArgs: false,
+            readFileConfig: false,
+          });
+
+          serverSpinner.succeed("Dev server started successfully");
+        } catch (error) {
+          serverSpinner.fail(`Failed to start dev server: ${error.message}`);
+          console.error(error);
+        }
       } catch (error) {
         watchModeSpinner.fail("Watch mode initialization failed");
         throw error;
@@ -281,11 +383,17 @@ export default program
   .command("build")
   .description("Builds auro components")
   .option(
-    "-p, --module-path <string>",
+    "-m, --module-path <string>",
     "Path to node_modules folder",
     "node_modules",
   )
   .option("-d, --dev", "Development mode: rebuilds on file changes", false)
+  .option("-p, --port <number>", "Port for the dev server")
+  .option(
+    "-b, --open <path>",
+    "Path to open in the browser when dev server starts",
+  )
+  .option("-c, --closed", "Prevent browser from opening automatically")
   .action(async (options) => {
     try {
       const build = ora("Initializing...");

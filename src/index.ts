@@ -8,11 +8,12 @@ import "#commands/build.js";
 import "#commands/migrate.js";
 import "#commands/sync.js";
 import "#commands/wca-setup.js";
+import "#commands/build-vite.js";
 
 program
-	.name("auro")
-	.version(getPackageVersion())
-	.description("A cli tool to support the Auro Design System");
+  .name("auro")
+  .version(getPackageVersion())
+  .description("A cli tool to support the Auro Design System");
 
 program.addHelpText("beforeAll", auroSplash());
 
