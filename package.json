@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "description": "A cli tool to support the Auro Design System",
   "scripts": {
-    "lint": "biome check --fix",
+    "lint": "biome check --fix --no-errors-on-unmatched",
     "prepare": "husky",
     "test": "echo \"Notice: no tests available\" && exit 0",
     "dev": "nodemon --watch src --exec 'npm run build:dev'",
@@ -15,7 +15,7 @@
   "license": "Apache-2.0",
   "type": "module",
   "lint-staged": {
-    "*": ["biome check --fix"]
+    "*": ["biome check --fix --no-errors-on-unmatched"]
   },
   "bin": {
     "auro": "dist/auro-cli.js"
@@ -59,7 +59,7 @@
     "web-component-analyzer": "^2.0.0"
   },
   "devDependencies": {
-    "@aurodesignsystem/auro-config": "^1.0.0",
+    "@aurodesignsystem/auro-config": "^1.0.1",
     "@biomejs/biome": "1.9.4",
     "@commitlint/cli": "^19.8.0",
     "@commitlint/config-conventional": "^19.8.0",
