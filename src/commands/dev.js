@@ -1,39 +1,43 @@
-import { hmrPlugin } from "@open-wc/dev-server-hmr";
-import { startDevServer } from "@web/dev-server";
 import { program } from "commander";
+import ora from "ora";
+import {
+  withBuildOptions,
+  withServerOptions,
+} from "#commands/_sharedOptions.js";
+import { buildWithRollup, cleanupDist } from "#scripts/build/rollup.js";
 
-export default program
+let devCommand = program
   .command("dev")
-  .description("Runs web-dev-server command")
-  .option("-o, --open <type>", "Open server to a specific directory")
-  .option("-p, --port <type>", "Change the server port")
-  .option("-c, --closed", "Prevent the server from opening a browser window")
-  .action((options) => {
-    const config = {
-      port: Number(options.port) || undefined,
-      open: options.closed ? undefined : options.open || "/",
-      watch: true,
-      nodeResolve: true,
-      basePath: "/",
-      rootDir: "./demo",
-      middleware: [
-        function rewriteIndex(context, next) {
-          if (!context.url.endsWith("/") && !context.url.includes(".")) {
-            context.url += ".html";
-          }
-          return next();
-        },
-      ],
-      plugins: [
-        hmrPlugin({
-          include: ["src/**/*", "demo/**/*", "apiExamples/**/*", "docs/**/*"],
-        }),
-      ],
-    };
+  .description("Runs development server for auro components");
 
-    startDevServer({
-      config,
-      readCliArgs: false,
-      readFileConfig: false,
-    });
-  });
+devCommand = withBuildOptions(devCommand, {
+  watch: true,
+});
+devCommand = withServerOptions(devCommand);
+
+export default devCommand.action(async (options) => {
+  try {
+    const build = ora("Initializing...");
+
+    if (options.watch) {
+      build.text = "Waiting for changes...";
+      build.spinner = "bouncingBar";
+      build.color = "green";
+    } else {
+      build.text = "Building component";
+    }
+
+    build.start();
+
+    cleanupDist();
+
+    await buildWithRollup({ ...options, dev: true, watch: true });
+
+    // build.succeed("Build completed successfully!");
+  } catch (error) {
+    // If there's any active spinner, we need to fail it
+    ora().fail(`Build failed: ${error.message}`);
+    console.error(error);
+    process.exit(1);
+  }
+});
