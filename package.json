@@ -55,10 +55,11 @@
     "rollup-plugin-dts": "^6.2.1",
     "rollup-plugin-scss-lit": "^2.1.0",
     "simple-git": "^3.27.0",
-    "web-component-analyzer": "^2.0.0",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "web-component-analyzer": "^2.0.0"
   },
   "devDependencies": {
+    "@aurodesignsystem/auro-config": "^1.0.0",
     "@biomejs/biome": "1.9.4",
     "@commitlint/cli": "^19.8.0",
     "@commitlint/config-conventional": "^19.8.0",
