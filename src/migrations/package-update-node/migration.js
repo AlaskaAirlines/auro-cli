@@ -1,6 +1,6 @@
 import { Logger } from "@aurodesignsystem/auro-library/scripts/utils/logger.mjs";
 
-import fs from "fs";
+import fs from "node:fs";
 // import { path } from "path";
 
 // Run tasks sequentially
@@ -26,7 +26,7 @@ const run = () => {
     );
   }
 
-  Logger.success(`Node engine version updated to version in package.json`);
+  Logger.success("Node engine version updated to version in package.json");
 };
 
 run();

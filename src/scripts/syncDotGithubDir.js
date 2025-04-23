@@ -1,9 +1,9 @@
+import fs from "node:fs/promises";
+import { Logger } from "@aurodesignsystem/auro-library/scripts/utils/logger.mjs";
 import {
   processContentForFile,
   templateFiller,
 } from "@aurodesignsystem/auro-library/scripts/utils/sharedFileProcessorUtils.mjs";
-import { Logger } from "@aurodesignsystem/auro-library/scripts/utils/logger.mjs";
-import fs from "fs/promises";
 
 const REMOTE_TEMPLATE_BASE_URL =
   "https://raw.githubusercontent.com/AlaskaAirlines/auro-templates";

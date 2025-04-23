@@ -1,8 +1,10 @@
-/* eslint-disable no-underscore-dangle, no-await-in-loop, no-magic-numbers, no-undef */
+import fs from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import process from "node:process";
+import { fileURLToPath } from "node:url";
+/* eslint-disable no-underscore-dangle, no-await-in-loop, no-magic-numbers */
 import { build } from "esbuild";
-import { fileURLToPath } from "url";
-import { dirname, join, resolve } from "path";
-import fs from "fs";
+import ora from "ora";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -37,16 +39,21 @@ const externalDependencies = [
   "inquirer",
   "simple-git",
   "glob",
+  "web-component-analyzer",
 ];
 
 // Create the final list of external packages
 const externalPackages = [...nodeBuiltins, ...externalDependencies];
 
+// Parse command line arguments to check for development mode
+const isDevelopmentMode = process.argv.includes("--dev");
+
 // Custom build steps for optimizing the distribution
 /**
- *
+ * Runs the build process with optional development mode.
+ * @param {boolean} isDev - Whether to build in development mode for easier debugging.
  */
-async function runBuild() {
+async function runBuild(isDev = false) {
   try {
     // Step 1: Ensure dist directory exists
     if (!fs.existsSync("dist")) {
@@ -67,13 +74,18 @@ async function runBuild() {
       }
     }
 
-    // Step 3: Bundle the application in a single optimized file
-    const result = await build({
+    // Step 3: Bundle the application in a single file
+    const buildSpinner = ora(
+      isDev
+        ? "Building in DEVELOPMENT mode..."
+        : "Building in PRODUCTION mode...",
+    ).start();
+
+    const buildConfig = {
       entryPoints: ["src/index.js"],
       bundle: true,
       platform: "node",
       target: "node18",
-      minify: true,
       outfile: "dist/auro-cli.js",
       format: "esm",
       banner: {
@@ -84,25 +96,50 @@ async function runBuild() {
         // Ensure migrations are kept external
         "./migrations/*",
         "../migrations/*",
+        // Handle dynamic requires of node modules
+        "node:*",
       ],
-      logLevel: "info",
+      // Prevent bundling Node.js built-ins
+      packages: "external",
       loader: {
         ".node": "file",
       },
       mainFields: ["module", "main"],
-      treeShaking: true,
       metafile: true,
-      sourcemap: "external",
-      // Additional options for more aggressive bundling
       allowOverwrite: true,
-      legalComments: "none",
       // Support aliased imports from package.json
       alias: {
+        "#configs": resolve(__dirname, "src/configs"),
         "#commands": resolve(__dirname, "src/commands"),
         "#scripts": resolve(__dirname, "src/scripts"),
         "#utils": resolve(__dirname, "src/utils"),
       },
-    });
+    };
+
+    // Apply development or production specific settings
+    if (isDev) {
+      // Development mode settings for easier debugging
+      buildConfig.minify = false;
+      buildConfig.sourcemap = true;
+      buildConfig.logLevel = "debug";
+      buildConfig.treeShaking = false;
+      // No aggressive bundling in dev mode
+    } else {
+      // Production mode settings
+      buildConfig.minify = true;
+      buildConfig.sourcemap = "external";
+      buildConfig.logLevel = "info";
+      buildConfig.treeShaking = true;
+      buildConfig.legalComments = "none";
+    }
+
+    const result = await build(buildConfig);
+
+    buildSpinner.succeed(
+      isDev
+        ? "Build complete with development-friendly distribution!"
+        : "Build complete with optimized distribution!",
+    );
 
     // Step 4: Process migration JS files to inline their dependencies
     // Find all JS files in the migrations folder
@@ -113,24 +150,27 @@ async function runBuild() {
      * @param {string} dir - The directory to search for JavaScript files.
      */
     function findJsFiles(dir) {
+      if (!fs.existsSync(dir)) {
+        return;
+      }
       const files = fs.readdirSync(dir);
-      files.forEach((file) => {
+      for (const file of files) {
         const filePath = join(dir, file);
         if (fs.statSync(filePath).isDirectory()) {
           findJsFiles(filePath);
         } else if (file.endsWith(".js")) {
           migrationJsFiles.push(filePath);
         }
-      });
+      }
     }
 
     // Find all JS files in src/migrations
     findJsFiles("src/migrations");
 
     // Process each migration JS file
-    console.log(
-      `🔄 Processing ${migrationJsFiles.length} migration JS files...`,
-    );
+    const migrationSpinner = ora(
+      `Processing ${migrationJsFiles.length} migration JS files...`,
+    ).start();
 
     for (const migrationFile of migrationJsFiles) {
       // Calculate output path - replacing 'src/migrations' with 'dist/migrations'
@@ -146,7 +186,7 @@ async function runBuild() {
       }
 
       // Bundle the migration file with its dependencies
-      await build({
+      const migrationBuildConfig = {
         entryPoints: [migrationFile],
         bundle: true,
         platform: "node",
@@ -154,11 +194,13 @@ async function runBuild() {
         outfile: outputFile,
         format: "esm",
         // Keep only external package dependencies
-        external: externalPackages,
-        minify: true,
-        sourcemap: false,
-        legalComments: "none",
-        treeShaking: true,
+        external: [
+          ...externalPackages,
+          // Handle dynamic requires of node modules
+          "node:*",
+        ],
+        // Prevent bundling Node.js built-ins
+        packages: "external",
         allowOverwrite: true,
         // Support utils/ imports and other local imports
         alias: {
@@ -166,8 +208,29 @@ async function runBuild() {
           "#scripts": resolve(__dirname, "src/scripts"),
           "#commands": resolve(__dirname, "src/commands"),
         },
-      });
+      };
+
+      // Apply development or production specific settings for migrations
+      if (isDev) {
+        // Development mode settings for migrations
+        migrationBuildConfig.minify = false;
+        migrationBuildConfig.sourcemap = true;
+        migrationBuildConfig.logLevel = "debug";
+        migrationBuildConfig.treeShaking = false;
+      } else {
+        // Production mode settings for migrations
+        migrationBuildConfig.minify = true;
+        migrationBuildConfig.sourcemap = false;
+        migrationBuildConfig.legalComments = "none";
+        migrationBuildConfig.treeShaking = true;
+      }
+
+      await build(migrationBuildConfig);
     }
+
+    migrationSpinner.succeed(
+      `Processed ${migrationJsFiles.length} migration JS files.`,
+    );
 
     // Step 5: Fix any issues with the main bundle
     const mainBundlePath = "dist/auro-cli.js";
@@ -192,13 +255,11 @@ async function runBuild() {
       const bundleSize = fs.statSync("dist/auro-cli.js").size;
       console.log(`🔹 Main bundle size: ${(bundleSize / 1024).toFixed(2)}kb`);
     }
-
-    console.log("✅ Build complete with optimized distribution!");
   } catch (error) {
     console.error("❌ Build failed:", error);
     process.exit(1);
   }
 }
 
-// Execute the build
-runBuild();
+// Execute the build with development mode if --dev flag is present
+runBuild(isDevelopmentMode);

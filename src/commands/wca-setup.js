@@ -1,11 +1,11 @@
 /* eslint-disable no-await-in-loop, line-comment-position, no-inline-comments, jsdoc/require-jsdoc, no-undef */
 
+import fs from "node:fs";
+import path from "node:path";
+import { Logger } from "@aurodesignsystem/auro-library/scripts/utils/logger.mjs";
 import { program } from "commander";
-import fs from "fs";
-import path from "path";
 import { glob } from "glob";
 import getTemplatedComponentCode from "#scripts/prepWcaCompatibleCode.mjs";
-import { Logger } from "@aurodesignsystem/auro-library/scripts/utils/logger.mjs";
 
 // Use glob directly as it's already promised-based in newer versions
 

@@ -6,6 +6,7 @@ docTemplates/
 dist/
 .gitter-temp/
 .idea/
+.vscode/
 
 ## Code coverage reports
 coverage/
