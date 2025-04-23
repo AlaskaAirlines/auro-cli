@@ -23,7 +23,7 @@
   "exports": {
     ".": "./dist/auro-cli.js"
   },
-  "files": ["dist"],
+  "files": ["dist", "CHANGELOG.md", "README.md", "LICENSE", "NOTICE"],
   "imports": {
     "#configs/*": "./src/configs/*",
     "#commands/*": "./src/commands/*",
