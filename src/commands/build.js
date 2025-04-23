@@ -11,6 +11,7 @@ import { rollup, watch } from "rollup";
 import { dts } from "rollup-plugin-dts";
 import { litScss } from "rollup-plugin-scss-lit";
 import { analyzeComponents } from "#scripts/analyze.js";
+import { runDefaultDocsBuild } from "#scripts/build/defaultBuild.js";
 
 /**
  * Clean up the dist folder
@@ -30,7 +31,7 @@ function cleanupDist() {
 
 /**
  * Creates Rollup plugins configuration.
- * @param {string[]} loadPaths - Paths to include in litScss.
+ * @param {string[]} modulePaths - Paths to include in litScss.
  * @returns {object[]} - Array of Rollup plugins.
  */
 function getPluginsConfig(modulePaths = []) {
@@ -65,14 +66,11 @@ function getMainBundleConfig(options) {
   return {
     input: ["./src/index.js", "./src/registered.js"],
     external: [
-      "lit",
-      "@lit/reactive-element",
-      "lit-html",
-      "lit/decorators.js",
-      "lit/static-html.js",
-      "lit/directives/repeat.js",
-      "lit/directives/class-map.js",
-      "lit/directives/if-defined.js",
+      // externalize all lit dependencies
+      /node_modules\/lit/,
+      /node_modules\/lit-element/,
+      /node_modules\/lit-html/,
+      /node_modules\/@lit/,
     ],
     plugins: getPluginsConfig(modulePaths),
   };
@@ -80,7 +78,7 @@ function getMainBundleConfig(options) {
 
 /**
  * Creates Rollup configuration for demo files.
- * @param {string} entryPoint - The entry point file name without extension.
+ * @param {object} options - The entry point file name without extension.
  * @returns {object} - Rollup configuration object.
  */
 function createDemoConfig(options) {
@@ -253,7 +251,7 @@ async function buildTypeDefinitions(config, outputConfig) {
 
 /**
  * Builds the demo files
- * @param {Array<string>} demoFiles - Array of demo entry points
+ * @param {object} options - Array of demo entry points
  */
 async function buildDemoFiles(options) {
   const demoSpinner = ora("Building demo files...").start();
@@ -275,19 +273,21 @@ async function buildDemoFiles(options) {
 /**
  * Analyzes web components and generates API documentation.
  */
-async function generateApiDocs(options) {
+async function generateDocs(options) {
   const { sourceFiles, outFile } = options;
   const analyzeSpinner = ora(
-    "Analyzing components and generating API documentation...",
+    "Analyzing components and generating documentation...",
   ).start();
 
   try {
     await analyzeComponents(sourceFiles, outFile);
-    analyzeSpinner.succeed("API documentation generated successfully");
+    await runDefaultDocsBuild();
+
+    analyzeSpinner.succeed("Documentation generated successfully");
   } catch (error) {
-    analyzeSpinner.fail("Failed to generate API documentation");
-    console.error("Error generating API documentation:", error);
-    throw new Error(`API documentation generation failed: ${error.message}`);
+    analyzeSpinner.fail(`Failed to generate documentation: ${error.message}`);
+    console.error("Error generating documentation:", error);
+    throw new Error(`Documentation generation failed: ${error.message}`);
   }
 }
 
@@ -331,7 +331,7 @@ async function buildWithRollup(options) {
     if (!isDevMode) {
       await buildMainBundle(mainBundleConfig, mainOutputConfig);
       await buildTypeDefinitions(dtsConfig, dtsOutputConfig);
-      await generateApiDocs(options); // Generate API documentation
+      await generateDocs(options); // Generate API documentation
       await buildDemoFiles(options); // Build demo files in production mode
     } else {
       const watchModeSpinner = ora("Starting watch mode...").start();
@@ -347,7 +347,7 @@ async function buildWithRollup(options) {
         watchModeSpinner.succeed("Watch mode started successfully");
 
         // Build demo files initially in dev mode
-        await generateApiDocs(options); // Generate API documentation
+        await generateDocs(options); // Generate API documentation
         await buildDemoFiles(options);
 
         // Start dev server in dev mode
