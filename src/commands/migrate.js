@@ -1,11 +1,11 @@
-import { program } from "commander";
-import { shell } from "#utils/shell.js";
+import { exec } from "node:child_process";
 import path from "node:path";
-import { fileURLToPath } from "url";
-import { exec } from "child_process";
-import util from "util";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
+import util from "node:util";
+import { program } from "commander";
 import inquirer from "inquirer";
+import { shell } from "#utils/shell.js";
 
 export default program
   .command("migrate")

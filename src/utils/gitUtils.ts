@@ -1,6 +1,6 @@
-import simpleGit from "simple-git";
+import { appendFile, readFile } from "node:fs/promises";
 import { Logger } from "@aurodesignsystem/auro-library/scripts/utils/logger.mjs";
-import { readFile, appendFile } from "node:fs/promises";
+import simpleGit from "simple-git";
 
 // @ts-ignore - something about the call signature is not happy. it works so we don't care too much
 const git = simpleGit();
@@ -11,7 +11,7 @@ export class Git {
     try {
       const fileContent = await readFile(".gitignore", "utf-8");
       return fileContent.includes(pattern);
-    } catch (err: any) {
+    } catch (err) {
       Logger.error(`Error reading file: ${err}`);
       return false;
     }

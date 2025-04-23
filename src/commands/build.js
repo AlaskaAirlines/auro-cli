@@ -1,21 +1,17 @@
 import { program } from "commander";
 import ora from "ora";
-import {
-  withBuildOptions,
-  withServerOptions,
-} from "#commands/_sharedOptions.js";
+import { withBuildOptions } from "#commands/_sharedOptions.js";
 import { buildWithRollup, cleanupDist } from "#scripts/build/rollup.js";
 
-let devCommand = program
-  .command("dev")
-  .description("Runs development server for auro components");
+let buildCommand = program
+  .command("build")
+  .description("Builds auro components");
 
-devCommand = withBuildOptions(devCommand, {
-  watch: true,
+buildCommand = withBuildOptions(buildCommand, {
+  watch: false,
 });
-devCommand = withServerOptions(devCommand);
 
-export default devCommand.action(async (options) => {
+export default buildCommand.action(async (options) => {
   try {
     const build = ora("Initializing...");
 
@@ -31,9 +27,11 @@ export default devCommand.action(async (options) => {
 
     cleanupDist();
 
-    await buildWithRollup({ ...options, dev: true, watch: true });
+    await buildWithRollup(options);
 
-    // build.succeed("Build completed successfully!");
+    if (!options.watch) {
+      build.succeed("Build completed successfully!");
+    }
   } catch (error) {
     // If there's any active spinner, we need to fail it
     ora().fail(`Build failed: ${error.message}`);

@@ -2,7 +2,7 @@
 
 import { Logger } from "@aurodesignsystem/auro-library/scripts/utils/logger.mjs";
 
-import fs from "fs";
+import fs from "node:fs";
 
 function updateBuildApiScript() {
   try {
@@ -19,7 +19,7 @@ function updateBuildApiScript() {
       `${JSON.stringify(packageJson, null, 2)}\n`,
       "utf8",
     );
-    Logger.success(`build:api script updated in package.json`);
+    Logger.success("build:api script updated in package.json");
   } catch (error) {
     Logger.error(`Failed to update build:api script in package.json: ${error}`);
   }

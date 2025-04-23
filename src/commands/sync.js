@@ -1,9 +1,9 @@
-import { program } from "commander";
 import process from "node:process";
+import { program } from "commander";
 
+import { readFile, writeFile } from "node:fs/promises";
 import { Logger } from "@aurodesignsystem/auro-library/scripts/utils/logger.mjs";
 import { syncDotGithubDir } from "#scripts/syncDotGithubDir.js";
-import { readFile, writeFile } from "node:fs/promises";
 
 export default program
   .command("sync")
