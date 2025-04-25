@@ -47,13 +47,7 @@ export function getMainBundleConfig(options) {
         dir: "./dist",
         entryFileNames: "[name].js",
       },
-      external: [
-        // externalize all lit dependencies
-        /node_modules\/lit/,
-        /node_modules\/lit-element/,
-        /node_modules\/lit-html/,
-        /node_modules\/@lit/,
-      ],
+      external: getExternalConfig(),
       plugins: getPluginsConfig(modulePaths),
       watch: getWatcherConfig(watch),
     },
@@ -80,7 +74,7 @@ export function getDemoConfig(options) {
       ),
       output: {
         format: "esm",
-        dir: "./demo/",
+        dir: "./demo",
         entryFileNames: "[name].min.js",
         chunkFileNames: "[name].min.js",
       },
@@ -127,4 +121,18 @@ export function getWatcherConfig(hasWatcher) {
     },
     include: ["./src/**/*", "./demo/**/*", "./apiExamples/**/*", "./docs/**/*"],
   };
+}
+
+/**
+ * Creates external configuration for Rollup.
+ * @returns {string[]} - Array of external dependencies.
+ */
+export function getExternalConfig() {
+  return [
+    // externalize all lit dependencies
+    /node_modules\/lit/,
+    /node_modules\/lit-element/,
+    /node_modules\/lit-html/,
+    /node_modules\/@lit/,
+  ];
 }

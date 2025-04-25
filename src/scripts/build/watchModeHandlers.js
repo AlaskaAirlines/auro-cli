@@ -86,7 +86,6 @@ export async function handleWatcherEvents(
 
       try {
         await generateDocs(options);
-        docsSpinner.succeed("Docs fresh and ready!");
         return true;
       } catch (error) {
         docsSpinner.fail("Docs stumble! Couldn't refresh.");
