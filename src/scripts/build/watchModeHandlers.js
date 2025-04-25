@@ -27,30 +27,30 @@ export async function handleWatcherEvents(
   // Function to build d.ts files
   const buildDts = async () => {
     if (dtsBuildInProgress) {
-      ora().info("D.ts build already in progress, skipping...");
+      ora().info("Types build already in progress, hang tight...");
       return false;
     }
 
     try {
       dtsBuildInProgress = true;
-      const dtsSpinner = ora("Building d.ts files in watch mode...").start();
+      const dtsSpinner = ora("Crafting type definitions...").start();
 
       try {
         const create_dts = await rollup(getDtsConfig().config);
         await create_dts.write(getDtsConfig().config.output);
         await create_dts.close();
 
-        dtsSpinner.succeed("d.ts files built successfully");
+        dtsSpinner.succeed("Type files built.");
         return true;
       } catch (error) {
-        dtsSpinner.fail("Failed to build d.ts files");
-        console.error("d.ts build error:", error);
+        dtsSpinner.fail("Types trouble! Build failed.");
+        console.error("TypeScript definition build error:", error);
         return false;
       } finally {
         dtsBuildInProgress = false;
       }
     } catch (error) {
-      console.error("Error building d.ts files:", error);
+      console.error("Error building TypeScript definition files:", error);
       return false;
     }
   };
@@ -58,14 +58,16 @@ export async function handleWatcherEvents(
   // Function to analyze components
   const runAnalyze = async () => {
     const { wcaInput: sourceFiles, wcaOutput: outFile } = options;
-    const analyzeSpinner = ora("Analyzing components...").start();
+    const analyzeSpinner = ora(
+      "Detective work: analyzing components...",
+    ).start();
 
     try {
       await analyzeComponents(sourceFiles, outFile);
-      analyzeSpinner.succeed("Components analyzed successfully");
+      analyzeSpinner.succeed("Component analysis complete! API generated.");
       return true;
     } catch (error) {
-      analyzeSpinner.fail(`Failed to analyze components: ${error.message}`);
+      analyzeSpinner.fail("Analysis hiccup! Something went wrong.");
       console.error("Component analysis error:", error);
       return false;
     }
@@ -74,22 +76,20 @@ export async function handleWatcherEvents(
   // Function to rebuild documentation
   const rebuildDocs = async () => {
     if (buildInProgress) {
-      ora().info(
-        "A build is already in progress, documentation rebuild queued...",
-      );
+      ora().info("Another build in progress, docs queued up next...");
       return false;
     }
 
     try {
       buildInProgress = true;
-      const docsSpinner = ora("Rebuilding documentation...").start();
+      const docsSpinner = ora("Refreshing docs...").start();
 
       try {
         await generateDocs(options);
-        docsSpinner.succeed("Documentation rebuilt successfully");
+        docsSpinner.succeed("Docs fresh and ready!");
         return true;
       } catch (error) {
-        docsSpinner.fail("Failed to rebuild documentation");
+        docsSpinner.fail("Docs stumble! Couldn't refresh.");
         console.error("Documentation rebuild error:", error);
         return false;
       } finally {
@@ -103,24 +103,24 @@ export async function handleWatcherEvents(
   };
 
   // Create a spinner for watch mode
-  const watchSpinner = ora("Starting watch mode...").start();
+  const watchSpinner = ora("Activating watch mode...").start();
 
   let bundleSpinner;
 
   watcher.on("event", async (event) => {
     switch (event.code) {
       case "START":
-        watchSpinner.succeed("Watching for changes");
+        watchSpinner.succeed("Watch mode active! Eyes peeled.");
         break;
 
       case "BUNDLE_START":
-        bundleSpinner = ora("Bundling...").start();
+        bundleSpinner = ora("Weaving bundles...").start();
         buildInProgress = true;
         break;
 
       case "BUNDLE_END":
         if (bundleSpinner) {
-          bundleSpinner.succeed("Bundle completed in ${event.duration}ms");
+          bundleSpinner.succeed(`Bundle done in ${event.duration}ms! 🚀`);
         }
         buildInProgress = false;
         break;
@@ -148,9 +148,9 @@ export async function handleWatcherEvents(
       case "ERROR":
         buildInProgress = false;
         if (bundleSpinner) {
-          bundleSpinner.fail(`Bundle failed: ${event.error.message}`);
+          bundleSpinner.fail(`Oops! Bundle hit a snag: ${event.error.message}`);
         } else {
-          ora().fail(`Watch error: ${event.error.message}`);
+          ora().fail(`Watch mode hiccup: ${event.error.message}`);
         }
         break;
     }
@@ -163,9 +163,9 @@ export async function handleWatcherEvents(
  */
 export function setupWatchModeListeners(watcher) {
   process.on("SIGINT", () => {
-    const closeSpinner = ora("Closing watcher...").start();
+    const closeSpinner = ora("Wrapping up...").start();
     watcher.close();
-    closeSpinner.succeed("Watcher closed successfully");
+    closeSpinner.succeed("All done! See you next time. ✨");
     process.exit(0);
   });
 

@@ -8,7 +8,7 @@ import ora from "ora";
  * @returns {object} - The server instance
  */
 export async function startDevelopmentServer(options) {
-  const serverSpinner = ora("Starting dev server...\n").start();
+  const serverSpinner = ora("Firing up dev server...").start();
 
   try {
     const config = {
@@ -43,8 +43,8 @@ export async function startDevelopmentServer(options) {
     serverSpinner.stop();
     return server;
   } catch (error) {
-    serverSpinner.fail(`Failed to start dev server: ${error.message}`);
-    console.error(error);
-    throw new Error(`Dev server failed: ${error.message}`);
+    serverSpinner.fail("Server snag! Couldn't start dev server.");
+    console.error("Error starting development server:", error);
+    throw new Error(`Development server failed to start: ${error.message}`);
   }
 }

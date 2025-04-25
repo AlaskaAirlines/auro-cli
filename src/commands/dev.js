@@ -24,7 +24,10 @@ export default devCommand.action(async (options) => {
       build.spinner = "bouncingBar";
       build.color = "green";
     } else {
-      build.text = "Building component";
+      build.text =
+        options.docs === false
+          ? "Building component (docs disabled)"
+          : "Building component";
     }
 
     build.start();
@@ -32,8 +35,6 @@ export default devCommand.action(async (options) => {
     cleanupDist();
 
     await buildWithRollup({ ...options, dev: true, watch: true });
-
-    // build.succeed("Build completed successfully!");
   } catch (error) {
     // If there's any active spinner, we need to fail it
     ora().fail(`Build failed: ${error.message}`);

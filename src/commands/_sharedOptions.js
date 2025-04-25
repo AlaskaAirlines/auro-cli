@@ -11,7 +11,7 @@ export function withBuildOptions(command, { watch = false }) {
       "Watch for changes - default for dev mode, opt-in for build",
       watch,
     )
-
+    .option("--skip-docs", "Skip documentation generation", false)
     .option(
       "--wca-input [files...]",
       "Source file(s) to analyze for API documentation",
