@@ -1,5 +1,4 @@
 import terser from "@rollup/plugin-terser";
-import ora from "ora";
 import { watch } from "rollup";
 import {
   buildCombinedBundle,
@@ -43,33 +42,18 @@ export async function buildWithRollup(options) {
       return;
     }
 
-    // Set up watcher for dev mode or watch mode
+    // Set up watcher
     const watcher = watch([mainBundleConfig.config, demoConfig.config]);
-    // Pass options to handleWatcherEvents so we can access them for rebuilding docs and restarting dev server
-    // For dev mode, provide a callback that starts the dev server after initial builds are complete
+
     handleWatcherEvents(
       watcher,
       options,
       isDevMode
         ? async () => {
-            const serverSpinner = ora(
-              "Initial builds complete, starting development server...",
-            ).start();
-            try {
-              await startDevelopmentServer(options);
-              serverSpinner.succeed("Development server started successfully");
-            } catch (error) {
-              serverSpinner.fail(
-                `Failed to start development server: ${error.message}`,
-              );
-              throw error;
-            }
+            startDevelopmentServer(options);
           }
         : undefined,
     );
-
-    // Don't start the dev server immediately anymore - we'll start it in the callback
-    // when the initial builds are complete
 
     setupWatchModeListeners(watcher);
 

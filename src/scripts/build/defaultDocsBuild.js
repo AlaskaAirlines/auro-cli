@@ -1,5 +1,3 @@
-import ora from "ora";
-
 import { Logger } from "@aurodesignsystem/auro-library/scripts/utils/logger.mjs";
 import {
   generateReadmeUrl,
@@ -92,5 +90,4 @@ export async function processDocFiles(config = defaultDocsProcessorConfig) {
 
 export async function runDefaultDocsBuild() {
   await processDocFiles();
-  ora("Docs processed successfully").succeed();
 }

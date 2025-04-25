@@ -114,17 +114,13 @@ export async function handleWatcherEvents(
         break;
 
       case "BUNDLE_START":
-        // Use the bundle name from the config, fallback to "files" if name is not available
-        bundleSpinner = ora(`Bundling ${event.name}...`).start();
+        bundleSpinner = ora("Bundling...").start();
         buildInProgress = true;
         break;
 
       case "BUNDLE_END":
         if (bundleSpinner) {
-          // Use the same bundle name for completed message
-          bundleSpinner.succeed(
-            `${event.name} bundle completed in ${event.duration}ms`,
-          );
+          bundleSpinner.succeed("Bundle completed in ${event.duration}ms");
         }
         buildInProgress = false;
         break;
