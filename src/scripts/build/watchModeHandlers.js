@@ -8,18 +8,11 @@ import { getDtsConfig } from "./configUtils.js";
 // Track if any build is in progress to prevent overlapping operations
 let buildInProgress = false;
 
-// Store watch events that are currently being processed
-const activeBuilds = {
-  dts: false,
-  analyze: false,
-  docs: false,
-};
-
-// Keep track of time when last build of each type happened
-const lastBuildTimes = {
-  dts: 0,
-  analyze: 0,
-  docs: 0,
+// Track build states and times in a single object for cleaner management
+const builds = {
+  dts: { active: false, lastTime: 0 },
+  analyze: { active: false, lastTime: 0 },
+  docs: { active: false, lastTime: 0 },
 };
 
 // Minimum time between builds of the same type (in ms)
@@ -58,6 +51,32 @@ function isOutputFile(filePath) {
 }
 
 /**
+ * Runs a build task with proper tracking of state
+ * @param {string} taskName - Type of task (dts, analyze, docs)
+ * @param {Function} taskFn - The actual task function to run
+ * @returns {Promise<boolean>} - Success status
+ */
+async function runBuildTask(taskName, taskFn) {
+  const task = builds[taskName];
+
+  // Skip if build is active or within throttle time
+  if (task.active || Date.now() - task.lastTime < MIN_BUILD_INTERVAL) {
+    return false;
+  }
+
+  try {
+    task.active = true;
+    task.lastTime = Date.now();
+    return await taskFn();
+  } catch (error) {
+    console.error(`Error in ${taskName} task:`, error);
+    return false;
+  } finally {
+    task.active = false;
+  }
+}
+
+/**
  * Handles the watcher events.
  * @param {object} watcher - Rollup watcher object.
  * @param {object} options - Build options.
@@ -70,64 +89,46 @@ export async function handleWatcherEvents(
 ) {
   // Track if this is the first build
   let isInitialBuild = true;
+  // biome-ignore lint/style/useConst: This is an object that is mutated.
+  let buildTasksResults = { dts: false, analyze: false, docs: false };
+  let scheduledTasksTimer = null;
+  let bundleSpinner;
 
-  // Function to build d.ts files
-  const buildDts = async () => {
-    // Skip if a build is already in progress or if we're within the throttle time
-    if (
-      activeBuilds.dts ||
-      Date.now() - lastBuildTimes.dts < MIN_BUILD_INTERVAL
-    ) {
-      return false;
-    }
+  // Create a spinner for watch mode
+  const watchSpinner = ora("Activating watch mode...").start();
 
-    try {
-      activeBuilds.dts = true;
-      lastBuildTimes.dts = Date.now();
-
+  // The actual task functions
+  const buildTasks = {
+    // Function to build d.ts files
+    dts: async () => {
       const dtsSpinner = ora("Crafting type definitions...").start();
-
       try {
         const create_dts = await rollup(getDtsConfig().config);
         await create_dts.write(getDtsConfig().config.output);
         await create_dts.close();
-
         dtsSpinner.succeed("Type files built.");
         return true;
       } catch (error) {
         dtsSpinner.fail("Types trouble! Build failed.");
         console.error("TypeScript definition build error:", error);
         return false;
-      } finally {
-        activeBuilds.dts = false;
       }
-    } catch (error) {
-      console.error("Error building TypeScript definition files:", error);
-      activeBuilds.dts = false;
-      return false;
-    }
-  };
+    },
 
-  // Function to analyze components
-  const runAnalyze = async () => {
-    // Skip if a build is already in progress or if we're within the throttle time
-    if (
-      activeBuilds.analyze ||
-      Date.now() - lastBuildTimes.analyze < MIN_BUILD_INTERVAL
-    ) {
-      return false;
-    }
-
-    const { wcaInput: sourceFiles, wcaOutput: outFile } = options;
-
-    try {
-      activeBuilds.analyze = true;
-      lastBuildTimes.analyze = Date.now();
+    // Function to analyze components
+    analyze: async () => {
+      const { wcaInput: sourceFiles, wcaOutput: outFile, skipDocs } = options;
+      if (skipDocs) {
+        const skipSpinner = ora("Skipping component analysis...").start();
+        setTimeout(() => {
+          skipSpinner.succeed("Component analysis skipped.");
+        }, 0);
+        return true;
+      }
 
       const analyzeSpinner = ora(
         "Detective work: analyzing components...",
       ).start();
-
       try {
         await analyzeComponents(sourceFiles, outFile);
         analyzeSpinner.succeed("Component analysis complete! API generated.");
@@ -136,34 +137,26 @@ export async function handleWatcherEvents(
         analyzeSpinner.fail("Analysis hiccup! Something went wrong.");
         console.error("Component analysis error:", error);
         return false;
-      } finally {
-        activeBuilds.analyze = false;
       }
-    } catch (error) {
-      console.error("Error analyzing components:", error);
-      activeBuilds.analyze = false;
-      return false;
-    }
-  };
+    },
 
-  // Function to rebuild documentation
-  const rebuildDocs = async () => {
-    // Skip if a build is already in progress, the main bundle is building,
-    // or if we're within the throttle time
-    if (
-      buildInProgress ||
-      activeBuilds.docs ||
-      Date.now() - lastBuildTimes.docs < MIN_BUILD_INTERVAL
-    ) {
-      return false;
-    }
+    // Function to rebuild documentation
+    docs: async () => {
+      // Skip if main bundle is still building
+      if (buildInProgress) {
+        return false;
+      }
 
-    try {
-      activeBuilds.docs = true;
-      lastBuildTimes.docs = Date.now();
+      // Check if docs generation is skipped
+      if (options.skipDocs) {
+        const skipSpinner = ora("Skipping docs generation...").start();
+        setTimeout(() => {
+          skipSpinner.succeed("Docs generation skipped.");
+        }, 0);
+        return true;
+      }
 
       const docsSpinner = ora("Refreshing docs...").start();
-
       try {
         await generateDocs(options);
         docsSpinner.succeed("Documentation refreshed!");
@@ -171,26 +164,8 @@ export async function handleWatcherEvents(
       } catch (error) {
         docsSpinner.fail("Docs stumble! Couldn't refresh.");
         console.error("Documentation rebuild error:", error);
-        return false;
-      } finally {
-        activeBuilds.docs = false;
       }
-    } catch (error) {
-      console.error("Error rebuilding documentation:", error);
-      activeBuilds.docs = false;
-      return false;
-    }
-  };
-
-  // Create a spinner for watch mode
-  const watchSpinner = ora("Activating watch mode...").start();
-  let bundleSpinner;
-
-  // Stores results of build tasks for initial build completion check
-  const buildTasksResults = {
-    dts: false,
-    analyze: false,
-    docs: false,
+    },
   };
 
   // Check if all initial build tasks completed successfully
@@ -207,31 +182,31 @@ export async function handleWatcherEvents(
     }
   };
 
-  // Create a function to safely schedule the post-bundle tasks
+  // Schedule the post-bundle tasks with proper sequencing
   function schedulePostBundleTasks(delay = 1000) {
-    // Clear any pending timers
-    if (schedulePostBundleTasks.timer) {
-      clearTimeout(schedulePostBundleTasks.timer);
+    if (scheduledTasksTimer) {
+      clearTimeout(scheduledTasksTimer);
     }
 
-    // Schedule the tasks sequentially with delays between them
-    schedulePostBundleTasks.timer = setTimeout(async () => {
-      // Run each task and capture its result
-      buildTasksResults.dts = await buildDts();
+    scheduledTasksTimer = setTimeout(async () => {
+      // Run tasks with delays between them to avoid race conditions
+      buildTasksResults.dts = await runBuildTask("dts", buildTasks.dts);
 
-      // Wait a bit between tasks to let the file system settle
       setTimeout(async () => {
-        buildTasksResults.analyze = await runAnalyze();
+        buildTasksResults.analyze = await runBuildTask(
+          "analyze",
+          buildTasks.analyze,
+        );
 
-        // Wait again before running docs
         setTimeout(async () => {
-          buildTasksResults.docs = await rebuildDocs();
+          buildTasksResults.docs = await runBuildTask("docs", buildTasks.docs);
           checkInitialBuildComplete();
         }, 1000);
       }, 1000);
     }, delay);
   }
 
+  // Set up event handlers for the watcher
   watcher.on("event", async (event) => {
     switch (event.code) {
       case "START":
@@ -271,20 +246,20 @@ export async function handleWatcherEvents(
 
       case "BUNDLE_END":
         if (bundleSpinner) {
-          bundleSpinner.succeed(`Bundle done in ${event.duration}ms! 🚀`);
+          bundleSpinner.succeed(
+            `Bundle ${Array.isArray(event.input) ? `of ${event.input.join("& ")} ` : ""}done in ${event.duration}ms! 🚀`,
+          );
         }
         buildInProgress = false;
 
-        // If there's at least one source file that triggered this build,
-        // and none of them are output files, schedule the post-bundle tasks
+        // Schedule post-bundle tasks if source files triggered this build
         if (sourceEventPaths.size > 0) {
           schedulePostBundleTasks();
         }
         break;
 
       case "END":
-        // The END event generally comes after BUNDLE_END
-        // We've already scheduled our tasks in BUNDLE_END, so nothing to do here
+        // We've already scheduled tasks in BUNDLE_END, nothing to do here
         break;
 
       case "ERROR":
@@ -294,7 +269,6 @@ export async function handleWatcherEvents(
         } else {
           ora().fail(`Watch mode hiccup: ${event.error.message}`);
         }
-        // Clear source paths since the build failed
         sourceEventPaths.clear();
         break;
     }

@@ -7,17 +7,42 @@ import { runDefaultDocsBuild } from "#scripts/build/defaultDocsBuild.js";
 
 /**
  * Clean up the dist folder
+ * @returns {boolean} Success status
  */
 export function cleanupDist() {
   const distPath = join("./dist");
+  const spinner = ora("Cleaning dist folder...").start();
 
   try {
     rmSync(distPath, { recursive: true, force: true });
-    ora().succeed("All clean! Dist folder wiped.");
+    spinner.succeed("All clean! Dist folder wiped.");
+    return true;
   } catch (error) {
-    ora().fail(`Oops! Couldn't clean dist/ folder: ${error.message}`);
+    spinner.fail(`Oops! Couldn't clean dist/ folder: ${error.message}`);
     console.error(error);
-    process.exit(1);
+    return false;
+  }
+}
+
+/**
+ * Run a build step with spinner feedback
+ * @param {string} taskName - Name of the task for spinner text
+ * @param {Function} taskFn - Async function to execute the task
+ * @param {string} successMsg - Message to show on success
+ * @param {string} failMsg - Message to show on failure
+ * @returns {Promise<any>} - Result of the task function or throws error
+ */
+async function runBuildStep(taskName, taskFn, successMsg, failMsg) {
+  const spinner = ora(taskName).start();
+
+  try {
+    const result = await taskFn();
+    spinner.succeed(successMsg);
+    return result;
+  } catch (error) {
+    spinner.fail(failMsg);
+    console.error(`Error: ${error.message}`);
+    throw error;
   }
 }
 
@@ -27,19 +52,16 @@ export function cleanupDist() {
  * @param {object} outputConfig - Output configuration for d.ts files
  */
 export async function buildTypeDefinitions(config, outputConfig) {
-  const dtsSpinner = ora("Creating type definitions...").start();
-
-  try {
-    const create_dts = await rollup(config);
-    await create_dts.write(outputConfig);
-    await create_dts.close();
-
-    dtsSpinner.succeed("Types files built.");
-  } catch (error) {
-    dtsSpinner.fail("Darn! Type definitions failed.");
-    console.error("Error building d.ts files:", error);
-    throw new Error(`Type definitions build failed: ${error.message}`);
-  }
+  return runBuildStep(
+    "Creating type definitions...",
+    async () => {
+      const bundle = await rollup(config);
+      await bundle.write(outputConfig);
+      await bundle.close();
+    },
+    "Types files built.",
+    "Darn! Type definitions failed.",
+  );
 }
 
 /**
@@ -48,47 +70,47 @@ export async function buildTypeDefinitions(config, outputConfig) {
  * @param {object} demoConfig - Rollup config for the demo files
  */
 export async function buildCombinedBundle(mainConfig, demoConfig) {
-  const combinedSpinner = ora(
+  return runBuildStep(
     `Bundling ${mainConfig.name || "main"} and ${demoConfig.name || "demo"}...`,
-  ).start();
+    async () => {
+      // Build main bundle
+      const mainBundle = await rollup(mainConfig);
+      await mainBundle.write(mainConfig.output);
+      await mainBundle.close();
 
-  try {
-    // Build main bundle
-    const mainBundle = await rollup(mainConfig);
-    await mainBundle.write(mainConfig.output);
-    await mainBundle.close();
-    combinedSpinner.text = `${mainConfig.name || "Main bundle"} done!`;
-
-    // Build demo files
-    const demoBundle = await rollup(demoConfig);
-    await demoBundle.write(demoConfig.output);
-    await demoBundle.close();
-
-    combinedSpinner.succeed(
-      `Bundles ready! ${mainConfig.name || "Main"} and ${demoConfig.name || "demo"} built.`,
-    );
-  } catch (error) {
-    combinedSpinner.fail("Bundle hiccup! Build failed.");
-    console.error("Error building combined bundle:", error);
-    throw new Error(`Combined bundle build failed: ${error.message}`);
-  }
+      // Build demo files
+      const demoBundle = await rollup(demoConfig);
+      await demoBundle.write(demoConfig.output);
+      await demoBundle.close();
+    },
+    `Bundles ready! ${mainConfig.name || "Main"} and ${demoConfig.name || "demo"} built.`,
+    "Bundle hiccup! Build failed.",
+  );
 }
 
 /**
  * Analyzes web components and generates API documentation.
+ * @param {object} options - Options containing wcaInput and wcaOutput
  */
 export async function generateDocs(options) {
-  const { wcaInput: sourceFiles, wcaOutput: outFile } = options;
-  const analyzeSpinner = ora("Analyzing components and making docs...").start();
+  const { wcaInput: sourceFiles, wcaOutput: outFile, skipDocs } = options;
 
-  try {
-    await analyzeComponents(sourceFiles, outFile);
-    await runDefaultDocsBuild();
+  if (skipDocs) {
+    const skipSpinner = ora("Skipping docs generation...").start();
 
-    analyzeSpinner.succeed("Docs ready! Looking good.");
-  } catch (error) {
-    analyzeSpinner.fail(`Doc troubles! ${error.message}`);
-    console.error("Error generating documentation:", error);
-    throw new Error(`Documentation generation failed: ${error.message}`);
+    setTimeout(() => {
+      skipSpinner.succeed("Docs generation skipped.");
+    }, 0);
+    return;
   }
+
+  return runBuildStep(
+    "Analyzing components and making docs...",
+    async () => {
+      await analyzeComponents(sourceFiles, outFile);
+      await runDefaultDocsBuild();
+    },
+    "Docs ready! Looking good.",
+    "Doc troubles!",
+  );
 }
