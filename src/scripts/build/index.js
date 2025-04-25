@@ -21,7 +21,11 @@ import {
  * Build the component using Rollup.
  */
 export async function buildWithRollup(options) {
-  const { dev: isDevMode, watch: isWatchMode = isDevMode } = options;
+  const {
+    dev: isDevMode,
+    watch: isWatchMode = isDevMode,
+    docs = true,
+  } = options;
 
   const mainBundleConfig = getMainBundleConfig(options);
   const demoConfig = getDemoConfig(options);
@@ -36,7 +40,9 @@ export async function buildWithRollup(options) {
   try {
     // not dev and not watch = run exactly once. break early with a return
     if (!isDevMode && !isWatchMode) {
-      await generateDocs(options); // Generate documentation
+      if (docs) {
+        await generateDocs(options); // Generate documentation only if not disabled
+      }
       await buildCombinedBundle(mainBundleConfig.config, demoConfig.config); // Combined build for main and demo files
       await buildTypeDefinitions(dtsConfig.config, dtsConfig.config.output);
       return;
@@ -59,7 +65,7 @@ export async function buildWithRollup(options) {
 
     return watcher;
   } catch (error) {
-    throw new Error(`Rollup build failed: ${error.message}`);
+    throw new Error(`Oops! Build hit a snag: ${error.message}`);
   }
 }
 

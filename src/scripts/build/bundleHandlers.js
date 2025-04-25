@@ -13,9 +13,9 @@ export function cleanupDist() {
 
   try {
     rmSync(distPath, { recursive: true, force: true });
-    ora().succeed("Cleaned up dist folder");
+    ora().succeed("All clean! Dist folder wiped.");
   } catch (error) {
-    ora().fail(`Failed to cleanup dist/ folder: ${error.message}`);
+    ora().fail(`Oops! Couldn't clean dist/ folder: ${error.message}`);
     console.error(error);
     process.exit(1);
   }
@@ -27,16 +27,16 @@ export function cleanupDist() {
  * @param {object} outputConfig - Output configuration for d.ts files
  */
 export async function buildTypeDefinitions(config, outputConfig) {
-  const dtsSpinner = ora("Generating type definitions...").start();
+  const dtsSpinner = ora("Creating type definitions...").start();
 
   try {
     const create_dts = await rollup(config);
     await create_dts.write(outputConfig);
     await create_dts.close();
 
-    dtsSpinner.succeed("Type definitions generated successfully");
+    dtsSpinner.succeed("Types files built.");
   } catch (error) {
-    dtsSpinner.fail("Failed to generate type definitions");
+    dtsSpinner.fail("Darn! Type definitions failed.");
     console.error("Error building d.ts files:", error);
     throw new Error(`Type definitions build failed: ${error.message}`);
   }
@@ -48,14 +48,16 @@ export async function buildTypeDefinitions(config, outputConfig) {
  * @param {object} demoConfig - Rollup config for the demo files
  */
 export async function buildCombinedBundle(mainConfig, demoConfig) {
-  const combinedSpinner = ora("Building main bundle and demo files...").start();
+  const combinedSpinner = ora(
+    `Bundling ${mainConfig.name || "main"} and ${demoConfig.name || "demo"}...`,
+  ).start();
 
   try {
     // Build main bundle
     const mainBundle = await rollup(mainConfig);
     await mainBundle.write(mainConfig.output);
     await mainBundle.close();
-    combinedSpinner.text = `${mainConfig.name || "Main bundle"} built successfully`;
+    combinedSpinner.text = `${mainConfig.name || "Main bundle"} done!`;
 
     // Build demo files
     const demoBundle = await rollup(demoConfig);
@@ -63,10 +65,10 @@ export async function buildCombinedBundle(mainConfig, demoConfig) {
     await demoBundle.close();
 
     combinedSpinner.succeed(
-      `${mainConfig.name || "Main bundle"} and ${demoConfig.name || "Demo"} built successfully`,
+      `Bundles ready! ${mainConfig.name || "Main"} and ${demoConfig.name || "demo"} built.`,
     );
   } catch (error) {
-    combinedSpinner.fail("Failed to build combined bundle");
+    combinedSpinner.fail("Bundle hiccup! Build failed.");
     console.error("Error building combined bundle:", error);
     throw new Error(`Combined bundle build failed: ${error.message}`);
   }
@@ -77,17 +79,15 @@ export async function buildCombinedBundle(mainConfig, demoConfig) {
  */
 export async function generateDocs(options) {
   const { wcaInput: sourceFiles, wcaOutput: outFile } = options;
-  const analyzeSpinner = ora(
-    "Analyzing components and generating documentation...",
-  ).start();
+  const analyzeSpinner = ora("Analyzing components and making docs...").start();
 
   try {
     await analyzeComponents(sourceFiles, outFile);
     await runDefaultDocsBuild();
 
-    analyzeSpinner.succeed("Documentation generated successfully");
+    analyzeSpinner.succeed("Docs ready! Looking good.");
   } catch (error) {
-    analyzeSpinner.fail(`Failed to generate documentation: ${error.message}`);
+    analyzeSpinner.fail(`Doc troubles! ${error.message}`);
     console.error("Error generating documentation:", error);
     throw new Error(`Documentation generation failed: ${error.message}`);
   }
