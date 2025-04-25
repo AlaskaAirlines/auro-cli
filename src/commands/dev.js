@@ -32,8 +32,6 @@ export default devCommand.action(async (options) => {
 
     build.start();
 
-    cleanupDist();
-
     await buildWithRollup({ ...options, dev: true, watch: true });
   } catch (error) {
     // If there's any active spinner, we need to fail it

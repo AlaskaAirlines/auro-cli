@@ -3,21 +3,39 @@ import { hmrPlugin } from "@web/dev-server-hmr";
 import ora from "ora";
 
 /**
- * Starts the development server
- * @param {object} options - Server options like port and open flag
- * @returns {object} - The server instance
+ * Default server configuration
  */
-export async function startDevelopmentServer(options) {
-  const serverSpinner = ora("Firing up dev server...").start();
+const DEFAULT_CONFIG = {
+  watch: true,
+  nodeResolve: true,
+  basePath: "/",
+  rootDir: "./demo",
+  hmrInclude: ["src/**/*", "demo/**/*", "apiExamples/**/*", "docs/**/*"],
+};
+
+/**
+ * Starts the development server
+ * @param {object} options - Server options
+ * @param {number} [options.port] - Port number for the server
+ * @param {boolean} [options.open] - Whether to open the browser
+ * @param {string} [options.rootDir] - Root directory for serving files
+ * @param {string[]} [options.hmrInclude] - Patterns to include for HMR
+ * @returns {Promise<object>} - The server instance
+ */
+export async function startDevelopmentServer(options = {}) {
+  const serverSpinner = ora("Firing up dev server...\n").start();
 
   try {
-    const config = {
+    // Merge options with defaults
+    const serverConfig = {
       port: Number(options.port) || undefined,
       open: options.open ? "/" : undefined,
-      watch: true,
-      nodeResolve: true,
-      basePath: "/",
-      rootDir: "./demo",
+      watch: options.watch ?? DEFAULT_CONFIG.watch,
+      nodeResolve: options.nodeResolve ?? DEFAULT_CONFIG.nodeResolve,
+      basePath: options.basePath ?? DEFAULT_CONFIG.basePath,
+      rootDir: options.rootDir ?? DEFAULT_CONFIG.rootDir,
+
+      // HTML file extension middleware
       middleware: [
         function rewriteIndex(context, next) {
           if (!context.url.endsWith("/") && !context.url.includes(".")) {
@@ -26,20 +44,22 @@ export async function startDevelopmentServer(options) {
           return next();
         },
       ],
+
+      // Hot Module Replacement plugin
       plugins: [
         hmrPlugin({
-          include: ["src/**/*", "demo/**/*", "apiExamples/**/*", "docs/**/*"],
+          include: options.hmrInclude ?? DEFAULT_CONFIG.hmrInclude,
         }),
       ],
     };
 
+    // Start the server with our configuration
     const server = await startDevServer({
-      config,
+      config: serverConfig,
       readCliArgs: false,
       readFileConfig: false,
     });
 
-    // Stop the spinner without showing a success message, as the calling function will show the message
     serverSpinner.stop();
     return server;
   } catch (error) {

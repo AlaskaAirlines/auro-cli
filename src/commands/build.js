@@ -28,8 +28,6 @@ export default buildCommand.action(async (options) => {
 
     build.start();
 
-    cleanupDist();
-
     await buildWithRollup(options);
 
     if (!options.watch) {
