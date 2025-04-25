@@ -1,7 +1,7 @@
 import { program } from "commander";
 import ora from "ora";
 import { withBuildOptions } from "#commands/_sharedOptions.js";
-import { buildWithRollup, cleanupDist } from "#scripts/build/rollup.js";
+import { buildWithRollup, cleanupDist } from "#scripts/build/index.js";
 
 let buildCommand = program
   .command("build")
