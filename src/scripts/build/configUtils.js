@@ -3,6 +3,7 @@ import { nodeResolve } from "@rollup/plugin-node-resolve";
 import { glob } from "glob";
 import { dts } from "rollup-plugin-dts";
 import { litScss } from "rollup-plugin-scss-lit";
+import { watchGlobs } from "./plugins.js";
 
 /**
  * Creates Rollup plugins configuration.
@@ -27,6 +28,7 @@ export function getPluginsConfig(modulePaths = []) {
         ],
       },
     }),
+    watchGlobs(["./apiExamples/**/*", "./docs/**/*"]),
   ];
 }
 
@@ -114,12 +116,34 @@ export function getWatcherConfig(hasWatcher) {
     return false;
   }
   return {
-    clearScreen: false,
-    buildDelay: 200,
+    clearScreen: true,
+    buildDelay: 500, // Increased delay to prevent rapid reloads
     chokidar: {
       ignoreInitial: true,
+      // Ignore common output files that cause feedback loops
+      ignored: [
+        "**/dist/**/*.d.ts", // Ignore type definition files
+        "**/custom-elements.json", // Ignore web component analysis output
+        "**/demo/*.md", // Ignore API documentation
+        "**/demo/**/*.min.js", // Ignore minified demo files
+        "**/docs/api.md", // Ignore API documentation (alternative location)
+        "**/node_modules/**", // Explicitly ignore node_modules
+        "**/.git/**", // Explicitly ignore git files
+      ],
+      // Reduce watcher's sensitivity to prevent loops
+      awaitWriteFinish: {
+        stabilityThreshold: 1000,
+        pollInterval: 100,
+      },
     },
-    include: ["./src/**/*", "./demo/**/*", "./apiExamples/**/*", "./docs/**/*"],
+    include: [
+      "./src/**/*.js",
+      "./src/**/*.ts",
+      "./demo/**/*.js",
+      "./apiExamples/**/*",
+      "./docs/**/*.md",
+    ],
+    exclude: ["./dist/**/*", "./node_modules/**/*"],
   };
 }
 
