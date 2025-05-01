@@ -104,7 +104,7 @@ async function runBuild(isDev = false) {
     if (isWatchMode) {
       // Create a watch spinner with custom styling
       const watchSpinner = ora({
-        text: "Waiting for file changes...",
+        text: "Waiting for file changes...\n",
         spinner: "bouncingBar",
         color: "green",
       }).start();
@@ -114,10 +114,33 @@ async function runBuild(isDev = false) {
         isDev,
         externalPackages,
         aliases,
-        onEvent: (event) => {
+        onEvent: async (event) => {
           if (event.error) {
             watchSpinner.fail(`Watch mode error: ${event.error.message}`);
-            watchSpinner.text = "Waiting for file changes...";
+            watchSpinner.text = "Waiting for file changes...\n";
+            watchSpinner.start();
+          } else if (event.requiresRebuild) {
+            // If a source file changed that requires a full rebuild
+            watchSpinner.text = `Rebuilding after changes to ${event.path}...`;
+
+            try {
+              // Rebuild the main bundle with the current configuration
+              await build(buildConfig);
+              watchSpinner.succeed(`Rebuild complete for ${event.path}`);
+
+              // Report build stats if available
+              if (fs.existsSync("dist/auro-cli.js")) {
+                const bundleSize = fs.statSync("dist/auro-cli.js").size;
+                console.log(
+                  `🔹 Main bundle size: ${(bundleSize / 1024).toFixed(2)}kb`,
+                );
+              }
+            } catch (buildError) {
+              watchSpinner.fail(`Rebuild failed: ${buildError.message}`);
+            }
+
+            // Reset spinner state
+            watchSpinner.text = "Waiting for file changes...\n";
             watchSpinner.start();
           }
         },
