@@ -46,39 +46,9 @@ async function main() {
   const packageJson = await fs.readFile(
     path.resolve(process.cwd(), "package.json"),
   );
-  const engineVersionString = "^20.x || ^22.x";
 
   /** @type {Record<string, object>} */
   const fileContents = JSON.parse(packageJson.toString("utf8"));
-  const packageEngineVersion = fileContents.engines.node.trim();
-
-  if (packageEngineVersion !== engineVersionString) {
-    throw new Error(
-      `${fileContents.name} -> engine version is out of date. Expected "${engineVersionString}" and received "${packageEngineVersion}"`,
-    );
-  }
-
-  // Check wcss version
-
-  const wcssPackageName = "@aurodesignsystem/webcorestylesheets";
-  const wcssVersion = `^6.0.2`;
-  const peerDepsVersion = fileContents.peerDependencies[wcssPackageName];
-
-  if (peerDepsVersion && peerDepsVersion !== wcssVersion) {
-    throw new Error(
-      `${fileContents.name} -> wcss version out of date. Expected "${wcssVersion}" and received ${peerDepsVersion}`,
-    );
-  }
-
-  const iconMetaPackage = "@alaskaairux/icons";
-  const iconMetaVersion = `^5.0.0`;
-  const iconPeerDepsVersion = fileContents.peerDependencies[iconMetaPackage];
-
-  if (iconPeerDepsVersion && iconPeerDepsVersion !== iconMetaVersion) {
-    throw new Error(
-      `${fileContents.name} -> ${iconMetaPackage} out of date. Expected "${wcssVersion}" and received ${iconPeerDepsVersion}`,
-    );
-  }
 
   // Log auro dependencies
   const auroPackagePrefixes = ["@aurodesignsystem", "@alaskaairux"];

@@ -17,6 +17,19 @@ interface DependencyNode {
 
 type DependencyTree = Record<string, DependencyNode>;
 
+// CLI argument parsing
+
+// ---
+// Step 1: Parse target dependencies from command line
+const rawTargetDependencies = process.argv.slice(2); // e.g., ["button", "hyperlink"]
+
+// Step 2: Format them to match internal package names
+const targetDependencies = rawTargetDependencies.map(
+  (dep) => `@aurodesignsystem/auro-${dep}`
+);
+// ---
+
+
 const dependencyTree: DependencyTree = {};
 
 function getJsonFilesFromDirectory(directory: string): string[] {
@@ -149,26 +162,66 @@ for (const file of files) {
   }
 }
 
-// write the dependency tree to a file
+// Write the dependency tree to a file
 fs.writeFileSync(
   `${BASE_DIRECTORY}/dependencyTree.json`,
   JSON.stringify(dependencyTree, null, 2),
 );
 
-const updateOrder = getSafeUpdateOrder(dependencyTree);
+// If there are no specified target dependencies, use all packages
+if (!targetDependencies.length) {
+  console.log("No target dependencies provided - using all packages.");
 
-const updateText = `
-# Update Order
-${updateOrder.map((pkg, index) => `${index + 1}. ${pkg}`).join("\n")}
-`;
+  const batchedUpdateOrderText = batchedUpdateOrder(dependencyTree)
+    .map(
+      (batch, index) =>
+        `Batch ${index + 1}\n${batch.map((pkg) => `  - ${pkg.replace("@aurodesignsystem", "AlaskaAirlines").replace("@alaskaairux/icons", "AlaskaAirlines/Icons")}`).join("\n")}`,
+    )
+    .join("\n\n");
 
-console.log(updateText);
+  console.log(batchedUpdateOrderText);
+} else {
 
-const batchedUpdateOrderText = batchedUpdateOrder(dependencyTree)
-  .map(
-    (batch, index) =>
-      `Batch ${index + 1}\n${batch.map((pkg) => `  - ${pkg.replace("@aurodesignsystem", "AlaskaAirlines").replace("@alaskaairux/icons", "AlaskaAirlines/Icons")}`).join("\n")}`,
-  )
-  .join("\n\n");
+// If there ARE target dependencies, filter the dependency tree
+  const relevantPackages = new Set<string>();
 
-console.log(batchedUpdateOrderText);
+// Include any packages that depend on a target dependency
+  for (const [pkg, node] of Object.entries(dependencyTree)) {
+    if (node.dependsOn.some(dep => targetDependencies.includes(dep))) {
+      relevantPackages.add(pkg);
+    }
+  }
+
+// Also include the target dependencies themselves
+  for (const target of targetDependencies) {
+    if (dependencyTree[target]) {
+      relevantPackages.add(target);
+    }
+  }
+
+// Final filtered dependency tree
+  const filteredDependencyTree: DependencyTree = {};
+  for (const pkg of relevantPackages) {
+    filteredDependencyTree[pkg] = {
+      dependsOn: dependencyTree[pkg].dependsOn.filter(dep => relevantPackages.has(dep)),
+      dependentPackages: dependencyTree[pkg].dependentPackages.filter(dep => relevantPackages.has(dep)),
+    };
+  }
+
+  const batchedUpdateOrderText = batchedUpdateOrder(filteredDependencyTree)
+    .map(
+      (batch, index) =>
+        `Batch ${index + 1}\n${batch.map((pkg) => `  - ${pkg.replace("@aurodesignsystem", "AlaskaAirlines").replace("@alaskaairux/icons", "AlaskaAirlines/Icons")}`).join("\n")}`,
+    )
+    .join("\n\n");
+
+  console.log(batchedUpdateOrderText);
+}
+
+//  - AlaskaAirlines/auro-accordion
+//   - AlaskaAirlines/auro-avatar
+//   - AlaskaAirlines/auro-button
+//   - AlaskaAirlines/auro-dialog
+//   - AlaskaAirlines/auro-drawer
+//   - AlaskaAirlines/auro-formkit
+//   - AlaskaAirlines/auro-toast
