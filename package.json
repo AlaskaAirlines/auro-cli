@@ -6,7 +6,7 @@
     "lint": "biome check --fix --no-errors-on-unmatched",
     "prepare": "husky",
     "test": "echo \"Notice: no tests available\" && exit 0",
-    "dev": "nodemon --watch src --exec 'npm run build:dev'",
+    "dev": "tsc && npm run copy-files && npm run bundle -- --watch --dev",
     "build": "tsc && npm run copy-files && npm run bundle",
     "build:dev": "tsc && npm run copy-files && npm run bundle -- --dev",
     "copy-files": "copyfiles -f -u 1 \"src/migrations/**/*.{yml,sh}\" dist/ && tsc-alias",
