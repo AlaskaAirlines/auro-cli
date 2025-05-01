@@ -120,10 +120,6 @@
     "src/**/*.d.ts",
     "src/**/*.js",
     "src/**/*.yml",
-    "src/**/*.sh",
-    "migration/**/*.ts",
-    "migration/**/*.js",
-    "migration/**/*.yml",
-    "migration/**/*.sh"
+    "src/**/*.sh"
   ]
 }
