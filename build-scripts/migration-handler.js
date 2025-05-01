@@ -105,7 +105,7 @@ export async function processMigrationFile(
  * @param {string[]} options.externalPackages - List of packages to keep external
  * @param {Object} options.aliases - Map of import aliases
  * @param {Object} options.onEvent - Optional callback for file change events
- * @returns {fs.FSWatcher} The file system watcher instance
+ * @returns {Object} The file system watchers
  */
 export function watchMigrationFiles(options = {}) {
   // Initialize hash tracking for existing files
@@ -120,7 +120,8 @@ export function watchMigrationFiles(options = {}) {
       } else if (
         filePath.endsWith(".js") ||
         filePath.endsWith(".yml") ||
-        filePath.endsWith(".sh")
+        filePath.endsWith(".sh") ||
+        filePath.endsWith(".ts")
       ) {
         try {
           const fileHash = crypto
@@ -137,15 +138,61 @@ export function watchMigrationFiles(options = {}) {
 
   // Initialize hashes for existing files
   initializeFileHashes("src/migrations");
+  initializeFileHashes("src");
 
-  // Set up the watcher
-  return watch(
-    "src/migrations",
-    { recursive: true },
-    async (eventType, filename) => {
+  const watchers = {
+    // Set up the watcher for migrations
+    migrations: watch(
+      "src/migrations",
+      { recursive: true },
+      async (eventType, filename) => {
+        if (!filename) return;
+
+        const filePath = join("src/migrations", filename);
+
+        // Skip if file doesn't exist (might have been deleted)
+        if (!fs.existsSync(filePath)) {
+          console.log(`❌ File no longer exists: ${filePath}`);
+          return;
+        }
+
+        // Skip if not a file type we care about
+        if (
+          !filePath.endsWith(".js") &&
+          !filePath.endsWith(".yml") &&
+          !filePath.endsWith(".sh")
+        ) {
+          return;
+        }
+
+        // Check if content actually changed by comparing hashes
+        try {
+          const currentHash = crypto
+            .createHash("sha256")
+            .update(fs.readFileSync(filePath))
+            .digest("hex");
+
+          const previousHash = fileHashes.get(filePath);
+
+          // Only process if file is new or contents changed
+          if (previousHash !== currentHash) {
+            console.log(`🔄 Detected change in ${filename}`);
+            await processMigrationFile(filePath, options);
+          }
+        } catch (error) {
+          console.error(`❌ Error checking file ${filePath}:`, error);
+        }
+      },
+    ),
+
+    // Set up the watcher for the entire src directory
+    src: watch("src", { recursive: true }, async (eventType, filename) => {
       if (!filename) return;
 
-      const filePath = join("src/migrations", filename);
+      // Skip migrations directory as it's handled by the other watcher
+      if (filename.startsWith("migrations/")) return;
+
+      const filePath = join("src", filename);
 
       // Skip if file doesn't exist (might have been deleted)
       if (!fs.existsSync(filePath)) {
@@ -156,13 +203,13 @@ export function watchMigrationFiles(options = {}) {
       // Skip if not a file type we care about
       if (
         !filePath.endsWith(".js") &&
-        !filePath.endsWith(".yml") &&
-        !filePath.endsWith(".sh")
+        !filePath.endsWith(".ts") &&
+        !filePath.endsWith(".mjs") &&
+        !filePath.endsWith(".cjs")
       ) {
         return;
       }
 
-      // Check if content actually changed by comparing hashes
       try {
         const currentHash = crypto
           .createHash("sha256")
@@ -174,13 +221,33 @@ export function watchMigrationFiles(options = {}) {
         // Only process if file is new or contents changed
         if (previousHash !== currentHash) {
           console.log(`🔄 Detected change in ${filename}`);
-          await processMigrationFile(filePath, options);
+          fileHashes.set(filePath, currentHash);
+
+          // Trigger a rebuild of the main bundle
+          if (typeof options.onEvent === "function") {
+            options.onEvent({
+              type: "change",
+              path: filePath,
+              requiresRebuild: true,
+            });
+          }
         }
       } catch (error) {
         console.error(`❌ Error checking file ${filePath}:`, error);
+        if (typeof options.onEvent === "function") {
+          options.onEvent({ error });
+        }
       }
+    }),
+  };
+
+  // Return an object with both watchers
+  return {
+    close: () => {
+      watchers.migrations.close();
+      watchers.src.close();
     },
-  );
+  };
 }
 
 /**
