@@ -1,7 +1,7 @@
 import { program } from "commander";
 import ora from "ora";
 import { withBuildOptions } from "#commands/_sharedOptions.js";
-import { buildWithRollup, cleanupDist } from "#scripts/build/rollup.js";
+import { buildWithRollup, cleanupDist } from "#scripts/build/index.js";
 
 let buildCommand = program
   .command("build")
@@ -20,17 +20,18 @@ export default buildCommand.action(async (options) => {
       build.spinner = "bouncingBar";
       build.color = "green";
     } else {
-      build.text = "Building component";
+      build.text =
+        options.docs === false
+          ? "Building component (docs disabled)"
+          : "Building component";
     }
 
     build.start();
 
-    cleanupDist();
-
     await buildWithRollup(options);
 
     if (!options.watch) {
-      build.succeed("Build completed successfully!");
+      build.succeed("Build completed!");
     }
   } catch (error) {
     // If there's any active spinner, we need to fail it
