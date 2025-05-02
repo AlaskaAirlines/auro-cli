@@ -11,7 +11,10 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.ACCESS_TOKEN }}
 
       - name: Push Tag to Dev Branch
         run: |
@@ -21,8 +24,8 @@ jobs:
 
           # Push the tag to the dev branch
           git fetch --all
-          git checkout dev
-            git merge --ff-only $TAG
-            git push origin dev
+          git checkout dev || { echo "Failed to checkout dev branch"; exit 1; }
+          git merge --ff-only $TAG || { echo "Failed to merge tag into dev"; exit 1; }
+          git push origin dev || { echo "Failed to push changes to dev"; exit 1; }
         env:
-            GITHUB_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.ACCESS_TOKEN }}
