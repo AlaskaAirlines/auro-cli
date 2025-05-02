@@ -1,0 +1,28 @@
+name: Sync Tags to Dev Branch
+
+on:
+  push:
+    tags:
+      - "*"
+
+jobs:
+  sync-tags:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Push Tag to Dev Branch
+        run: |
+          # Get the current tag
+          TAG=$(git describe --tags --exact-match)
+          echo "Syncing tag $TAG to dev branch"
+
+          # Push the tag to the dev branch
+          git fetch --all
+          git checkout dev
+            git merge --ff-only $TAG
+            git push origin dev
+        env:
+            GITHUB_TOKEN: ${{ secrets.ACCESS_TOKEN }}
