@@ -1,12 +1,30 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import { watch } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join } from "node:path";
 import { build } from "esbuild";
 import ora from "ora";
 
 // Store file hashes for detecting changes
 const fileHashes = new Map();
+
+/**
+ * Sets executable permissions for shell scripts
+ * @param {string} filePath - The path to the file
+ * @param {string} outputFile - The output file path
+ */
+function setExecutablePermissions(filePath, outputFile) {
+  if (filePath.endsWith(".sh")) {
+    try {
+      fs.chmodSync(outputFile, 0o755);
+    } catch (chmodError) {
+      console.error(
+        `⚠️ Warning: Failed to set executable permissions on ${outputFile}:`,
+        chmodError,
+      );
+    }
+  }
+}
 
 /**
  * Processes a single migration file that has changed
@@ -69,17 +87,8 @@ export async function processMigrationFile(
       // Copy configuration file
       fs.copyFileSync(filePath, outputFile);
 
-      // Set executable permissions on shell scripts
-      if (filePath.endsWith(".sh")) {
-        try {
-          fs.chmodSync(outputFile, 0o755);
-        } catch (chmodError) {
-          console.error(
-            `⚠️ Warning: Failed to set executable permissions on ${outputFile}:`,
-            chmodError,
-          );
-        }
-      }
+      // Set executable permissions for shell scripts
+      setExecutablePermissions(filePath, outputFile);
     }
 
     fileSpinner.succeed(`Successfully processed ${filePath}`);
@@ -328,16 +337,7 @@ export async function processMigrations(options = {}) {
           fs.copyFileSync(srcPath, destPath);
 
           // Set executable permissions for shell scripts
-          if (item.endsWith(".sh")) {
-            try {
-              fs.chmodSync(destPath, 0o755);
-            } catch (chmodError) {
-              console.error(
-                `⚠️ Warning: Failed to set executable permissions on ${destPath}:`,
-                chmodError,
-              );
-            }
-          }
+          setExecutablePermissions(srcPath, destPath);
 
           copiedCount++;
         }
