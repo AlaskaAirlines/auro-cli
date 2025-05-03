@@ -7,13 +7,112 @@ const git = simpleGit();
 
 export class Git {
   static async checkGitignore(pattern: string) {
-    if (pattern === "") return false;
+    if (pattern === "") {
+      return false;
+    }
     try {
       const fileContent = await readFile(".gitignore", "utf-8");
       return fileContent.includes(pattern);
     } catch (err) {
       Logger.error(`Error reading file: ${err}`);
       return false;
+    }
+  }
+
+  static async getCommitMessages(): Promise<
+    Array<{
+      type: string;
+      hash: string;
+      date: string;
+      subject: string;
+      body: string;
+      message: string;
+      author_name: string;
+    }>
+  > {
+    try {
+      interface GitCommitType {
+        hash: string;
+        date: string;
+        subject: string;
+        body: string;
+        message: string;
+        author_name: string;
+        type: string;
+      }
+
+      const currentBranch = await git.branchLocal();
+      const mainBranch = "main";
+
+      const mergeBase = await git.raw([
+        "merge-base",
+        mainBranch,
+        currentBranch.current,
+      ]);
+      const commonAncestor = mergeBase.trim();
+
+      // Use a different format that will let us parse each commit separately
+      // %H = hash, %ad = author date, %an = author name, %s = subject, %b = body
+      // Separate each commit with a custom delimiter we can split on
+      const branchCommitsRaw = await git.raw([
+        "log",
+        "--pretty=format:COMMIT_START%n%H%n%ad%n%an%n%s%n%b%nCOMMIT_END",
+        "--date=short",
+        `${commonAncestor}..HEAD`,
+      ]);
+
+      // Split by our custom delimiter to get individual commits
+      const commitChunks = branchCommitsRaw
+        .split("COMMIT_START\n")
+        .filter((chunk: string) => chunk.trim() !== "");
+
+      const commits: GitCommitType[] = [];
+
+      for (const chunk of commitChunks) {
+        const parts = chunk.split("\n");
+        if (parts.length >= 4) {
+          const hash = parts[0];
+          const date = parts[1];
+          const author_name = parts[2];
+          const subject = parts[3];
+
+          // The rest is the body (may contain breaking changes)
+          // Filter out the COMMIT_END marker
+          const bodyLines = parts
+            .slice(4)
+            .filter((line: string) => line !== "COMMIT_END");
+          const body = bodyLines.length > 0 ? bodyLines.join("") : "";
+
+          // Use a shorter hash format for better readability (7 characters)
+          const shortHash = hash.substring(0, 7);
+
+          // Determine commit type from subject
+          const typeMatch = subject.match(
+            /^(feat|fix|docs|style|refactor|perf|test|build|ci|chore)(\(.+\))?:/,
+          );
+          let type = typeMatch ? typeMatch[1] : "unknown";
+
+          // Check for breaking changes
+          if (body.includes("BREAKING CHANGE")) {
+            type = "breaking";
+          }
+
+          commits.push({
+            type,
+            hash: shortHash,
+            date,
+            subject,
+            body,
+            message: `${subject}${body ? `\n\n${body}` : ""}`,
+            author_name,
+          });
+        }
+      }
+
+      return commits;
+    } catch (err) {
+      Logger.error(`Error getting commit messages: ${err}`);
+      return [];
     }
   }
 
