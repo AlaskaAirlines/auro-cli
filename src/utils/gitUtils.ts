@@ -56,12 +56,32 @@ export class Git {
       const currentBranch = await git.branchLocal();
       const mainBranch = "main";
 
-      const mergeBase = await git.raw([
-        "merge-base",
-        mainBranch,
-        currentBranch.current,
-      ]);
-      const commonAncestor = mergeBase.trim();
+      // Check if main branch exists locally, if not fetch it
+      // This is critical for GitHub Actions with shallow clones
+      try {
+        await git.raw(["rev-parse", "--verify", mainBranch]);
+      } catch (error) {
+        // Main branch doesn't exist locally, fetch it
+        Logger.info(`Fetching ${mainBranch} branch...`);
+        await git.fetch("origin", mainBranch);
+      }
+
+      // Try to get merge base, but handle potential failure in shallow clones
+      let commonAncestor: string;
+      try {
+        const mergeBase = await git.raw([
+          "merge-base",
+          mainBranch,
+          currentBranch.current,
+        ]);
+        commonAncestor = mergeBase.trim();
+      } catch (error) {
+        Logger.warn(`Failed to find merge base: ${error}`);
+        // Fallback strategy for shallow clones
+        // Use the most recent commit on main as reference point
+        const mainCommit = await git.raw(["rev-parse", mainBranch]);
+        commonAncestor = mainCommit.trim();
+      }
 
       // Use a different format that will let us parse each commit separately
       // %H = hash, %ad = author date, %an = author name, %s = subject, %b = body
