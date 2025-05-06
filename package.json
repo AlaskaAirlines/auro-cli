@@ -10,7 +10,8 @@
     "build": "tsc && npm run copy-files && npm run bundle",
     "build:dev": "tsc && npm run copy-files && npm run bundle -- --dev",
     "copy-files": "copyfiles -f -u 1 \"src/migrations/**/*.{yml,sh}\" dist/ && tsc-alias",
-    "bundle": "node esbuild.config.js"
+    "bundle": "node esbuild.config.js",
+    "auro-internal": "node ./dist/auro-cli.js"
   },
   "license": "Apache-2.0",
   "type": "module",

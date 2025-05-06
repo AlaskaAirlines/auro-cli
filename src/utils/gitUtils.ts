@@ -1,9 +1,21 @@
 import { appendFile, readFile } from "node:fs/promises";
 import { Logger } from "@aurodesignsystem/auro-library/scripts/utils/logger.mjs";
-import simpleGit from "simple-git";
+import { simpleGit } from "simple-git";
+import type { SimpleGit } from "simple-git";
 
-// @ts-ignore - something about the call signature is not happy. it works so we don't care too much
-const git = simpleGit();
+// Initialize simple-git with proper typing
+let git: SimpleGit;
+try {
+  git = simpleGit({
+    baseDir: process.cwd(),
+    binary: "git",
+    maxConcurrentProcesses: 1,
+  });
+} catch (error) {
+  Logger.error(`Failed to initialize git: ${error}`);
+  // Provide a minimal implementation to prevent runtime errors
+  git = {} as SimpleGit;
+}
 
 export class Git {
   static async checkGitignore(pattern: string) {
