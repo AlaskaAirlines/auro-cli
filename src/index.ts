@@ -9,6 +9,7 @@ import "#commands/migrate.js";
 import "#commands/sync.js";
 import "#commands/wca-setup.js";
 import "#commands/check-commits.ts";
+import "#commands/pr-release.ts";
 
 program
   .name("auro")
