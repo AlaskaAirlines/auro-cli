@@ -43,6 +43,6 @@ jobs:
           PACKAGE_VERSION=$(node -p "require('./package.json').version")
           
           # Create the comment with markdown formatting
-          gh pr comment ${{ github.event.pull_request.number }} -b "🚀 PR Release Published!\n\nPackage: \`$PACKAGE_NAME@$PACKAGE_VERSION\`\n\n[View on npmjs.com](https://www.npmjs.com/package/$PACKAGE_NAME/v/$PACKAGE_VERSION)"
+          gh pr comment ${{ github.event.pull_request.number }} -b "🚀 PR Release Published! \`$PACKAGE_NAME@$PACKAGE_VERSION\` [View on npmjs.com](https://www.npmjs.com/package/$PACKAGE_NAME/v/$PACKAGE_VERSION)"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
