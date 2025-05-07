@@ -15,7 +15,6 @@ import { applyLabelToPR } from "./github-labels.ts";
  */
 export async function analyzeCommits(
   debug = false,
-  verbose = false,
   setLabel = false,
 ): Promise<void> {
   const spinner = ora("Checking commits...\n").start();
@@ -25,7 +24,7 @@ export async function analyzeCommits(
 
     // Only display commit details if debug mode is enabled
     if (debug) {
-      displayDebugView(commitList, verbose);
+      displayDebugView(commitList);
     }
 
     spinner.succeed(`Total commits analyzed: ${commitList.length}`);
