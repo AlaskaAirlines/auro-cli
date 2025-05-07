@@ -100,20 +100,13 @@ export function wrapString(str: string, maxLength: number): string {
 /**
  * Display commits in a debug format with detailed information
  */
-export function displayDebugView(
-  commitList: CommitInfo[],
-  verbose = false,
-): void {
+export function displayDebugView(commitList: CommitInfo[]): void {
   for (const commit of commitList) {
     console.log("─".repeat(60));
 
     // Use a consistent color theme for metadata
-    const subject = verbose
-      ? commit.subject
-      : wrapString(commit.subject, MAX_SUBJECT_LENGTH);
-    const body = verbose
-      ? commit.body
-      : wrapString(commit.body, MAX_BODY_LENGTH);
+    const subject = wrapString(commit.subject, MAX_SUBJECT_LENGTH);
+    const body = wrapString(commit.body, MAX_BODY_LENGTH);
 
     // Display commit info in a more compact format
     console.log(chalk.bold(`${getColoredType(commit.type)}`));
