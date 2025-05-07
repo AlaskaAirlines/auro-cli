@@ -4,7 +4,7 @@ import {
   withBuildOptions,
   withServerOptions,
 } from "#commands/_sharedOptions.js";
-import { buildWithRollup, cleanupDist } from "#scripts/build/index.js";
+import { buildWithRollup } from "#scripts/build/index.js";
 
 let devCommand = program
   .command("dev")

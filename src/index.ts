@@ -8,6 +8,7 @@ import "#commands/build.js";
 import "#commands/migrate.js";
 import "#commands/sync.js";
 import "#commands/wca-setup.js";
+import "#commands/check-commits.ts";
 
 program
   .name("auro")
