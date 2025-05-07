@@ -8,13 +8,14 @@ on:
       - main
       - rc/**
 
+permissions:
+  contents: read
+  id-token: write # for npm provenance
+  pull-requests: write # permission to comment on PRs
+
 jobs:
-  pr-release:
-    name: PR Release
+  steps:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write # for npm provenance
     steps:
       - uses: actions/checkout@v4
       - name: Setup Node.js
@@ -35,3 +36,13 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Comment on PR
+        run: |
+          # Extract package info from package.json
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          
+          # Create the comment with markdown formatting
+          gh pr comment ${{ github.event.pull_request.number }} -b "🚀 PR Release Published!\n\nPackage: \`$PACKAGE_NAME@$PACKAGE_VERSION\`\n\n[View on npmjs.com](https://www.npmjs.com/package/$PACKAGE_NAME/v/$PACKAGE_VERSION)"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
