@@ -77,19 +77,30 @@ async function handleLabels(
     "chore",
   ];
 
-  const label = commitList
-    .map((commit) =>
-      validCommitTypes.includes(commit.type) ? commit.type : null,
-    )
-    .filter((label) => label !== null)[0];
+  // Extract all valid commit types from the commit list
+  const foundCommitTypes = commitList
+    .map((commit) => commit.type)
+    .filter((type) => validCommitTypes.includes(type));
 
-  if (label) {
+  // Select the highest priority commit type based on the order in validCommitTypes
+  let selectedLabel = null;
+  let highestPriorityIndex = Number.POSITIVE_INFINITY;
+
+  for (const type of foundCommitTypes) {
+    const priorityIndex = validCommitTypes.indexOf(type);
+    if (priorityIndex < highestPriorityIndex) {
+      highestPriorityIndex = priorityIndex;
+      selectedLabel = type;
+    }
+  }
+
+  if (selectedLabel) {
     const labelSpinner = ora("Applying label to pull request...").start();
     try {
       // Apply the label to the PR
-      await applyLabelToPR(label);
+      await applyLabelToPR(selectedLabel);
       labelSpinner.succeed(
-        `Label "semantic-status:${getColoredType(label)}" applied to the pull request.`,
+        `Label "semantic-status: ${getColoredType(selectedLabel)}" applied to the pull request.`,
       );
     } catch (error: unknown) {
       const errorMessage =

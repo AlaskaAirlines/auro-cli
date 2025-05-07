@@ -33,7 +33,7 @@ export async function applyLabelToPR(label: string): Promise<void> {
     const prNumber = context.payload.pull_request.number;
 
     // Add prefix to the label
-    const prefixedLabel = `semantic-status:${label}`;
+    const prefixedLabel = `semantic-status: ${label}`;
 
     // Get existing labels
     const { data: existingLabels } =
