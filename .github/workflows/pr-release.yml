@@ -1,0 +1,37 @@
+name: PR Release
+
+# Runs when a pull request is opened but not for PRs into main or rc branches
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches-ignore: 
+      - main
+      - rc/**
+
+jobs:
+  pr-release:
+    name: PR Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # for npm provenance
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: 'https://registry.npmjs.org'
+      - name: Test
+        run: npm run test
+      - name: Install dependencies
+        run: npm clean-install
+      - name: Build
+        run: npm run build
+      - name: Generate PR release version
+        run: npm run auro-internal -- pr-release -p ${{ github.event.pull_request.number }}
+      - name: Publish to NPM
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
