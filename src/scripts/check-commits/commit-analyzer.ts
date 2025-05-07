@@ -4,7 +4,7 @@ import type { Ora } from "ora";
 import { Git } from "#utils/gitUtils.ts";
 import type { CommitInfo } from "./display-utils.ts";
 import { displayDebugView, getColoredType } from "./display-utils.ts";
-import { applyLabelToPR } from "./github-labels.ts";
+import { applyLabelToPR, getExistingLabels } from "./github-labels.ts";
 
 /**
  * Analyze commit messages in the repository
@@ -76,12 +76,10 @@ async function handleLabels(
     "chore",
   ];
 
-  // Extract all valid commit types from the commit list
   const foundCommitTypes = commitList
     .map((commit) => commit.type)
     .filter((type) => validCommitTypes.includes(type));
 
-  // Select the highest priority commit type based on the order in validCommitTypes
   let selectedLabel = null;
   let highestPriorityIndex = Number.POSITIVE_INFINITY;
 
@@ -94,9 +92,20 @@ async function handleLabels(
   }
 
   if (selectedLabel) {
-    const labelSpinner = ora("Applying label to pull request...").start();
+    const labelSpinner = ora(
+      "Checking existing labels on pull request...",
+    ).start();
     try {
-      // Apply the label to the PR
+      const existingLabels = await getExistingLabels();
+
+      if (existingLabels.includes(`semantic-status: ${selectedLabel}`)) {
+        labelSpinner.info(
+          `Label "semantic-status: ${getColoredType(selectedLabel)}" already exists on the pull request.`,
+        );
+        return;
+      }
+
+      labelSpinner.text = "Applying label to pull request...";
       await applyLabelToPR(selectedLabel);
       labelSpinner.succeed(
         `Label "semantic-status: ${getColoredType(selectedLabel)}" applied to the pull request.`,
