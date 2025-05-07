@@ -3,6 +3,7 @@ import { get } from "node:https"; // Change to https
 import chalk from "chalk";
 import { program } from "commander";
 import ora from "ora";
+import type { Ora } from "ora";
 
 export default program
   .command("pr-release")
@@ -80,7 +81,7 @@ const updatePackageJson = async (option: ReleaseOptions): Promise<void> => {
 const getIncrementVersion = (
   releaseVersion: string,
   packageName: string,
-  spinner: ora.Ora,
+  spinner: Ora,
 ): Promise<number> => {
   return new Promise((resolve) => {
     try {
