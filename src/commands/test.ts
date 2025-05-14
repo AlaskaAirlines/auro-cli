@@ -11,7 +11,7 @@ export default program
   .option("-w, --watch", "Set watch number for the test")
   .description("Run the web test runner to test the component library")
   .action(async (option) => {
-    const command = `npx wtr --config ${cliRootDir}/dist/configs/web-test-runner.config.mjs`;
+    const command = `npx wtr --config ${cliRootDir}/dist/configs/web-test-runner.config.mjs --coverage`;
 
     if (option.watch) {
       shell(`${command} --watch`);
