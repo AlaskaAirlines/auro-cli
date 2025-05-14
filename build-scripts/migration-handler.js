@@ -8,13 +8,69 @@ import ora from "ora";
 // Store file hashes for detecting changes
 const fileHashes = new Map();
 
+// File extension definitions
+const FILE_EXTENSIONS = {
+  SCRIPT: [".js", ".ts", ".mjs", ".cjs"],
+  CONFIG: [".yml"],
+  SHELL: [".sh"],
+};
+
+/**
+ * Checks if a file has a script extension
+ * @param {string} filePath - The path to check
+ * @returns {boolean} Whether the file has a script extension
+ */
+function isScriptFile(filePath) {
+  return FILE_EXTENSIONS.SCRIPT.some((ext) => filePath.endsWith(ext));
+}
+
+/**
+ * Checks if a file has a shell script extension
+ * @param {string} filePath - The path to check
+ * @returns {boolean} Whether the file has a shell script extension
+ */
+function isShellScript(filePath) {
+  return FILE_EXTENSIONS.SHELL.some((ext) => filePath.endsWith(ext));
+}
+
+/**
+ * Checks if a file has a configuration extension
+ * @param {string} filePath - The path to check
+ * @returns {boolean} Whether the file has a configuration extension
+ */
+function isConfigFile(filePath) {
+  return FILE_EXTENSIONS.CONFIG.some((ext) => filePath.endsWith(ext));
+}
+
+/**
+ * Checks if a file should be processed (has any relevant extension)
+ * @param {string} filePath - The path to check
+ * @returns {boolean} Whether the file should be processed
+ */
+function isProcessableFile(filePath) {
+  return [
+    ...FILE_EXTENSIONS.SCRIPT,
+    ...FILE_EXTENSIONS.CONFIG,
+    ...FILE_EXTENSIONS.SHELL,
+  ].some((ext) => filePath.endsWith(ext));
+}
+
+/**
+ * Checks if a file is a JavaScript file that needs to be bundled
+ * @param {string} filePath - The path to check
+ * @returns {boolean} Whether the file is a bundleable JavaScript file
+ */
+function isBundleableJsFile(filePath) {
+  return [".js", ".mjs", ".cjs"].some((ext) => filePath.endsWith(ext));
+}
+
 /**
  * Sets executable permissions for shell scripts
  * @param {string} filePath - The path to the file
  * @param {string} outputFile - The output file path
  */
 function setExecutablePermissions(filePath, outputFile) {
-  if (filePath.endsWith(".sh")) {
+  if (isShellScript(filePath)) {
     try {
       fs.chmodSync(outputFile, 0o755);
     } catch (chmodError) {
@@ -47,7 +103,10 @@ export async function processMigrationFile(
     const fileSpinner = ora(`Processing ${filePath}...`).start();
 
     // Calculate output path
-    const outputFile = filePath.replace("src/migrations", "dist/migrations");
+    const outputFile = filePath.replace(
+      /^src\/(migrations|configs)/,
+      "dist/$1",
+    );
     const outputDir = dirname(outputFile);
 
     // Ensure output directory exists
@@ -55,7 +114,7 @@ export async function processMigrationFile(
       fs.mkdirSync(outputDir, { recursive: true });
     }
 
-    if (filePath.endsWith(".js")) {
+    if (isBundleableJsFile(filePath)) {
       // Process JS file - bundle it
       const migrationBuildConfig = {
         entryPoints: [filePath],
@@ -83,7 +142,7 @@ export async function processMigrationFile(
       }
 
       await build(migrationBuildConfig);
-    } else if (filePath.endsWith(".yml") || filePath.endsWith(".sh")) {
+    } else if (isConfigFile(filePath) || isShellScript(filePath)) {
       // Copy configuration file
       fs.copyFileSync(filePath, outputFile);
 
@@ -126,12 +185,7 @@ export function watchMigrationFiles(options = {}) {
       const filePath = join(dir, file);
       if (fs.statSync(filePath).isDirectory()) {
         initializeFileHashes(filePath);
-      } else if (
-        filePath.endsWith(".js") ||
-        filePath.endsWith(".yml") ||
-        filePath.endsWith(".sh") ||
-        filePath.endsWith(".ts")
-      ) {
+      } else if (isProcessableFile(filePath)) {
         try {
           const fileHash = crypto
             .createHash("sha256")
@@ -147,6 +201,7 @@ export function watchMigrationFiles(options = {}) {
 
   // Initialize hashes for existing files
   initializeFileHashes("src/migrations");
+  initializeFileHashes("src/configs");
   initializeFileHashes("src");
 
   const watchers = {
@@ -166,11 +221,47 @@ export function watchMigrationFiles(options = {}) {
         }
 
         // Skip if not a file type we care about
-        if (
-          !filePath.endsWith(".js") &&
-          !filePath.endsWith(".yml") &&
-          !filePath.endsWith(".sh")
-        ) {
+        if (!isProcessableFile(filePath)) {
+          return;
+        }
+
+        // Check if content actually changed by comparing hashes
+        try {
+          const currentHash = crypto
+            .createHash("sha256")
+            .update(fs.readFileSync(filePath))
+            .digest("hex");
+
+          const previousHash = fileHashes.get(filePath);
+
+          // Only process if file is new or contents changed
+          if (previousHash !== currentHash) {
+            console.log(`🔄 Detected change in ${filename}`);
+            await processMigrationFile(filePath, options);
+          }
+        } catch (error) {
+          console.error(`❌ Error checking file ${filePath}:`, error);
+        }
+      },
+    ),
+
+    // Set up the watcher for configs
+    configs: watch(
+      "src/configs",
+      { recursive: true },
+      async (eventType, filename) => {
+        if (!filename) return;
+
+        const filePath = join("src/configs", filename);
+
+        // Skip if file doesn't exist (might have been deleted)
+        if (!fs.existsSync(filePath)) {
+          console.log(`❌ File no longer exists: ${filePath}`);
+          return;
+        }
+
+        // Skip if not a file type we care about
+        if (!isProcessableFile(filePath)) {
           return;
         }
 
@@ -198,8 +289,9 @@ export function watchMigrationFiles(options = {}) {
     src: watch("src", { recursive: true }, async (eventType, filename) => {
       if (!filename) return;
 
-      // Skip migrations directory as it's handled by the other watcher
-      if (filename.startsWith("migrations/")) return;
+      // Skip migrations and configs directories as they're handled by other watchers
+      if (filename.startsWith("migrations/") || filename.startsWith("configs/"))
+        return;
 
       const filePath = join("src", filename);
 
@@ -210,12 +302,7 @@ export function watchMigrationFiles(options = {}) {
       }
 
       // Skip if not a file type we care about
-      if (
-        !filePath.endsWith(".js") &&
-        !filePath.endsWith(".ts") &&
-        !filePath.endsWith(".mjs") &&
-        !filePath.endsWith(".cjs")
-      ) {
+      if (!isScriptFile(filePath)) {
         return;
       }
 
@@ -250,10 +337,11 @@ export function watchMigrationFiles(options = {}) {
     }),
   };
 
-  // Return an object with both watchers
+  // Return an object with all watchers
   return {
     close: () => {
       watchers.migrations.close();
+      watchers.configs.close();
       watchers.src.close();
     },
   };
@@ -268,8 +356,8 @@ export function watchMigrationFiles(options = {}) {
  */
 export async function processMigrations(options = {}) {
   try {
-    // Step 1: Process migration JS files to inline their dependencies
-    const migrationJsFiles = [];
+    // Step 1: Process JS files to inline their dependencies
+    const jsFiles = [];
 
     /**
      * Recursively finds all JavaScript files in a given directory.
@@ -284,30 +372,27 @@ export async function processMigrations(options = {}) {
         const filePath = join(dir, file);
         if (fs.statSync(filePath).isDirectory()) {
           findJsFiles(filePath);
-        } else if (file.endsWith(".js")) {
-          migrationJsFiles.push(filePath);
+        } else if (isBundleableJsFile(filePath)) {
+          jsFiles.push(filePath);
         }
       }
     }
 
     findJsFiles("src/migrations");
+    findJsFiles("src/configs");
 
-    // Process each migration JS file
-    const migrationSpinner = ora(
-      `Processing ${migrationJsFiles.length} migration JS files...`,
-    ).start();
+    // Process each JS file
+    const jsSpinner = ora(`Processing ${jsFiles.length} JS files...`).start();
 
-    for (const migrationFile of migrationJsFiles) {
-      await processMigrationFile(migrationFile, options);
+    for (const jsFile of jsFiles) {
+      await processMigrationFile(jsFile, options);
     }
 
-    migrationSpinner.succeed(
-      `Processed ${migrationJsFiles.length} migration JS files.`,
-    );
+    jsSpinner.succeed(`Processed ${jsFiles.length} JS files.`);
 
-    // Step 2: Copy migration .yml and .sh files
+    // Step 2: Copy .yml and .sh files
     const copySpinner = ora(
-      "Copying migration configuration files (.yml, .sh)...",
+      "Copying configuration files (.yml, .sh)...",
     ).start();
 
     /**
@@ -315,7 +400,7 @@ export async function processMigrations(options = {}) {
      * @param {string} srcDir - The source directory to search in.
      * @param {string} destDir - The destination directory to copy to.
      */
-    function copyMigrationConfigFiles(srcDir, destDir) {
+    function copyConfigFiles(srcDir, destDir) {
       if (!fs.existsSync(srcDir)) {
         return 0;
       }
@@ -331,8 +416,8 @@ export async function processMigrations(options = {}) {
           if (!fs.existsSync(destPath)) {
             fs.mkdirSync(destPath, { recursive: true });
           }
-          copiedCount += copyMigrationConfigFiles(srcPath, destPath);
-        } else if (item.endsWith(".yml") || item.endsWith(".sh")) {
+          copiedCount += copyConfigFiles(srcPath, destPath);
+        } else if (isConfigFile(srcPath) || isShellScript(srcPath)) {
           // Always copy the file regardless if it exists or has changed
           fs.copyFileSync(srcPath, destPath);
 
@@ -346,15 +431,18 @@ export async function processMigrations(options = {}) {
       return copiedCount;
     }
 
-    const copiedFiles = copyMigrationConfigFiles(
+    const migrationCopiedFiles = copyConfigFiles(
       "src/migrations",
       "dist/migrations",
     );
+
+    const configCopiedFiles = copyConfigFiles("src/configs", "dist/configs");
+
     copySpinner.succeed(
-      `Copied ${copiedFiles} migration configuration files (.yml, .sh).`,
+      `Copied ${migrationCopiedFiles + configCopiedFiles} configuration files (.yml, .sh).`,
     );
   } catch (error) {
-    console.error("❌ Failed to process migrations:", error);
+    console.error("❌ Failed to process files:", error);
     throw error;
   }
 }
