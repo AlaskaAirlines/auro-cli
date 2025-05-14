@@ -1,7 +1,6 @@
 import { startDevServer } from "@web/dev-server";
 import { hmrPlugin } from "@web/dev-server-hmr";
 import ora from "ora";
-
 /**
  * Default server configuration
  */
