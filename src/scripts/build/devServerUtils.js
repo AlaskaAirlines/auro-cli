@@ -37,11 +37,6 @@ export async function startDevelopmentServer(options = {}) {
       // HTML file extension middleware
       middleware: [
         function rewriteIndex(context, next) {
-          if (context.url.endsWith("coverage")) {
-            context.redirect("/coverage/index.html");
-            return;
-          }
-
           if (!context.url.endsWith("/") && !context.url.includes(".")) {
             context.url += ".html";
           }

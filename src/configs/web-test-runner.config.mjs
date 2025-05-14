@@ -11,7 +11,6 @@ export default {
       functions: 80,
       lines: 80,
     },
-    reportDir: "demo/coverage",
     reporters: ["html"],
   },
   mimeTypes: {
