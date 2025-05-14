@@ -1,7 +1,6 @@
 import { startDevServer } from "@web/dev-server";
 import { hmrPlugin } from "@web/dev-server-hmr";
 import ora from "ora";
-
 /**
  * Default server configuration
  */
@@ -38,6 +37,11 @@ export async function startDevelopmentServer(options = {}) {
       // HTML file extension middleware
       middleware: [
         function rewriteIndex(context, next) {
+          if (context.url.endsWith("coverage")) {
+            context.redirect("/coverage/index.html");
+            return;
+          }
+
           if (!context.url.endsWith("/") && !context.url.includes(".")) {
             context.url += ".html";
           }
