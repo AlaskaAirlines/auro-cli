@@ -1,4 +1,4 @@
-name: Sync Tags to Dev Branch
+name: Sync Tags
 
 on:
   release:
@@ -7,6 +7,7 @@ on:
 jobs:
   sync-tags:
     runs-on: ubuntu-latest
+    if: github.event.release.target_commitish == 'main'
 
     steps:
       - name: Checkout Code
