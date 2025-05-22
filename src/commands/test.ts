@@ -14,7 +14,13 @@ export default program
   .option("-o, --open", "Open the coverage report in the browser")
   .description("Run the web test runner to test the component library")
   .action(async (option) => {
-    let command = `npx wtr --config ${cliRootDir}/dist/configs/web-test-runner.config.mjs`;
+    const configPath = path.join(
+      cliRootDir,
+      "dist",
+      "configs",
+      "web-test-runner.config.mjs",
+    );
+    let command = `npx wtr --config "${configPath}"`;
     const coveragePath = `${process.cwd()}/coverage/index.html`;
 
     if (option.coverageReport) {
