@@ -1,21 +1,23 @@
 import { LitElement } from "lit";
-import { html } from "lit/directives.js";
+import { html } from "lit/static-html.js";
 
-import componentTokens from "token.scss"
-import componentColor from "color.scss"
-import componentStyle from "style.scss"
+import componentTokens from "./styles/tokens.scss"
+import componentColor from "./styles/color.scss"
+import componentStyle from "./styles/style.scss"
 
+/**
+ * {{ auroComponentName name }} is a reusable web component written using Lit.
+ */
 export class {{ auroComponentName name }} extends LitElement {
   static get styles() {
     return [componentTokens, componentColor, componentStyle];
   }
 
-
-  register() {
+  static register() {
     if (typeof window !== "undefined") {
       const elementName = "{{ auroDashCase name }}";
       if (!customElements.get(elementName)) {
-        customElements.define(elementName, this.constructor);
+        customElements.define(elementName, {{ auroComponentName name }});
       }
     }
   }

@@ -4,7 +4,7 @@ README.md is created by running `npm run build:docs`.
 This file is generated based on a template fetched from `./docs/partials/demo.md`
 -->
 
-# {{ capitalize name }}
+# {{ titleCase name }}
 
 <!-- AURO-GENERATED-CONTENT:START (FILE:src=../docs/partials/description.md) -->
 <!-- AURO-GENERATED-CONTENT:END -->

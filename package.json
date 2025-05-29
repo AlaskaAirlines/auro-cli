@@ -57,6 +57,7 @@
     "inquirer": "^12.6.0",
     "ora": "^8.2.0",
     "plop": "^4.0.1",
+    "plop-pack-npm-install": "^0.3.0",
     "rollup-plugin-dts": "^6.2.1",
     "rollup-plugin-scss-lit": "^2.1.0",
     "simple-git": "^3.27.0",

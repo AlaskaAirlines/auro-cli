@@ -1,0 +1,10 @@
+import { {{ auroComponentName name }} } from "../../src/{{ auroDashCase name }}.js";
+
+/**
+ * {{ auroComponentName name }} is a reusable web component written using Lit.
+ */
+class {{ auroComponentName name }}WCA extends {{ auroComponentName name }} {}
+
+if (!customElements.get("{{ auroDashCase name }}")) {
+  customElements.define("{{ auroDashCase name }}", {{ auroComponentName name }}WCA);
+}
