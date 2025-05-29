@@ -16,9 +16,7 @@
   "license": "Apache-2.0",
   "type": "module",
   "lint-staged": {
-    "*": [
-      "biome check --fix --no-errors-on-unmatched"
-    ]
+    "*": ["biome check --fix --no-errors-on-unmatched"]
   },
   "bin": {
     "auro": "dist/auro-cli.js"
@@ -26,13 +24,7 @@
   "exports": {
     ".": "./dist/auro-cli.js"
   },
-  "files": [
-    "dist",
-    "CHANGELOG.md",
-    "README.md",
-    "LICENSE",
-    "NOTICE"
-  ],
+  "files": ["dist", "CHANGELOG.md", "README.md", "LICENSE", "NOTICE"],
   "imports": {
     "#configs/*": "./src/configs/*",
     "#commands/*": "./src/commands/*",
@@ -45,12 +37,7 @@
   "engines": {
     "node": ">=18"
   },
-  "keywords": [
-    "alaska airlines",
-    "auro",
-    "design system",
-    "web components"
-  ],
+  "keywords": ["alaska airlines", "auro", "design system", "web components"],
   "dependencies": {
     "@actions/github": "^6.0.0",
     "@aurodesignsystem/auro-library": "^4.4.1",
