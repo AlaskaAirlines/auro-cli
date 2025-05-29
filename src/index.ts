@@ -10,7 +10,8 @@ import "#commands/sync.js";
 import "#commands/wca-setup.js";
 import "#commands/check-commits.ts";
 import "#commands/pr-release.ts";
-import "#commands/test.js";
+import "#commands/test.ts";
+import "#commands/generate.ts";
 
 program
   .name("auro")

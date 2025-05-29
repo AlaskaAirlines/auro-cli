@@ -11,7 +11,7 @@ const fileHashes = new Map();
 // File extension definitions
 const FILE_EXTENSIONS = {
   SCRIPT: [".js", ".ts", ".mjs", ".cjs"],
-  CONFIG: [".yml"],
+  CONFIG: [".yml", ".json", ".hbs", ".scss"],
   SHELL: [".sh"],
 };
 
@@ -75,7 +75,7 @@ function setExecutablePermissions(filePath, outputFile) {
       fs.chmodSync(outputFile, 0o755);
     } catch (chmodError) {
       console.error(
-        `⚠️ Warning: Failed to set executable permissions on ${outputFile}:`,
+        `! Warning: Failed to set executable permissions on ${outputFile}:`,
         chmodError,
       );
     }

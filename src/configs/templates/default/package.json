@@ -1,0 +1,113 @@
+{
+  "//": [
+    "================================================================================",
+    "# To work within the development environment, run the following tasks",
+    "  1. $ npm run dev",
+    "  2. Go to http://localhost:8000",
+    "================================================================================"
+  ],
+  "type": "module",
+  "name": "@aurodesignsystem/auro-{{ dashCase name }}",
+  "version": "0.0.0",
+  "description": "auro-{{ dashCase name }} HTML custom element",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AlaskaAirlines/auro-{{ dashCase name }}"
+  },
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=18.15.0"
+  },
+  "dependencies": {
+    "@lit/reactive-element": "^2.0.4",
+    "lit": "^3.2.1"
+  },
+  "devDependencies": {
+    "@aurodesignsystem/auro-cli": "^2.3.1",
+    "@aurodesignsystem/auro-config": "^1.0.1",
+    "@aurodesignsystem/auro-library": "^3.0.13",
+    "@aurodesignsystem/design-tokens": "^4.13.0",
+    "@aurodesignsystem/webcorestylesheets": "^6.1.0",
+    "@biomejs/biome": "^1.9.4",
+    "@commitlint/cli": "^19.8.0",
+    "@commitlint/config-conventional": "^19.8.0",
+    "@open-wc/testing": "^4.0.0",
+    "@rollup/plugin-node-resolve": "^16.0.1",
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/npm": "^12.0.1",
+    "@web/dev-server": "^0.4.6",
+    "@web/test-runner": "^0.20.0",
+    "autoprefixer": "^10.4.21",
+    "compression": "^1.8.0",
+    "concat": "^1.0.3",
+    "concurrently": "^9.1.2",
+    "copyfiles": "^2.4.1",
+    "core-js": "^3.41.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.5.1",
+    "sass": "^1.81.0",
+    "semantic-release": "^24.2.3",
+    "stylelint": "^16.16.0",
+    "stylelint-config-idiomatic-order": "^10.0.0",
+    "stylelint-config-standard": "^37.0.0",
+    "stylelint-config-standard-scss": "^14.0.0",
+    "stylelint-order": "^6.0.4",
+    "stylelint-scss": "^6.11.1",
+    "typescript": "^5.8.2",
+    "wc-sass-render": "^1.4.0",
+    "web-component-analyzer": "^2.0.0",
+    "whatwg-fetch": "^3.6.20",
+    "yaml-lint": "^1.7.0"
+  },
+  "overrides": {
+    "wc-sass-render": {
+      "sass": "$sass"
+    }
+  },
+  "browserslist": [
+    "last 2 Chrome versions",
+    "last 2 iOS major versions",
+    "last 2 Firefox versions",
+    "last 2 Edge versions",
+    "last 2 Safari major versions"
+  ],
+  "nodemonConfig": {
+    "ignore": ["*-css.js", "*.css"]
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": ["alaska airlines", "auro", "design system", "web components"],
+  "scripts": {
+    "build": "auro build",
+    "dev": "auro dev --open",
+    "lint": "biome check --fix --no-errors-on-unmatched && stylelint \"./src/**/*.scss\"",
+    "test": "auro test",
+    "test:watch": "auro test --watch",
+    "prepare": "husky"
+  },
+  "files": [
+    "dist/**/*",
+    "demo/**/*",
+    "CHANGELOG.md",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "lint-staged": {
+    "*": ["biome check --fix --no-errors-on-unmatched"],
+    "*.{scss,css}": ["stylelint --fix"]
+  },
+  "exports": {
+    "./readme.md": "./README.md",
+    ".": "./dist/registered.js",
+    "./demo/*.md": "./demo/*.md",
+    "./demo/*.js": "./demo/*.min.js",
+    "./class": {
+      "module": "./dist/index.js",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  }
+}

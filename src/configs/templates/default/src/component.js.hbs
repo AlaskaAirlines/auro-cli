@@ -1,0 +1,30 @@
+import { LitElement } from "lit";
+import { html } from "lit/directives.js";
+
+import componentTokens from "token.scss"
+import componentColor from "color.scss"
+import componentStyle from "style.scss"
+
+export class {{ auroComponentName name }} extends LitElement {
+  static get styles() {
+    return [componentTokens, componentColor, componentStyle];
+  }
+
+
+  register() {
+    if (typeof window !== "undefined") {
+      const elementName = "{{ auroDashCase name }}";
+      if (!customElements.get(elementName)) {
+        customElements.define(elementName, this.constructor);
+      }
+    }
+  }
+
+  render() {
+    return html`
+      <div>
+        <p>hello {{ auroComponentName name }}!</p>
+      </div>
+    `;
+  }
+}
