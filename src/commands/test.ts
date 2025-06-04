@@ -12,6 +12,7 @@ export default program
   .option("-w, --watch", "Set watch number for the test")
   .option("-c, --coverage-report", "Generate coverage report")
   .option("-o, --open", "Open the coverage report in the browser")
+  .option("-f, --files <String|String[]>", "Test files glob pattern")
   .description("Run the web test runner to test the component library")
   .action(async (option) => {
     const configPath = path.join(
@@ -29,6 +30,13 @@ export default program
 
     if (option.watch) {
       command += " --watch";
+    }
+
+    if (option.files) {
+      const files = Array.isArray(option.files)
+        ? option.files.join(" ")
+        : option.files;
+      command += ` --files "${files}"`;
     }
 
     shell(command);
