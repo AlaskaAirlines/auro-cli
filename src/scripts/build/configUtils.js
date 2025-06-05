@@ -166,6 +166,7 @@ export function getWatcherConfig(watchOptions) {
       },
     },
     include: options.include ?? [
+      "./src/**/*.scss",
       "./src/**/*.js",
       "./src/**/*.ts",
       "./demo/**/*.js",
