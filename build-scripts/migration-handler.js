@@ -11,7 +11,7 @@ const fileHashes = new Map();
 // File extension definitions
 const FILE_EXTENSIONS = {
   SCRIPT: [".js", ".ts", ".mjs", ".cjs"],
-  CONFIG: [".yml"],
+  CONFIG: [".yml", ".hbs"],
   SHELL: [".sh"],
 };
 
