@@ -1,5 +1,6 @@
 import { LitElement } from "lit";
 import { html } from "lit/static-html.js";
+import AuroLibraryRuntimeUtils from "@aurodesignsystem/auro-library/scripts/utils/runtimeUtils.mjs";
 
 import componentTokens from "./styles/tokens.scss"
 import componentColor from "./styles/color.scss"
@@ -9,17 +10,19 @@ import componentStyle from "./styles/style.scss"
  * {{ auroComponentName name }} is a reusable web component written using Lit.
  */
 export class {{ auroComponentName name }} extends LitElement {
-  static get styles() {
-    return [componentTokens, componentColor, componentStyle];
+
+  /**
+   * Registers the custom element with the browser.
+   * @param {string} [name="{{ auroDashCase name}}"] - Custom element name to register.
+   * @example
+   * {{ auroComponentName name }}.register("custom-{{ dashCase name }}") // registers <custom-{{ dashCase name }}/>
+   */
+  static register(name = "{{ auroDashCase name}}") {
+    AuroLibraryRuntimeUtils.prototype.registerComponent(name, {{ auroComponentName name }});
   }
 
-  static register() {
-    if (typeof window !== "undefined") {
-      const elementName = "{{ auroDashCase name }}";
-      if (!customElements.get(elementName)) {
-        customElements.define(elementName, {{ auroComponentName name }});
-      }
-    }
+  static get styles() {
+    return [componentTokens, componentColor, componentStyle];
   }
 
   render() {
