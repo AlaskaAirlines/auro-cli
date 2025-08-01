@@ -1,14 +1,17 @@
+import { parseBoolean } from "#utils/parseBoolean.js";
+
 /**
  * @param {import('commander').Command} command
  * @param {{ watch: boolean }} options
  * @returns {import('commander').Command}
  */
-export function withBuildOptions(command, { watch = false }) {
+export function withBuildOptions(command, { watch }) {
   return command
     .option("-m, --module-paths [paths...]", "Path(s) to node_modules folder")
     .option(
-      "--watch",
-      "Watch for changes - default for dev mode, opt-in for build",
+      "--watch [boolean]",
+      "Watch for changes and rebuild automatically",
+      parseBoolean,
       watch,
     )
     .option("--skip-docs", "Skip documentation generation", false)

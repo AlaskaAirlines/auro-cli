@@ -32,7 +32,11 @@ export default devCommand.action(async (options) => {
 
     build.start();
 
-    await buildWithRollup({ ...options, dev: true, watch: true });
+    if (!options.watch) {
+      build.succeed("Build completed!");
+    }
+
+    await buildWithRollup({ ...options, dev: true, watch: options.watch });
   } catch (error) {
     // If there's any active spinner, we need to fail it
     ora().fail(`Build failed: ${error.message}`);
