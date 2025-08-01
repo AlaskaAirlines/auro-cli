@@ -15,6 +15,7 @@ const DEFAULT_CONFIG = {
 /**
  * Starts the development server
  * @param {object} options - Server options
+ * @param {boolean} [options.serve] - Whether to start the server
  * @param {number} [options.port] - Port number for the server
  * @param {boolean} [options.open] - Whether to open the browser
  * @param {string} [options.rootDir] - Root directory for serving files
@@ -22,6 +23,8 @@ const DEFAULT_CONFIG = {
  * @returns {Promise<object>} - The server instance
  */
 export async function startDevelopmentServer(options = {}) {
+  if (!options.serve) return;
+
   const serverSpinner = ora("Firing up dev server...\n").start();
 
   try {

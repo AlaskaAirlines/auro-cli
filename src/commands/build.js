@@ -7,9 +7,7 @@ let buildCommand = program
   .command("build")
   .description("Builds auro components");
 
-buildCommand = withBuildOptions(buildCommand, {
-  watch: false,
-});
+buildCommand = withBuildOptions(buildCommand);
 
 export default buildCommand.action(async (options) => {
   try {
