@@ -10,9 +10,7 @@ let devCommand = program
   .command("dev")
   .description("Runs development server for auro components");
 
-devCommand = withBuildOptions(devCommand, {
-  watch: true,
-});
+devCommand = withBuildOptions(devCommand);
 devCommand = withServerOptions(devCommand);
 
 export default devCommand.action(async (options) => {
