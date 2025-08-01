@@ -76,18 +76,18 @@ async function setupWatchMode(options) {
  */
 export async function buildWithRollup(options = {}) {
   try {
-    const { dev: isDevMode = false, watch: isWatchMode = isDevMode } = options;
+    const { watch } = options;
 
     // Clean output directory
     cleanupDist();
 
     // Run production build once or set up watch mode
-    if (!isDevMode && !isWatchMode) {
-      return await runProductionBuild(options);
-      // biome-ignore lint/style/noUselessElse: This else is the difference between build or dev.
-    } else {
+    // Only use watch mode if explicitly enabled
+    if (watch) {
       return await setupWatchMode(options);
     }
+
+    return await runProductionBuild(options);
   } catch (error) {
     throw new Error(`Build failed: ${error.message}`);
   }
