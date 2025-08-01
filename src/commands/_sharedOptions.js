@@ -1,16 +1,11 @@
 /**
  * @param {import('commander').Command} command
- * @param {{ watch: boolean }} options
  * @returns {import('commander').Command}
  */
-export function withBuildOptions(command, { watch = false }) {
+export function withBuildOptions(command) {
   return command
     .option("-m, --module-paths [paths...]", "Path(s) to node_modules folder")
-    .option(
-      "--watch",
-      "Watch for changes - default for dev mode, opt-in for build",
-      watch,
-    )
+    .option("-w, --watch", "Watches for changes")
     .option("--skip-docs", "Skip documentation generation", false)
     .option(
       "--wca-input [files...]",
@@ -24,6 +19,7 @@ export function withBuildOptions(command, { watch = false }) {
  */
 export function withServerOptions(command) {
   return command
-    .option("-p, --port <number>", "Port for the dev server")
+    .option("-s, --serve", "Starts a server")
+    .option("-p, --port <number>", "Port for the server")
     .option("-o, --open", "Open the browser after starting the server");
 }
