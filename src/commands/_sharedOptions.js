@@ -1,5 +1,3 @@
-import { parseBoolean } from "#utils/parseBoolean.js";
-
 /**
  * @param {import('commander').Command} command
  * @returns {import('commander').Command}
