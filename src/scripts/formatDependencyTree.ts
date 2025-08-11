@@ -119,12 +119,6 @@ export async function formatDependencyTree(
     }
   }
 
-  // Write the dependency tree to a file
-  fs.writeFileSync(
-    `${jsonFileDirectory}/dependencyTree.json`,
-    JSON.stringify(dependencyTree, null, 2),
-  );
-
   // If there are no specified target dependencies, use all packages
   if (targetDependencies.length) {
     // If there ARE target dependencies, filter the dependency tree down to just relevant packages
@@ -162,6 +156,12 @@ export async function formatDependencyTree(
   } else {
     console.log("No target dependencies provided - using all packages.");
   }
+
+  // Write the dependency tree to a file
+  fs.writeFileSync(
+    `${jsonFileDirectory}/dependencyTree.json`,
+    JSON.stringify(dependencyTree, null, 2),
+  );
 
   return dependencyTree;
 }
