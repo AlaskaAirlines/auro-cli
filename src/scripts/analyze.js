@@ -7,6 +7,6 @@ import { shell } from "#utils/shell.js";
  */
 export async function analyzeComponents(sourceFiles, outFile) {
   shell(
-    `npx wca analyze ${sourceFiles || "scripts/wca/*"} --outFiles ${outFile || "docs/api.md"}`,
+    `npx --package=web-component-analyzer -y -- wca analyze ${sourceFiles || "scripts/wca/*"} --outFiles ${outFile || "docs/api.md"}`,
   );
 }
