@@ -20,7 +20,7 @@ export default {
     rollupAdapter(
       litScss({
         options: {
-          loadPaths: ["../../node_modules", "../node_modules", "node_modules"],
+          loadPaths: ["../../node_modules", "../node_modules", "node_modules", `${process.cwd()}/src/styles`, `${process.cwd()}/src`],
         },
       }),
     ),
