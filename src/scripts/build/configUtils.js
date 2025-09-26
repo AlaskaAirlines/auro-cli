@@ -36,7 +36,7 @@ export function getPluginsConfig(modulePaths = [], options = {}) {
     litScss({
       minify: { fast: true },
       options: {
-        loadPaths: allModulePaths,
+        loadPaths: [...allModulePaths, `${process.cwd()}/src/styles`, `${process.cwd()}/src`],
       },
     }),
     watchGlobs(watchPatterns),
