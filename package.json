@@ -81,5 +81,8 @@
     "open": "^10.2.0",
     "plop": "^4.0.3",
     "tsc-alias": "^1.8.16"
+  },
+  "optionalDependencies": {
+    "@rollup/rollup-linux-x64-gnu": "*"
   }
 }
