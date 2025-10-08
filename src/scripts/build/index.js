@@ -5,6 +5,8 @@ import {
   buildTypeDefinitions,
   cleanupDist,
   generateDocs,
+  generateTypings,
+  mergeTypeDefinitions,
 } from "./bundleHandlers.js";
 import {
   getDemoConfig,
@@ -27,17 +29,23 @@ async function runProductionBuild(options) {
   const demoConfig = getDemoConfig(options);
   const dtsConfig = getDtsConfig();
 
-  // Add terser for minification in production
-  mainBundleConfig.config.plugins.push(terser());
+  // Add terser for minification in production but include comments without @private
+  mainBundleConfig.config.plugins.push();
 
   // Generate docs if enabled
   await generateDocs(options);
+
+  // Generate component typings for framework integration
+  await generateTypings(options);
 
   // Build main and demo bundles
   await buildCombinedBundle(mainBundleConfig.config, demoConfig.config);
 
   // Build TypeScript definitions
   await buildTypeDefinitions(dtsConfig.config, dtsConfig.config.output);
+
+  // Merge all .d.ts files into a single index.d.ts file
+  await mergeTypeDefinitions();
 }
 
 /**
