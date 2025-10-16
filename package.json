@@ -85,5 +85,6 @@
   },
   "optionalDependencies": {
     "@rollup/rollup-linux-x64-gnu": "*"
-  }
+  },
+  "customElements": "custom-elements.json"
 }
