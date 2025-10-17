@@ -1,9 +1,14 @@
+import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 export function getAuroHomeDir() {
-  const homeDir = process.env.HOME || process.env.USERPROFILE;
+  const homeDir = os.homedir() || process.env.HOME || process.env.USERPROFILE;
+
+  if (!homeDir) {
+    throw new Error("Unable to determine user home directory");
+  }
 
   return path.join(homeDir, ".auro");
 }
