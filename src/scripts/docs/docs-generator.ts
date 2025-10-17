@@ -202,6 +202,7 @@ export default class Docs {
         ]
           .map((value: string) =>
             String(value || "")
+              .replace(/\\/g, "\\\\")
               .replace(/\|/g, "\\|")
               .replace(/\n/g, "<br>"),
           )
@@ -270,6 +271,7 @@ ${rows}
             const value = this.get(item, p);
             // Escape pipes in table cells and handle multiline content
             return String(value || "")
+              .replace(/\\/g, "\\\\")
               .replace(/\|/g, "\\|")
               .replace(/\n/g, "<br>");
           })
