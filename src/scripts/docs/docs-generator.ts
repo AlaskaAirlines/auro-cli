@@ -1,20 +1,38 @@
-/**
- * This page generates markdown documentation from the custom-element.json file.
- * Based on the HTML template generator but outputs markdown format.
- */
 /** biome-ignore-all lint/complexity/noThisInStatic: not confusing */
 import fs from "node:fs";
 import path from "node:path";
+import type {
+  Package,
+  Module,
+  Declaration,
+  CustomElementDeclaration,
+  ClassMember,
+  Parameter,
+  Attribute
+} from 'custom-elements-manifest';
+
+interface GenerateOptions {
+  outDir?: string;
+  outFile?: string;
+  manifestPath?: string;
+}
+
+interface MergedTableData {
+  name: string;
+  properties: string;
+  attributes: string;
+  type: string;
+  default: string;
+  description: string;
+}
 
 export default class Docs {
-  constructor() {
-    this.manifest = {};
-  }
+  private static manifest: Package = { schemaVersion: "1.0.0", readme: "", modules: [] };
 
   /**
    * Generate markdown documentation for all components
    */
-  static generate(options = {}) {
+  static generate(options: GenerateOptions = {}): void {
     const {
       outDir = "./docs",
       outFile = "api.md",
@@ -25,7 +43,7 @@ export default class Docs {
     if (manifestPath) {
       try {
         const manifestContent = fs.readFileSync(manifestPath, "utf8");
-        this.manifest = JSON.parse(manifestContent);
+        this.manifest = JSON.parse(manifestContent) as Package;
       } catch (error) {
         console.error(`Error reading manifest file at ${manifestPath}:`, error);
         throw error;
@@ -50,13 +68,14 @@ export default class Docs {
   /**
    * Extract custom elements from the manifest
    */
-  static getElements() {
+  static getElements(): CustomElementDeclaration[] {
     return this.manifest.modules.reduce(
-      (els, module) =>
+      (els: CustomElementDeclaration[], module: Module) =>
         els.concat(
           module.declarations?.filter(
-            (dec) => dec.customElement && dec.tagName && 
-            this.isWcaModule(module),
+            (dec: Declaration): dec is CustomElementDeclaration => 
+              'customElement' in dec && dec.customElement === true && 'tagName' in dec && 
+              this.isWcaModule(module),
           ) ?? [],
         ),
       [],
@@ -66,7 +85,7 @@ export default class Docs {
   /**
    * Check if a module has a path that matches the WCA pattern
    */
-  static isWcaModule(module) {
+  static isWcaModule(module: Module): boolean {
     // Check if the module path matches "scripts/wca/auro-*.js"
     const path = module.path;
     if (!path) {
@@ -80,9 +99,9 @@ export default class Docs {
   /**
    * Render all elements into a single markdown document
    */
-  static renderAllElements(elements) {
+  static renderAllElements(elements: CustomElementDeclaration[]): string {
     return `${elements
-      .map((element) => this.renderElement(element, false))
+      .map((element: CustomElementDeclaration) => this.renderElement(element, false))
       .join("\n\n---\n\n")}
     `;
   }
@@ -90,69 +109,69 @@ export default class Docs {
   /**
    * Render a single element as markdown
    */
-  static renderElement(element, includeTitle = true) {
+  static renderElement(element: CustomElementDeclaration, includeTitle = true): string {
     return `${includeTitle ? `# ${element.tagName}\n\n` : `# ${element.tagName}\n\n`}${element.description ? `${element.description}\n\n` : ""}${this.renderPropertiesAttributesTable(element)}${this.renderTable(
       "Methods",
       ["name", "parameters", "return.type.text", "description"],
       (element.members || [])
         .filter(
-          (m) =>
-            m.kind === "method" && m.privacy !== "private" && m.name[0] !== "_",
+          (m: ClassMember) =>
+            m.kind === "method" && ('privacy' in m ? m.privacy !== "private" : true) && m.name[0] !== "_",
         )
-        .map((m) => ({
+        .map((m: ClassMember) => ({
           ...m,
-          parameters: this.renderParameters(m.parameters),
+          parameters: this.renderParameters('parameters' in m ? m.parameters as Parameter[] : undefined),
         })),
     )}${this.renderTable(
       "Events",
       ["name", "description"],
-      element.events,
+      element.events as unknown as Record<string, unknown>[],
     )}${this.renderTable(
       "Slots",
       [["name", "(default)"], "description"],
-      element.slots,
+      element.slots as unknown as Record<string, unknown>[],
     )}${this.renderTable(
       "CSS Shadow Parts",
       ["name", "description"],
-      element.cssParts,
+      element.cssParts as unknown as Record<string, unknown>[],
     )}${this.renderTable(
       "CSS Custom Properties",
       ["name", "description"],
-      element.cssProperties,
+      element.cssProperties as unknown as Record<string, unknown>[],
     )}`;
   }
 
   /**
    * Render combined properties and attributes table
    */
-  static renderPropertiesAttributesTable(element) {
-    const properties = element.members?.filter((m) => m.kind === "field") || [];
+  static renderPropertiesAttributesTable(element: CustomElementDeclaration): string {
+    const properties = element.members?.filter((m: ClassMember) => m.kind === "field") || [];
     const attributes = element.attributes || [];
 
     // Create a merged dataset
-    const mergedData = [];
-    const processedNames = new Set();
+    const mergedData: MergedTableData[] = [];
+    const processedNames = new Set<string>();
 
     // Process properties first (only include those with descriptions)
-    properties.forEach((prop) => {
+    properties.forEach((prop: ClassMember) => {
       if (prop.description?.trim()) {
         mergedData.push({
           name: prop.name,
           properties: prop.name,
-          attributes: prop.attribute || "",
+          attributes: ('attribute' in prop ? prop.attribute as string : '') || "",
           type: this.get(prop, "type.text") || "",
-          default: prop.default || "",
+          default: ('default' in prop ? prop.default as string : '') || "",
           description: prop.description || "",
         });
       }
       processedNames.add(prop.name);
-      if (prop.attribute) {
-        processedNames.add(prop.attribute);
+      if ('attribute' in prop && prop.attribute) {
+        processedNames.add(prop.attribute as string);
       }
     });
 
     // Process attributes that don't have corresponding properties (only include those with descriptions)
-    attributes.forEach((attr) => {
+    attributes.forEach((attr: Attribute) => {
       if (!processedNames.has(attr.name) && attr.description?.trim()) {
         mergedData.push({
           name: attr.name,
@@ -173,7 +192,7 @@ export default class Docs {
     const separator = "--- | --- | --- | --- | ---";
 
     const rows = mergedData
-      .map((item) =>
+      .map((item: MergedTableData) =>
         [
           item.properties,
           item.attributes,
@@ -181,7 +200,7 @@ export default class Docs {
           item.default,
           item.description,
         ]
-          .map((value) =>
+          .map((value: string) =>
             String(value || "")
               .replace(/\|/g, "\\|")
               .replace(/\n/g, "<br>"),
@@ -203,14 +222,14 @@ ${rows}
   /**
    * Render method parameters as a formatted string
    */
-  static renderParameters(parameters) {
+  static renderParameters(parameters?: Parameter[]): string {
     if (!parameters || parameters.length === 0) {
       return "None";
     }
 
     return parameters
       .map(
-        (param) =>
+        (param: Parameter) =>
           `\`${param.name}\` (${this.get(param, "type.text") || "any"})${param.description ? ` - ${param.description}` : ""}`,
       )
       .join("<br>");
@@ -219,28 +238,35 @@ ${rows}
   /**
    * Renders a markdown table of data, plucking the given properties from each item in `data`.
    */
-  static renderTable(name, properties, data) {
+  static renderTable(
+    name: string, 
+    properties: (string | string[])[], 
+    data?: Array<Record<string, unknown>>
+  ): string {
     if (data === undefined || data.length === 0) {
       return "";
     }
 
     // Filter out items without descriptions
-    const filteredData = data.filter((item) => item.description?.trim());
+    const filteredData = data.filter((item: Record<string, unknown>) => {
+      const description = item.description;
+      return typeof description === 'string' && description.trim();
+    });
 
     if (filteredData.length === 0) {
       return "";
     }
 
     const headers = properties
-      .map((p) => this.capitalize((Array.isArray(p) ? p[0] : p).split(".")[0]))
+      .map((p: string | string[]) => this.capitalize((Array.isArray(p) ? p[0] : p).split(".")[0]))
       .join(" | ");
 
     const separator = properties.map(() => "---").join(" | ");
 
     const rows = filteredData
-      .map((item) =>
+      .map((item: Record<string, unknown>) =>
         properties
-          .map((p) => {
+          .map((p: string | string[]) => {
             const value = this.get(item, p);
             // Escape pipes in table cells and handle multiline content
             return String(value || "")
@@ -264,24 +290,26 @@ ${rows}
   /**
    * Reads a (possibly deep) path off of an object.
    */
-  static get(obj, pathInput) {
+  // biome-ignore lint/suspicious/noExplicitAny: utility method needs to work with any object structure
+  static get(obj: any, pathInput: string | string[]): string {
     let fallback = "";
-    let path = pathInput;
+    let path: string = pathInput as string;
     if (Array.isArray(pathInput)) {
       [path, fallback] = pathInput;
     }
     const parts = path.split(".");
-    let current = obj;
+    // biome-ignore lint/suspicious/noExplicitAny: utility method needs to work with any object structure
+    let current: any = obj;
     while (current && parts.length) {
-      current = current[parts.shift()];
+      current = current[parts.shift() as string];
     }
-    return current == null || current === "" ? fallback : current;
+    return current == null || current === "" ? fallback : String(current);
   }
 
   /**
    * Capitalize the first letter of a string
    */
-  static capitalize(s) {
+  static capitalize(s: string): string {
     return s[0].toUpperCase() + s.substring(1);
   }
 }
