@@ -1,4 +1,4 @@
-import { basename } from "node:path";
+import { basename, join } from "node:path";
 import { nodeResolve } from "@rollup/plugin-node-resolve";
 import { glob } from "glob";
 import { dts } from "rollup-plugin-dts";
@@ -36,7 +36,7 @@ export function getPluginsConfig(modulePaths = [], options = {}) {
     litScss({
       minify: { fast: true },
       options: {
-        loadPaths: allModulePaths,
+        loadPaths: [...allModulePaths, join(process.cwd(), "src", "styles"), join(process.cwd(), "src")],
       },
     }),
     watchGlobs(watchPatterns),

@@ -10,6 +10,7 @@ import {
  * @typedef {Object} ProcessorConfig
  * @property {boolean} [overwriteLocalCopies=true] - The release version tag to use instead of master.
  * @property {string} [remoteReadmeVersion="master"] - The release version tag to use instead of master.
+ * @property {string} [remoteReadmeUrl] - The release version tag to use instead of master.
  * @property {string} [remoteReadmeVariant=""] - The variant string to use for the README source.
  * (like "_esm" to make README_esm.md).
  */
@@ -40,10 +41,12 @@ export const fileConfigs = (config) => [
   {
     identifier: "README.md",
     input: {
-      remoteUrl: generateReadmeUrl(
-        config.remoteReadmeVersion,
-        config.remoteReadmeVariant,
-      ),
+      remoteUrl:
+        config.remoteReadmeUrl ||
+        generateReadmeUrl(
+          config.remoteReadmeVersion,
+          config.remoteReadmeVariant,
+        ),
       fileName: pathFromCwd("/docTemplates/README.md"),
       overwrite: config.overwriteLocalCopies,
     },
@@ -89,5 +92,9 @@ export async function processDocFiles(config = defaultDocsProcessorConfig) {
 }
 
 export async function runDefaultDocsBuild() {
-  await processDocFiles();
+  await processDocFiles({
+    ...defaultDocsProcessorConfig,
+    remoteReadmeUrl:
+      "https://raw.githubusercontent.com/AlaskaAirlines/auro-templates/main/templates/default/README.md",
+  });
 }
