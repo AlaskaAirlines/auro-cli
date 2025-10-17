@@ -1,6 +1,6 @@
 import ora from "ora";
 import { shell } from "#utils/shell.js";
-import Docs from "./docs-generator.js";
+import Docs from "./docs-generator.ts";
 
 export async function cem() {
   const cemSpinner = ora("Generating Custom Elements Manifest...").start();
