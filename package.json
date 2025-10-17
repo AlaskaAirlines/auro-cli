@@ -16,7 +16,8 @@
   "license": "Apache-2.0",
   "type": "module",
   "bin": {
-    "auro": "dist/auro-cli.js"
+    "auro": "dist/auro-cli.js",
+    "auro-cli": "dist/auro-cli.js"
   },
   "exports": {
     ".": "./dist/auro-cli.js"
@@ -50,6 +51,7 @@
     "@actions/github": "^6.0.1",
     "@aurodesignsystem/auro-library": "^5.5.3",
     "@babel/preset-env": "^7.28.3",
+    "@custom-elements-manifest/analyzer": "^0.10.10",
     "@open-wc/dev-server-hmr": "^0.2.0",
     "@open-wc/testing": "^4.0.0",
     "@rollup/plugin-node-resolve": "^16.0.1",
@@ -69,13 +71,13 @@
     "rollup-plugin-scss-lit": "^2.1.0",
     "simple-git": "^3.28.0",
     "table": "^6.9.0",
-    "typescript": "^5.9.2",
-    "web-component-analyzer": "^2.0.0"
+    "typescript": "^5.9.2"
   },
   "devDependencies": {
     "@aurodesignsystem/auro-config": "^1.3.0",
     "@types/node": "^22.15.3",
     "copyfiles": "^2.4.1",
+    "custom-elements-manifest": "^2.1.0",
     "esbuild": "^0.25.10",
     "husky": "^9.1.7",
     "open": "^10.2.0",
@@ -84,5 +86,6 @@
   },
   "optionalDependencies": {
     "@rollup/rollup-linux-x64-gnu": "*"
-  }
+  },
+  "customElements": "custom-elements.json"
 }

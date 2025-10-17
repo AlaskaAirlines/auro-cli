@@ -11,6 +11,8 @@ import "#commands/wca-setup.js";
 import "#commands/check-commits.ts";
 import "#commands/pr-release.ts";
 import "#commands/test.js";
+import "#commands/agent.ts";
+import "#commands/docs.ts";
 
 program
   .name("auro")

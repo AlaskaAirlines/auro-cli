@@ -104,7 +104,7 @@ export async function processMigrationFile(
 
     // Calculate output path
     const outputFile = filePath.replace(
-      /^src\/(migrations|configs)/,
+      /^src\/(migrations|configs|static)/,
       "dist/$1",
     );
     const outputDir = dirname(outputFile);
@@ -202,6 +202,7 @@ export function watchMigrationFiles(options = {}) {
   // Initialize hashes for existing files
   initializeFileHashes("src/migrations");
   initializeFileHashes("src/configs");
+  initializeFileHashes("src/static");
   initializeFileHashes("src");
 
   const watchers = {
@@ -380,6 +381,7 @@ export async function processMigrations(options = {}) {
 
     findJsFiles("src/migrations");
     findJsFiles("src/configs");
+    findJsFiles("src/static");
 
     // Process each JS file
     const jsSpinner = ora(`Processing ${jsFiles.length} JS files...`).start();
@@ -438,8 +440,10 @@ export async function processMigrations(options = {}) {
 
     const configCopiedFiles = copyConfigFiles("src/configs", "dist/configs");
 
+    const staticCopiedFiles = copyConfigFiles("src/static", "dist/static");
+
     copySpinner.succeed(
-      `Copied ${migrationCopiedFiles + configCopiedFiles} configuration files (.yml, .sh).`,
+      `Copied ${migrationCopiedFiles + configCopiedFiles + staticCopiedFiles} configuration files (.yml, .sh).`,
     );
   } catch (error) {
     console.error("❌ Failed to process files:", error);
