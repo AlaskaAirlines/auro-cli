@@ -1,6 +1,7 @@
 import ora from "ora";
 import { shell } from "#utils/shell.js";
 import Docs from "./docs-generator.ts";
+import { configPath } from "#utils/pathUtils.js";
 
 export async function cem() {
   const cemSpinner = ora("Generating Custom Elements Manifest...").start();
@@ -8,7 +9,7 @@ export async function cem() {
   try {
     // The shell function returns a promise that resolves when the command completes
     await shell(
-      "npx --package=@custom-elements-manifest/analyzer -y -- cem analyze --litelement --globs src/*.*js scripts/wca/**/*.*js --packagejson --dependencies",
+      `npx --package=@custom-elements-manifest/analyzer -y -- cem analyze --config '${configPath("custom-elements-manifest.config.mjs")}'`,
     );
     cemSpinner.succeed("Custom Elements Manifest generated successfully!");
   } catch (error) {
