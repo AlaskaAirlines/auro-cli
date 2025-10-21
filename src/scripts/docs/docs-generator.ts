@@ -1,6 +1,7 @@
 /** biome-ignore-all lint/complexity/noThisInStatic: not confusing */
 import fs from "node:fs";
 import path from "node:path";
+import { markdownTable } from "markdown-table";
 import type {
   Package,
   Module,
@@ -102,15 +103,30 @@ export default class Docs {
   static renderAllElements(elements: CustomElementDeclaration[]): string {
     return `${elements
       .map((element: CustomElementDeclaration) => this.renderElement(element, false))
-      .join("\n\n---\n\n")}
-    `;
+      .join("\n\n---\n\n")}`;
   }
 
   /**
    * Render a single element as markdown
    */
   static renderElement(element: CustomElementDeclaration, includeTitle = true): string {
-    return `${includeTitle ? `# ${element.tagName}\n\n` : `# ${element.tagName}\n\n`}${element.description ? `${element.description}\n\n` : ""}${this.renderPropertiesAttributesTable(element)}${this.renderTable(
+    const sections = [];
+    
+    // Title and description
+    sections.push(`${includeTitle ? `# ${element.tagName}` : `# ${element.tagName}`}`);
+    
+    if (element.description) {
+      sections.push(element.description);
+    }
+    
+    // Properties & Attributes table
+    const propertiesTable = this.renderPropertiesAttributesTable(element);
+    if (propertiesTable) {
+      sections.push(propertiesTable.trim());
+    }
+    
+    // Methods table
+    const methodsTable = this.renderTable(
       "Methods",
       ["name", "parameters", "return.type.text", "description"],
       (element.members || [])
@@ -122,30 +138,64 @@ export default class Docs {
           ...m,
           parameters: this.renderParameters('parameters' in m ? m.parameters as Parameter[] : undefined),
         })),
-    )}${this.renderTable(
+    );
+    if (methodsTable) {
+      sections.push(methodsTable.trim());
+    }
+    
+    // Events table
+    const eventsTable = this.renderTable(
       "Events",
       ["name", "description"],
       element.events as unknown as Record<string, unknown>[],
-    )}${this.renderTable(
+    );
+    if (eventsTable) {
+      sections.push(eventsTable.trim());
+    }
+    
+    // Slots table
+    const slotsTable = this.renderTable(
       "Slots",
       [["name", "(default)"], "description"],
       element.slots as unknown as Record<string, unknown>[],
-    )}${this.renderTable(
+    );
+    if (slotsTable) {
+      sections.push(slotsTable.trim());
+    }
+    
+    // CSS Shadow Parts table
+    const cssPartsTable = this.renderTable(
       "CSS Shadow Parts",
       ["name", "description"],
       element.cssParts as unknown as Record<string, unknown>[],
-    )}${this.renderTable(
+    );
+    if (cssPartsTable) {
+      sections.push(cssPartsTable.trim());
+    }
+    
+    // CSS Custom Properties table
+    const cssPropertiesTable = this.renderTable(
       "CSS Custom Properties",
       ["name", "description"],
       element.cssProperties as unknown as Record<string, unknown>[],
-    )}`;
+    );
+    if (cssPropertiesTable) {
+      sections.push(cssPropertiesTable.trim());
+    }
+    
+    return sections.join('\n\n');
   }
 
   /**
    * Render combined properties and attributes table
    */
   static renderPropertiesAttributesTable(element: CustomElementDeclaration): string {
-    const properties = element.members?.filter((m: ClassMember) => m.kind === "field") || [];
+    const properties = element.members?.filter(
+      (m: ClassMember) => 
+        m.kind === "field" && 
+        ('privacy' in m ? m.privacy !== "private" : true) && 
+        m.name[0] !== "_"
+    ) || [];
     const attributes = element.attributes || [];
 
     // Create a merged dataset
@@ -188,35 +238,20 @@ export default class Docs {
       return "";
     }
 
-    const headers = "Properties | Attributes | Type | Default | Description ";
-    const separator = "--- | --- | --- | --- | ---";
+    const headers = ["Properties", "Attributes", "Type", "Default", "Description"];
+    const rows = mergedData.map((item: MergedTableData) => [
+      item.properties,
+      item.attributes,
+      item.type,
+      item.default,
+      item.description,
+    ]);
 
-    const rows = mergedData
-      .map((item: MergedTableData) =>
-        [
-          item.properties,
-          item.attributes,
-          item.type,
-          item.default,
-          item.description,
-        ]
-          .map((value: string) =>
-            String(value || "")
-              .replace(/\\/g, "\\\\")
-              .replace(/\|/g, "\\|")
-              .replace(/\n/g, "<br>"),
-          )
-          .join(" | "),
-      )
-      .join("\n");
+    const table = markdownTable([headers, ...rows]);
 
-    return `
-### Properties & Attributes
+    return `### Properties & Attributes
 
-| ${headers} |
-| ${separator} |
-${rows}
-
+${table}
 `;
   }
 
@@ -259,33 +294,24 @@ ${rows}
     }
 
     const headers = properties
-      .map((p: string | string[]) => this.capitalize((Array.isArray(p) ? p[0] : p).split(".")[0]))
-      .join(" | ");
-
-    const separator = properties.map(() => "---").join(" | ");
+      .map((p: string | string[]) => this.capitalize((Array.isArray(p) ? p[0] : p).split(".")[0]));
 
     const rows = filteredData
       .map((item: Record<string, unknown>) =>
         properties
           .map((p: string | string[]) => {
             const value = this.get(item, p);
-            // Escape pipes in table cells and handle multiline content
+            // Handle multiline content and escape characters for markdown
             return String(value || "")
-              .replace(/\\/g, "\\\\")
-              .replace(/\|/g, "\\|")
               .replace(/\n/g, "<br>");
           })
-          .join(" | "),
-      )
-      .join("\n");
+      );
 
-    return `
-### ${name}
+    const table = markdownTable([headers, ...rows]);
 
-| ${headers} |
-| ${separator} |
-${rows}
+    return `### ${name}
 
+${table}
 `;
   }
 
