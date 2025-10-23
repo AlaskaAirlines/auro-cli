@@ -128,7 +128,7 @@ export default class Docs {
     // Methods table
     const methodsTable = this.renderTable(
       "Methods",
-      ["name", "parameters", "return.type.text", "description"],
+      ["name", "parameters", "return", "description"],
       (element.members || [])
         .filter(
           (m: ClassMember) =>
@@ -137,6 +137,7 @@ export default class Docs {
         .map((m: ClassMember) => ({
           ...m,
           parameters: this.renderParameters('parameters' in m ? m.parameters as Parameter[] : undefined),
+          returnType: 'return' in m && m.return ? this.getType(m.return) : "",
         })),
     );
     if (methodsTable) {
@@ -209,7 +210,7 @@ export default class Docs {
           name: prop.name,
           properties: prop.name,
           attributes: ('attribute' in prop ? prop.attribute as string : '') || "",
-          type: this.get(prop, "type.text") || "",
+          type: this.getType(prop) || "",
           default: ('default' in prop ? prop.default as string : '') || "",
           description: prop.description || "",
         });
@@ -227,7 +228,7 @@ export default class Docs {
           name: attr.name,
           properties: "",
           attributes: attr.name,
-          type: this.get(attr, "type.text") || "",
+          type: this.getType(attr) || "",
           default: attr.default || "",
           description: attr.description || "",
         });
@@ -240,11 +241,11 @@ export default class Docs {
 
     const headers = ["Properties", "Attributes", "Type", "Default", "Description"];
     const rows = mergedData.map((item: MergedTableData) => [
-      item.properties,
-      item.attributes,
-      item.type,
-      item.default,
-      item.description,
+      this.escapeMarkdown(item.properties),
+      this.escapeMarkdown(item.attributes),
+      this.escapeMarkdown(item.type),
+      this.escapeMarkdown(item.default),
+      this.escapeMarkdown(item.description),
     ]);
 
     const table = markdownTable([headers, ...rows]);
@@ -265,8 +266,11 @@ ${table}
 
     return parameters
       .map(
-        (param: Parameter) =>
-          `\`${param.name}\` (${this.get(param, "type.text") || "any"})${param.description ? ` - ${param.description}` : ""}`,
+        (param: Parameter) => {
+          const paramType = this.getType(param) || "any";
+          const description = param.description ? ` - ${param.description}` : "";
+          return `\`${param.name}\` (${this.escapeMarkdown(paramType)})${this.escapeMarkdown(description)}`;
+        }
       )
       .join("<br>");
   }
@@ -302,8 +306,7 @@ ${table}
           .map((p: string | string[]) => {
             const value = this.get(item, p);
             // Handle multiline content and escape characters for markdown
-            return String(value || "")
-              .replace(/\n/g, "<br>");
+            return this.escapeMarkdown(String(value || ""));
           })
       );
 
@@ -313,6 +316,62 @@ ${table}
 
 ${table}
 `;
+  }
+
+  /**
+   * Escape markdown special characters for table content
+   */
+  static escapeMarkdown(text: string): string {
+    return text
+      .replace(/\n/g, "<br>")
+      .replace(/\|/g, "\\|");
+  }
+
+  /**
+   * Extract and format type information from a property or attribute according to custom-elements-manifest schema
+   */
+  // biome-ignore lint/suspicious/noExplicitAny: utility method needs to work with any object structure
+  static getType(obj: any): string {
+    if (!obj || !obj.type) {
+      return "";
+    }
+
+    const type = obj.type;
+
+    // Handle simple string type
+    if (typeof type === 'string') {
+      return type;
+    }
+
+    // Handle type with text property
+    if (type.text) {
+      return type.text;
+    }
+
+    // Handle union types or arrays of types
+    if (Array.isArray(type)) {
+      // biome-ignore lint/suspicious/noExplicitAny: handling dynamic type structures from manifest
+      return type.map((t: any) => {
+        if (typeof t === 'string') return t;
+        if (t.text) return t.text;
+        if (t.name) return t.name;
+        return String(t);
+      }).join(' \\| ');
+    }
+
+    // Handle complex type objects
+    if (type.name) {
+      return type.name;
+    }
+
+    // Handle references
+    if (type.references && Array.isArray(type.references)) {
+      // biome-ignore lint/suspicious/noExplicitAny: handling dynamic reference structures from manifest
+      return type.references.map((ref: any) => ref.name || String(ref)).join(' \\| ');
+    }
+
+    // Fallback to string representation
+    return String(type);
   }
 
   /**
@@ -335,9 +394,14 @@ ${table}
   }
 
   /**
-   * Capitalize the first letter of a string
+   * Capitalize the first letter of a string and add spaces before capital letters in camelCase
    */
   static capitalize(s: string): string {
-    return s[0].toUpperCase() + s.substring(1);
+   
+    // Add spaces before capital letters and capitalize first letter
+    return s
+      .replace(/([A-Z])/g, ' $1')
+      .replace(/^./, str => str.toUpperCase())
+      .trim();
   }
 }

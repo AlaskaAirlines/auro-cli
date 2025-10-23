@@ -5,10 +5,10 @@ export default {
   litelement: true,
   packagejson: true,
   dependencies: true,
+  quiet: true,
   plugins: [
     cemSorterPlugin({
       deprecatedLast: true,
-      customFields: ["customProperty"],
     }),
   ],
 };
