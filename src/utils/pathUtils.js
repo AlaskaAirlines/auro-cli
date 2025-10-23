@@ -1,7 +1,7 @@
+import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
-import { fileURLToPath } from "node:url";
 
 export function getAuroHomeDir() {
   const homeDir = os.homedir() || process.env.HOME || process.env.USERPROFILE;
@@ -18,8 +18,10 @@ export function withHomeDir(...args) {
 }
 
 export function fromCliRoot(...relativePath) {
-  const filename = fileURLToPath(import.meta.url);
-  const dirname = path.dirname(filename);
+  const cliScript = fs.realpathSync(process.argv[1]);
+  const dirname = path.dirname(cliScript);
 
   return path.resolve(dirname, ...relativePath);
 }
+
+export const configPath = (file) => fromCliRoot("configs",file)
