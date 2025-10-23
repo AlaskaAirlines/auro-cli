@@ -102,7 +102,7 @@ export default class Docs {
    */
   static renderAllElements(elements: CustomElementDeclaration[]): string {
     return `${elements
-      .map((element: CustomElementDeclaration) => this.renderElement(element, false))
+      .map((element: CustomElementDeclaration) => this.renderElement(element, true))
       .join("\n\n---\n\n")}`;
   }
 
@@ -113,8 +113,8 @@ export default class Docs {
     const sections = [];
     
     // Title and description
-    sections.push(`${includeTitle ? `# ${element.tagName}` : `# ${element.tagName}`}`);
-    
+    sections.push(includeTitle ? `# ${element.tagName}` : '');
+
     if (element.description) {
       sections.push(element.description);
     }
@@ -323,6 +323,7 @@ ${table}
    */
   static escapeMarkdown(text: string): string {
     return text
+      .replace(/\\/g, "\\\\")
       .replace(/\n/g, "<br>")
       .replace(/\|/g, "\\|");
   }
