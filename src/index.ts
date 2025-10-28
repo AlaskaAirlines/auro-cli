@@ -13,6 +13,7 @@ import "#commands/pr-release.ts";
 import "#commands/test.js";
 import "#commands/agent.ts";
 import "#commands/docs.ts";
+import "#commands/ado.ts";
 
 program
   .name("auro")
