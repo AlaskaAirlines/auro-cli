@@ -23,5 +23,7 @@ export function fromCliRoot(...relativePath) {
 
   return path.resolve(dirname, ...relativePath);
 }
-
+  
 export const configPath = (file) => fromCliRoot("configs",file)
+
+export const migrationPath = (path) => fromCliRoot("migrations",path)
