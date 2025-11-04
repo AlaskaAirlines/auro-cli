@@ -36,7 +36,8 @@
     "#utils/*": "./src/utils/*"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "engines": {
     "node": ">=18"
@@ -52,6 +53,7 @@
     "@aurodesignsystem/auro-library": "^5.5.3",
     "@babel/preset-env": "^7.28.3",
     "@custom-elements-manifest/analyzer": "^0.10.10",
+    "@npmcli/package-json": "^7.0.1",
     "@open-wc/dev-server-hmr": "^0.2.0",
     "@open-wc/testing": "^4.0.0",
     "@rollup/plugin-node-resolve": "^16.0.1",
@@ -76,7 +78,7 @@
     "typescript": "^5.9.2"
   },
   "devDependencies": {
-    "@aurodesignsystem/auro-config": "^1.3.0",
+    "@aurodesignsystem/auro-config": "^1.3.1",
     "@types/node": "^22.15.3",
     "copyfiles": "^2.4.1",
     "custom-elements-manifest": "^2.1.0",
@@ -88,6 +90,5 @@
   },
   "optionalDependencies": {
     "@rollup/rollup-linux-x64-gnu": "*"
-  },
-  "customElements": "custom-elements.json"
+  }
 }
