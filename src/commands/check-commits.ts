@@ -9,9 +9,10 @@ export default program
     "Set label on the pull request based on the commit message type",
   )
   .option("-d, --debug", "Display detailed commit information for debugging")
+  .option("-r, --release-notes", "Generate release notes based on commit messages")
   .description(
     "Check commits in the local repository for the types of semantic commit messages made and return the results.",
   )
   .action(async (option) => {
-    await analyzeCommits(option.debug, option.setLabel);
+    await analyzeCommits(option.debug, option.setLabel, option.releaseNotes);
   });
