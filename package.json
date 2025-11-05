@@ -2,6 +2,10 @@
   "name": "@aurodesignsystem/auro-cli",
   "version": "0.0.0",
   "description": "A cli tool to support the Auro Design System",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AlaskaAirlines/auro-cli"
+  },
   "scripts": {
     "lint": "biome check --fix --no-errors-on-unmatched",
     "prepare": "husky",
