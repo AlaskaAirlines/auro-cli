@@ -1,4 +1,3 @@
-/** biome-ignore-all lint/complexity/noThisInStatic: not confusing */
 import fs from "node:fs";
 import path from "node:path";
 import { markdownTable } from "markdown-table";
@@ -22,6 +21,7 @@ interface MergedTableData {
   name: string;
   properties: string;
   attributes: string;
+  modifiers: string;
   type: string;
   default: string;
   description: string;
@@ -40,18 +40,20 @@ export default class Docs {
       manifestPath = "./custom-elements.json",
     } = options;
 
+    const { getElements, renderAllElements } = Docs;
+
     // Use provided manifest or fallback to default
     if (manifestPath) {
       try {
         const manifestContent = fs.readFileSync(manifestPath, "utf8");
-        this.manifest = JSON.parse(manifestContent) as Package;
+        Docs.manifest = JSON.parse(manifestContent) as Package;
       } catch (error) {
         console.error(`Error reading manifest file at ${manifestPath}:`, error);
         throw error;
       }
     }
 
-    const elements = this.getElements();
+    const elements = getElements();
 
     // Create docs directory if it doesn't exist
     const docsDir = outDir;
@@ -60,7 +62,7 @@ export default class Docs {
     }
 
     // Generate combined API documentation
-    const apiMarkdown = this.renderAllElements(elements);
+    const apiMarkdown = renderAllElements(elements);
     const apiFilename = path.join(docsDir, outFile);
     fs.writeFileSync(apiFilename, apiMarkdown);
     console.log(`Generated combined API documentation at ${apiFilename}`);
@@ -70,13 +72,13 @@ export default class Docs {
    * Extract custom elements from the manifest
    */
   static getElements(): CustomElementDeclaration[] {
-    return this.manifest.modules.reduce(
+    return Docs.manifest.modules.reduce(
       (els: CustomElementDeclaration[], module: Module) =>
         els.concat(
           module.declarations?.filter(
             (dec: Declaration): dec is CustomElementDeclaration => 
               'customElement' in dec && dec.customElement === true && 'tagName' in dec && 
-              this.isWcaModule(module),
+              Docs.isWcaModule(module),
           ) ?? [],
         ),
       [],
@@ -88,7 +90,8 @@ export default class Docs {
    */
   static isWcaModule(module: Module): boolean {
     // Check if the module path matches "scripts/wca/auro-*.js"
-    const path = module.path;
+    const { path } = module;
+
     if (!path) {
       return false;
     }
@@ -102,8 +105,9 @@ export default class Docs {
    */
   static renderAllElements(elements: CustomElementDeclaration[]): string {
     return `${elements
-      .map((element: CustomElementDeclaration) => this.renderElement(element, true))
-      .join("\n\n---\n\n")}`;
+      .sort((a, b) => (a.tagName || '').localeCompare(b.tagName || ''))
+      .map((element: CustomElementDeclaration) => Docs.renderElement(element, true))
+      .join("\n\n")}`;
   }
 
   /**
@@ -111,6 +115,7 @@ export default class Docs {
    */
   static renderElement(element: CustomElementDeclaration, includeTitle = true): string {
     const sections = [];
+    const { renderTable, renderPropertiesAttributesTable, renderParameters, getType } = Docs;
     
     // Title and description
     sections.push(includeTitle ? `# ${element.tagName}` : '');
@@ -120,13 +125,13 @@ export default class Docs {
     }
     
     // Properties & Attributes table
-    const propertiesTable = this.renderPropertiesAttributesTable(element);
+    const propertiesTable = renderPropertiesAttributesTable(element);
     if (propertiesTable) {
       sections.push(propertiesTable.trim());
     }
     
     // Methods table
-    const methodsTable = this.renderTable(
+    const methodsTable = renderTable(
       "Methods",
       ["name", "parameters", "return", "description"],
       (element.members || [])
@@ -136,8 +141,8 @@ export default class Docs {
         )
         .map((m: ClassMember) => ({
           ...m,
-          parameters: this.renderParameters('parameters' in m ? m.parameters as Parameter[] : undefined),
-          returnType: 'return' in m && m.return ? this.getType(m.return) : "",
+          parameters: renderParameters('parameters' in m ? m.parameters as Parameter[] : undefined),
+          returnType: 'return' in m && m.return ? getType(m.return) : "",
         })),
     );
     if (methodsTable) {
@@ -145,7 +150,7 @@ export default class Docs {
     }
     
     // Events table
-    const eventsTable = this.renderTable(
+    const eventsTable = renderTable(
       "Events",
       ["name", "description"],
       element.events as unknown as Record<string, unknown>[],
@@ -155,7 +160,7 @@ export default class Docs {
     }
     
     // Slots table
-    const slotsTable = this.renderTable(
+    const slotsTable = renderTable(
       "Slots",
       [["name", "(default)"], "description"],
       element.slots as unknown as Record<string, unknown>[],
@@ -165,7 +170,7 @@ export default class Docs {
     }
     
     // CSS Shadow Parts table
-    const cssPartsTable = this.renderTable(
+    const cssPartsTable = renderTable(
       "CSS Shadow Parts",
       ["name", "description"],
       element.cssParts as unknown as Record<string, unknown>[],
@@ -175,7 +180,7 @@ export default class Docs {
     }
     
     // CSS Custom Properties table
-    const cssPropertiesTable = this.renderTable(
+    const cssPropertiesTable = renderTable(
       "CSS Custom Properties",
       ["name", "description"],
       element.cssProperties as unknown as Record<string, unknown>[],
@@ -191,6 +196,9 @@ export default class Docs {
    * Render combined properties and attributes table
    */
   static renderPropertiesAttributesTable(element: CustomElementDeclaration): string {
+    
+    const { getType, escapeMarkdown } = Docs;
+    
     const properties = element.members?.filter(
       (m: ClassMember) => 
         m.kind === "field" && 
@@ -206,11 +214,16 @@ export default class Docs {
     // Process properties first (only include those with descriptions)
     properties.forEach((prop: ClassMember) => {
       if (prop.description?.trim()) {
+        const propType = getType(prop) || "";
+        const returnType = 'return' in prop && prop.return ? getType(prop.return) : "";
+        const displayType = returnType || propType;
+        
         mergedData.push({
           name: prop.name,
           properties: prop.name,
           attributes: ('attribute' in prop ? prop.attribute as string : '') || "",
-          type: this.getType(prop) || "",
+          modifiers: ('readonly' in prop && prop.readonly ? 'readonly' : ''),
+          type: displayType,
           default: ('default' in prop ? prop.default as string : '') || "",
           description: prop.description || "",
         });
@@ -228,7 +241,8 @@ export default class Docs {
           name: attr.name,
           properties: "",
           attributes: attr.name,
-          type: this.getType(attr) || "",
+          modifiers: "",
+          type: getType(attr) || "",
           default: attr.default || "",
           description: attr.description || "",
         });
@@ -239,13 +253,14 @@ export default class Docs {
       return "";
     }
 
-    const headers = ["Properties", "Attributes", "Type", "Default", "Description"];
+    const headers = ["Properties", "Attributes", "Modifiers", "Type", "Default", "Description"];
     const rows = mergedData.map((item: MergedTableData) => [
-      this.escapeMarkdown(item.properties),
-      this.escapeMarkdown(item.attributes),
-      this.escapeMarkdown(item.type),
-      this.escapeMarkdown(item.default),
-      this.escapeMarkdown(item.description),
+      escapeMarkdown(item.properties),
+      escapeMarkdown(item.attributes),
+      escapeMarkdown(item.modifiers),
+      escapeMarkdown(item.type),
+      escapeMarkdown(item.default),
+      escapeMarkdown(item.description),
     ]);
 
     const table = markdownTable([headers, ...rows]);
@@ -260,6 +275,9 @@ ${table}
    * Render method parameters as a formatted string
    */
   static renderParameters(parameters?: Parameter[]): string {
+
+    const { escapeMarkdown, getType } = Docs;
+
     if (!parameters || parameters.length === 0) {
       return "None";
     }
@@ -267,9 +285,9 @@ ${table}
     return parameters
       .map(
         (param: Parameter) => {
-          const paramType = this.getType(param) || "any";
+          const paramType = getType(param) || "any";
           const description = param.description ? ` - ${param.description}` : "";
-          return `\`${param.name}\` (${this.escapeMarkdown(paramType)})${this.escapeMarkdown(description)}`;
+          return `\`${param.name}\` (${escapeMarkdown(paramType)})${escapeMarkdown(description)}`;
         }
       )
       .join("<br>");
@@ -283,13 +301,16 @@ ${table}
     properties: (string | string[])[], 
     data?: Array<Record<string, unknown>>
   ): string {
+
+    const { escapeMarkdown, get, capitalize } = Docs;
+
     if (data === undefined || data.length === 0) {
       return "";
     }
 
     // Filter out items without descriptions
     const filteredData = data.filter((item: Record<string, unknown>) => {
-      const description = item.description;
+      const { description } = item;
       return typeof description === 'string' && description.trim();
     });
 
@@ -298,15 +319,15 @@ ${table}
     }
 
     const headers = properties
-      .map((p: string | string[]) => this.capitalize((Array.isArray(p) ? p[0] : p).split(".")[0]));
+      .map((p: string | string[]) => capitalize((Array.isArray(p) ? p[0] : p).split(".")[0]));
 
     const rows = filteredData
       .map((item: Record<string, unknown>) =>
         properties
           .map((p: string | string[]) => {
-            const value = this.get(item, p);
+            const value = get(item, p);
             // Handle multiline content and escape characters for markdown
-            return this.escapeMarkdown(String(value || ""));
+            return escapeMarkdown(String(value || ""));
           })
       );
 
@@ -337,16 +358,16 @@ ${table}
       return "";
     }
 
-    const type = obj.type;
+    const { type } = obj;
 
     // Handle simple string type
     if (typeof type === 'string') {
-      return type;
+      return type.replace(/\s*\|\s*/g, ' | ');
     }
 
     // Handle type with text property
     if (type.text) {
-      return type.text;
+      return type.text.replace(/\s*\|\s*/g, ' | ');
     }
 
     // Handle union types or arrays of types
@@ -362,7 +383,7 @@ ${table}
 
     // Handle complex type objects
     if (type.name) {
-      return type.name;
+      return type.name.replace(/\s*\|\s*/g, ' | ');
     }
 
     // Handle references
@@ -372,7 +393,10 @@ ${table}
     }
 
     // Fallback to string representation
-    return String(type);
+    const result = String(type);
+    
+    // Normalize all | separators to have spaces
+    return result.replace(/\s*\|\s*/g, ' | ');
   }
 
   /**
