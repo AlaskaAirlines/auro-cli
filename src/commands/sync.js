@@ -7,10 +7,11 @@ import { syncDotGithubDir } from "#scripts/syncDotGithubDir.js";
 
 export default program
   .command("sync")
+  .option("-r, --ref <branch/tag/commit>", "Git reference (branch/tag/commit) to use", "main")
   .description(
     "Script runner to synchronize local repository configuration files",
   )
-  .action(async () => {
+  .action(async (options) => {
     Logger.info("Synchronizing repository configuration files...");
 
     Logger.warn(
@@ -19,7 +20,7 @@ export default program
 
     const cwd = process.cwd();
 
-    await syncDotGithubDir(cwd);
+    await syncDotGithubDir(cwd, options.ref);
 
     // Cleanup for specific files
     // ------------------------------------------------------
