@@ -25,6 +25,9 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
       - name: Install dependencies
         run: npm clean-install
+
+      - name: Upgrade npm
+        run: npm install -g npm@latest
       - name: Build
         run: npm run build
       - name: Test
@@ -32,7 +35,7 @@ jobs:
       - name: Generate PR release version
         run: npm run auro-internal -- pr-release -p ${{ github.event.pull_request.number }}
       - name: Publish to NPM
-        run: npm publish --registry=https://registry.npmjs.org
+        run: npm publish --registry=https://registry.npmjs.org --tag=latest
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
