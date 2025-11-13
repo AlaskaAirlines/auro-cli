@@ -72,13 +72,17 @@ export default class Docs {
    * Extract custom elements from the manifest
    */
   static getElements(): CustomElementDeclaration[] {
+
+    // if wca exists, use only wca modules
+    const wcaModules = Docs.manifest.modules.filter(Docs.isWcaModule);
+
     return Docs.manifest.modules.reduce(
       (els: CustomElementDeclaration[], module: Module) =>
         els.concat(
           module.declarations?.filter(
             (dec: Declaration): dec is CustomElementDeclaration => 
               'customElement' in dec && dec.customElement === true && 'tagName' in dec && 
-              Docs.isWcaModule(module),
+              (wcaModules.length > 0 ? Docs.isWcaModule(module) : true),
           ) ?? [],
         ),
       [],
