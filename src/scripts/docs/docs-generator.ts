@@ -258,14 +258,27 @@ export default class Docs {
     }
 
     const headers = ["Properties", "Attributes", "Modifiers", "Type", "Default", "Description"];
-    const rows = mergedData.map((item: MergedTableData) => [
-      escapeMarkdown(item.properties),
-      escapeMarkdown(item.attributes),
-      escapeMarkdown(item.modifiers),
-      escapeMarkdown(item.type),
-      escapeMarkdown(item.default),
-      escapeMarkdown(item.description),
-    ]);
+    const rows = mergedData.map((item: MergedTableData) => {
+      const defaultRaw = item.default || "";
+      const defaultTrimmed = defaultRaw.trim();
+      // Remove surrounding single quotes from default values like 'foo'
+      const defaultSanitized = defaultTrimmed.replace(/^'([^']+)'$/, "$1");
+      // Remove surrounding double quotes from default values like "foo"
+      const defaultDoubleSanitized = defaultSanitized.replace(/^"([^"]+)"$/, "$1");
+      const defaultWrapped = defaultDoubleSanitized
+        ? (defaultDoubleSanitized.startsWith('`') && defaultDoubleSanitized.endsWith('`')
+            ? defaultDoubleSanitized
+            : `\`${defaultDoubleSanitized}\``)
+        : "";
+      return [
+        escapeMarkdown(item.properties),
+        escapeMarkdown(item.attributes),
+        escapeMarkdown(item.modifiers),
+        escapeMarkdown(item.type),
+        escapeMarkdown(defaultWrapped),
+        escapeMarkdown(item.description),
+      ];
+    });
 
     const table = markdownTable([headers, ...rows]);
 
@@ -364,14 +377,23 @@ ${table}
 
     const { type } = obj;
 
+    // Utility to normalize type text: fix union spacing and replace single quotes with backticks
+    const normalizeType = (text: string): string => {
+      return text
+        // Normalize union separators to have spaces around |
+        .replace(/\s*\|\s*/g, ' | ')
+        // Replace any single-quoted type segments with backticks
+        .replace(/'([^']+)'/g, '`$1`');
+    };
+
     // Handle simple string type
     if (typeof type === 'string') {
-      return type.replace(/\s*\|\s*/g, ' | ');
+      return normalizeType(type);
     }
 
     // Handle type with text property
     if (type.text) {
-      return type.text.replace(/\s*\|\s*/g, ' | ');
+      return normalizeType(type.text);
     }
 
     // Handle union types or arrays of types
@@ -387,7 +409,7 @@ ${table}
 
     // Handle complex type objects
     if (type.name) {
-      return type.name.replace(/\s*\|\s*/g, ' | ');
+      return normalizeType(type.name);
     }
 
     // Handle references
@@ -398,9 +420,7 @@ ${table}
 
     // Fallback to string representation
     const result = String(type);
-    
-    // Normalize all | separators to have spaces
-    return result.replace(/\s*\|\s*/g, ' | ');
+    return normalizeType(result);
   }
 
   /**
