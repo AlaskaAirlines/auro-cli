@@ -3,14 +3,12 @@ import ora from "ora";
 import { rollup } from "rollup";
 import { analyzeComponents } from "#scripts/analyze.js";
 import { generateDocs } from "./bundleHandlers.js";
-import { getDtsConfig } from "./configUtils.js";
 
 // Track if any build is in progress to prevent overlapping operations
 let buildInProgress = false;
 
 // Track build states and times in a single object for cleaner management
 const builds = {
-  dts: { active: false, lastTime: 0 },
   analyze: { active: false, lastTime: 0 },
   docs: { active: false, lastTime: 0 },
 };
@@ -52,7 +50,7 @@ function isOutputFile(filePath) {
 
 /**
  * Runs a build task with proper tracking of state
- * @param {string} taskName - Type of task (dts, analyze, docs)
+ * @param {string} taskName - Type of task (analyze, docs)
  * @param {Function} taskFn - The actual task function to run
  * @returns {Promise<boolean>} - Success status
  */
@@ -90,7 +88,7 @@ export async function handleWatcherEvents(
   // Track if this is the first build
   let isInitialBuild = true;
   // biome-ignore lint/style/useConst: This is an object that is mutated.
-  let buildTasksResults = { dts: false, analyze: false, docs: false };
+  let buildTasksResults = {analyze: false, docs: false };
   let scheduledTasksTimer = null;
   let bundleSpinner;
 
@@ -99,22 +97,6 @@ export async function handleWatcherEvents(
 
   // The actual task functions
   const buildTasks = {
-    // Function to build d.ts files
-    dts: async () => {
-      const dtsSpinner = ora("Crafting type definitions...").start();
-      try {
-        const create_dts = await rollup(getDtsConfig().config);
-        await create_dts.write(getDtsConfig().config.output);
-        await create_dts.close();
-        dtsSpinner.succeed("Type files built.");
-        return true;
-      } catch (error) {
-        dtsSpinner.fail("Types trouble! Build failed.");
-        console.error("TypeScript definition build error:", error);
-        return false;
-      }
-    },
-
     // Function to analyze components
     analyze: async () => {
       const { wcaInput: sourceFiles, wcaOutput: outFile, skipDocs } = options;
@@ -172,7 +154,6 @@ export async function handleWatcherEvents(
   const checkInitialBuildComplete = () => {
     if (
       isInitialBuild &&
-      buildTasksResults.dts &&
       buildTasksResults.analyze &&
       buildTasksResults.docs &&
       typeof onInitialBuildComplete === "function"
@@ -190,7 +171,6 @@ export async function handleWatcherEvents(
 
     scheduledTasksTimer = setTimeout(async () => {
       // Run tasks with delays between them to avoid race conditions
-      buildTasksResults.dts = await runBuildTask("dts", buildTasks.dts);
 
       setTimeout(async () => {
         buildTasksResults.analyze = await runBuildTask(
