@@ -1,7 +1,6 @@
 import { basename, join } from "node:path";
 import { nodeResolve } from "@rollup/plugin-node-resolve";
 import { glob } from "glob";
-import { dts } from "rollup-plugin-dts";
 import { litScss } from "rollup-plugin-scss-lit";
 import { watchGlobs } from "./plugins.js";
 
@@ -104,28 +103,6 @@ export function getDemoConfig(options = {}) {
       },
       plugins: getPluginsConfig(modulePaths),
       watch: getWatcherConfig(watch),
-    },
-  };
-}
-
-/**
- * Creates Rollup configuration for the d.ts files with output options.
- * @param {object} options - Configuration options
- * @returns {object} - Complete Rollup configuration object with input and output.
- */
-export function getDtsConfig(options = {}) {
-  const { input = ["./dist/index.js"], outputDir = "./dist" } = options;
-
-  return {
-    name: "DTS",
-    config: {
-      input,
-      output: {
-        format: "esm",
-        dir: outputDir,
-        entryFileNames: "[name].d.ts",
-      },
-      plugins: [dts()],
     },
   };
 }

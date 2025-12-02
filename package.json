@@ -77,11 +77,11 @@
     "inquirer": "^12.9.6",
     "markdown-table": "^3.0.4",
     "ora": "^8.2.0",
-    "rollup-plugin-dts": "^6.2.3",
     "rollup-plugin-scss-lit": "^2.1.0",
     "simple-git": "^3.28.0",
     "table": "^6.9.0",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.2",
+    "@wc-toolkit/jsx-types": "^1.4.3"
   },
   "devDependencies": {
     "@aurodesignsystem/auro-config": "^1.3.1",
