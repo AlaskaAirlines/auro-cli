@@ -25,7 +25,9 @@ async function runProductionBuild(options) {
   const demoConfig = getDemoConfig(options);
 
   // Add terser for minification in production
-  mainBundleConfig.config.plugins.push(terser());
+  if (!options.dev) {
+    mainBundleConfig.config.plugins.push(terser());
+  }
 
   // Generate docs if enabled
   await generateDocs(options);
