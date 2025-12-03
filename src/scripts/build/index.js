@@ -2,13 +2,11 @@ import terser from "@rollup/plugin-terser";
 import { watch } from "rollup";
 import {
   buildCombinedBundle,
-  buildTypeDefinitions,
   cleanupDist,
   generateDocs,
 } from "./bundleHandlers.js";
 import {
   getDemoConfig,
-  getDtsConfig,
   getMainBundleConfig,
 } from "./configUtils.js";
 import { startDevelopmentServer } from "./devServerUtils.js";
@@ -25,7 +23,6 @@ import {
 async function runProductionBuild(options) {
   const mainBundleConfig = getMainBundleConfig(options);
   const demoConfig = getDemoConfig(options);
-  const dtsConfig = getDtsConfig();
 
   // Add terser for minification in production
   mainBundleConfig.config.plugins.push(terser());
@@ -35,9 +32,6 @@ async function runProductionBuild(options) {
 
   // Build main and demo bundles
   await buildCombinedBundle(mainBundleConfig.config, demoConfig.config);
-
-  // Build TypeScript definitions
-  await buildTypeDefinitions(dtsConfig.config, dtsConfig.config.output);
 }
 
 /**
