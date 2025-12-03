@@ -21,6 +21,7 @@ export function getPluginsConfig(modulePaths = [], options = {}) {
   const {
     watchPatterns = DEFAULTS.watchPatterns,
     dedupe = ["lit", "lit-element", "lit-html"],
+    dev = false,
   } = options;
 
   // Combine default paths with any user-provided paths
@@ -33,7 +34,8 @@ export function getPluginsConfig(modulePaths = [], options = {}) {
       moduleDirectories: DEFAULTS.moduleDirectories,
     }),
     litScss({
-      minify: { fast: true },
+      // Disable CSS minification in dev for readability and faster rebuilds
+      minify: dev ? false : { fast: true },
       options: {
         loadPaths: [...allModulePaths, join(process.cwd(), "src", "styles"), join(process.cwd(), "src")],
       },
@@ -54,6 +56,8 @@ export function getMainBundleConfig(options = {}) {
     input = ["./src/index.js", "./src/registered.js"],
     outputDir = "./dist",
     format = "esm",
+    // When dev is true, avoid randomized filenames for easier debugging
+    dev = false,
   } = options;
 
   return {
@@ -63,10 +67,18 @@ export function getMainBundleConfig(options = {}) {
       output: {
         format,
         dir: outputDir,
-        entryFileNames: "[name].js",
+        // Stable names in dev; in production keep stable names for index/registered
+        entryFileNames: (chunk) =>
+          dev
+            ? "[name].js"
+            : ["index", "registered"].includes(chunk.name)
+              ? "[name].js"
+              : "[name]-[hash].js",
+        chunkFileNames: dev ? "[name].js" : "[name]-[hash].js",
+        assetFileNames: dev ? "[name][extname]" : "[name]-[hash][extname]",
       },
       external: getExternalConfig(),
-      plugins: getPluginsConfig(modulePaths),
+      plugins: getPluginsConfig(modulePaths, { dev }),
       watch: getWatcherConfig(watch),
     },
   };
@@ -84,6 +96,7 @@ export function getDemoConfig(options = {}) {
     globPattern = "./demo/*.js",
     ignorePattern = ["./demo/*.min.js"],
     outputDir = "./demo",
+    dev = false,
   } = options;
 
   return {
@@ -100,8 +113,9 @@ export function getDemoConfig(options = {}) {
         dir: outputDir,
         entryFileNames: "[name].min.js",
         chunkFileNames: "[name].min.js",
+        assetFileNames: dev ? "[name][extname]" : "[name]-[hash][extname]",
       },
-      plugins: getPluginsConfig(modulePaths),
+      plugins: getPluginsConfig(modulePaths, { dev }),
       watch: getWatcherConfig(watch),
     },
   };
