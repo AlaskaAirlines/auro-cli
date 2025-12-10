@@ -1,6 +1,7 @@
 import { cemSorterPlugin } from "@wc-toolkit/cem-sorter";
 import { jsxTypesPlugin } from "@wc-toolkit/jsx-types";
 import addDtsExportsPlugin from "#scripts/docs/plugins/addDtsExportsPlugin";
+import forcePrivatePlugin from "#scripts/docs/plugins/forcePrivatePlugin";
 
 export default {
   globs: ["src/**/*.*js", "scripts/wca/**/*.*js"],
@@ -17,6 +18,7 @@ export default {
       outdir: "dist",
       excludeCssCustomProperties: true,
     }),
-    addDtsExportsPlugin()
+    addDtsExportsPlugin(),
+    forcePrivatePlugin(),
   ],
 };
