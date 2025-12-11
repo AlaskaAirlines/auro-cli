@@ -7,6 +7,8 @@ import type {
   Attribute,
 } from "custom-elements-manifest";
 
+import { toCamelCase } from '@wc-toolkit/cem-utilities';
+
 interface ForcePrivateContext {
   forcePrivateProperties?: Map<string, string[]>;
 }
@@ -39,7 +41,7 @@ export default function forcePrivatePlugin() {
               declaration.members.forEach((member: ClassMember) => {
                 if (propertiesToMarkPrivate.includes(member.name)) {
                   console.log(
-                    `Found member '${member.name}' in ${declaration.name}, marking as private`,
+                    `\rFound member '${member.name}' in ${declaration.name}, marking as private`,
                   );
                   member.privacy = "private";
                 }
@@ -56,9 +58,11 @@ export default function forcePrivatePlugin() {
               if (customElementDeclaration.attributes) {
                 customElementDeclaration.attributes = customElementDeclaration.attributes.filter(
                   (attr: Attribute) => {
-                    if (propertiesToMarkPrivate.includes(attr.name)) {
+                    const camelCaseName = toCamelCase(attr.name);
+
+                    if (propertiesToMarkPrivate.includes(camelCaseName) || propertiesToMarkPrivate.includes(attr.name)) {
                       console.log(
-                        `Found attribute '${attr.name}' in ${declaration.name}, removing from manifest`,
+                        `\rFound attribute '${attr.name}' in ${declaration.name}, removing from manifest`,
                       );
                       return false;
                     }
