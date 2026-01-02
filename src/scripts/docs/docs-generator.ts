@@ -146,7 +146,7 @@ export default class Docs {
         .map((m: ClassMember) => ({
           ...m,
           parameters: renderParameters('parameters' in m ? m.parameters as Parameter[] : undefined),
-          returnType: 'return' in m && m.return ? getType(m.return) : "",
+          return: 'return' in m && m.return ? getType(m.return) : "",
         })),
     );
     if (methodsTable) {
