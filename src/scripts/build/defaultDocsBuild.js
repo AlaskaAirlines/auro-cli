@@ -37,35 +37,28 @@ function pathFromCwd(pathLike) {
  * @returns {import('../utils/sharedFileProcessorUtils').FileProcessorConfig[]}
  */
 export async function fileConfigs(config) {
-  const pageTemplateFullPath = pathFromCwd(PAGE_TEMPLATE_PATH);
-  let pageFiles = [];
+  const configs = [];
 
-  if (fs.existsSync(pageTemplateFullPath)) {
-    pageFiles = await fs.promises.readdir(pageTemplateFullPath);
-  }
-
-  const pageObjects = pageFiles.map((file) => ({
-    identifier: file,
-    input: path.join(pathFromCwd(PAGE_TEMPLATE_PATH), file),
-    output: pathFromCwd(`/demo/${file}`),
-  }));
-
-  return [
-    {
-      identifier: "README.md",
-      input: {
-        remoteUrl:
-          config.remoteReadmeUrl ||
-          generateReadmeUrl(
-            config.remoteReadmeVersion,
-            config.remoteReadmeVariant,
-          ),
-        fileName: pathFromCwd("/docTemplates/README.md"),
-        overwrite: config.overwriteLocalCopies,
-      },
-      output: pathFromCwd("/README.md"),
+  // ---------- README.md ----------
+  // Don't need to check for existence of README.md since it's always created
+  configs.push({
+    identifier: "README.md",
+    input: {
+      remoteUrl:
+        config.remoteReadmeUrl ||
+        generateReadmeUrl(
+          config.remoteReadmeVersion,
+          config.remoteReadmeVariant,
+        ),
+      fileName: pathFromCwd("/docTemplates/README.md"),
+      overwrite: config.overwriteLocalCopies,
     },
-    {
+    output: pathFromCwd("/README.md"),
+  });
+
+  // ---------- index.md ----------
+  if (fileExists("/docs/partials/index.md")) {
+    configs.push({
       identifier: "index.md",
       input: pathFromCwd("/docs/partials/index.md"),
       output: pathFromCwd("/demo/index.md"),
@@ -74,15 +67,36 @@ export async function fileConfigs(config) {
           directory: pathFromCwd("/demo"),
         },
       },
-    },
-    {
+    });
+  }
+
+  // ---------- api.md ----------
+  if (fileExists("/docs/partials/api.md")) {
+    configs.push({
       identifier: "api.md",
       input: pathFromCwd("/docs/partials/api.md"),
       output: pathFromCwd("/demo/api.md"),
       preProcessors: [templateFiller.formatApiTable],
-    },
-  ...pageObjects]
-};
+    });
+  }
+
+  // ---------- Page Templates ----------
+  const pageTemplateFullPath = pathFromCwd(PAGE_TEMPLATE_PATH);
+
+  if (fs.existsSync(pageTemplateFullPath)) {
+    const pageFiles = await fs.promises.readdir(pageTemplateFullPath);
+
+    const pageObjects = pageFiles.map((file) => ({
+      identifier: file,
+      input: path.join(pageTemplateFullPath, file),
+      output: pathFromCwd(`/demo/${file}`),
+    }));
+
+    configs.push(...pageObjects);
+  }
+
+  return configs;
+}
 
 /**
  *
@@ -111,4 +125,14 @@ export async function runDefaultDocsBuild() {
     remoteReadmeUrl:
       "https://raw.githubusercontent.com/AlaskaAirlines/auro-templates/main/templates/default/README.md",
   });
+}
+
+/**
+ * Check if a file exists.
+ * @private
+ * @param {String} pathToFile - The path to the file to check if it exists.
+ * @returns {Boolean}}
+ */
+function fileExists(pathToFile) {
+  return fs.existsSync(pathFromCwd(pathToFile));
 }
