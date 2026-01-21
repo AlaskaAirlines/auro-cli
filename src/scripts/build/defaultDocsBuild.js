@@ -34,27 +34,30 @@ function pathFromCwd(pathLike) {
 
 /**
  * @param {ProcessorConfig} config - The configuration for this processor.
+ * @param {boolean} [skipReadme=false] - Whether to skip README.md processing.
  * @returns {import('../utils/sharedFileProcessorUtils').FileProcessorConfig[]}
  */
-export async function fileConfigs(config) {
+export async function fileConfigs(config, skipReadme = false) {
   const configs = [];
 
   // ---------- README.md ----------
   // Don't need to check for existence of README.md since it's always created
-  configs.push({
-    identifier: "README.md",
-    input: {
-      remoteUrl:
-        config.remoteReadmeUrl ||
-        generateReadmeUrl(
-          config.remoteReadmeVersion,
-          config.remoteReadmeVariant,
-        ),
-      fileName: pathFromCwd("/docTemplates/README.md"),
-      overwrite: config.overwriteLocalCopies,
-    },
-    output: pathFromCwd("/README.md"),
-  });
+  if (!skipReadme) {
+    configs.push({
+      identifier: "README.md",
+      input: {
+        remoteUrl:
+          config.remoteReadmeUrl ||
+          generateReadmeUrl(
+            config.remoteReadmeVersion,
+            config.remoteReadmeVariant,
+          ),
+        fileName: pathFromCwd("/docTemplates/README.md"),
+        overwrite: config.overwriteLocalCopies,
+      },
+      output: pathFromCwd("/README.md"),
+    });
+  }
 
   // ---------- index.md ----------
   if (fileExists("/docs/partials/index.md")) {
@@ -101,13 +104,14 @@ export async function fileConfigs(config) {
 /**
  *
  * @param {ProcessorConfig} config - The configuration for this processor.
+ * @param {boolean} [skipReadme=false] - Whether to skip README.md processing.
  * @return {Promise<void>}
  */
-export async function processDocFiles(config = defaultDocsProcessorConfig) {
+export async function processDocFiles(config = defaultDocsProcessorConfig, skipReadme = false) {
   // setup
   await templateFiller.extractNames();
 
-  const fileConfigsList = await fileConfigs(config);
+  const fileConfigsList = await fileConfigs(config, skipReadme);
 
   for (const fileConfig of fileConfigsList) {
     try {
@@ -119,12 +123,12 @@ export async function processDocFiles(config = defaultDocsProcessorConfig) {
   }
 }
 
-export async function runDefaultDocsBuild() {
+export async function runDefaultDocsBuild(options = {}) {
   await processDocFiles({
     ...defaultDocsProcessorConfig,
     remoteReadmeUrl:
       "https://raw.githubusercontent.com/AlaskaAirlines/auro-templates/main/templates/default/README.md",
-  });
+  }, options.skipReadme);
 }
 
 /**
