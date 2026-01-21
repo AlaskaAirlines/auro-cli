@@ -181,9 +181,11 @@ async function generateDirectoryTree(dirPath: string, prefix: string = '', isLas
 /**
  * Sync the .github directory with the remote repository.
  * @param {string} rootDir - The root directory of the local repository.
+ * @param {string} ref - The Git reference (branch/tag/commit) to use.
+ * @param {string} template - The template based on which to sync.
  * @returns {Promise<void>} A promise that resolves when syncing is complete.
  */
-export async function syncDotGithubDir(rootDir: string, ref = 'main') {
+export async function syncDotGithubDir(rootDir: string, ref = 'main', template = 'default') {
   if (!rootDir) {
     const errorSpinner = ora().start();
     errorSpinner.fail("Root directory must be specified");
@@ -213,7 +215,7 @@ export async function syncDotGithubDir(rootDir: string, ref = 'main') {
     process.exit(1);
   }
 
-  const templatesDefaultGithubPath = 'templates/default/.github';
+  const templatesDefaultGithubPath = `templates/${template}/.github`;
   const folderItems = await getFolderItemsFromRelativeRepoPath(templatesDefaultGithubPath, ref);
   const fileConfigs = await processFolderItemsIntoFileConfigs({
     folderItems,
