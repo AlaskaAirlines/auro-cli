@@ -34,11 +34,11 @@ export async function api() {
   }
 }
 
-export async function docs() {
+export async function docs(options = {}) {
   const docsSpinner = ora("Compiling documentation...").start();
 
   try {
-    await runDefaultDocsBuild();
+    await runDefaultDocsBuild(options);
     docsSpinner.succeed("Documentation compiled successfully!");
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);

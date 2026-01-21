@@ -7,6 +7,7 @@ let docsCommand = program
   .description("Generate API documentation")
   .option("-c, --cem", "Generate Custom Elements Manifest (CEM) file", false)
   .option("-a, --api", "Creates api md file from CEM", false)
+  .option("--skip-readme", "Skip README.md processing", false)
   
   docsCommand = withServerOptions(docsCommand);
 
@@ -20,7 +21,7 @@ let docsCommand = program
       await api();
     }
 
-    await docs();
+    await docs(options);
 
     if( options.serve ) {
         await serve(options);
