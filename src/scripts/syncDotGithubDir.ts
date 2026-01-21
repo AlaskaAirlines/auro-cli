@@ -37,28 +37,38 @@ interface FileProcessorConfig {
  */
 async function getFolderItemsFromRelativeRepoPath(path: string, ref: string) {
   const octokit = new Octokit({
-    auth: process.env.GITHUB_TOKEN || '',
+    auth: process.env.GITHUB_TOKEN || ''
   });
 
-  const response = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
-    ref,
-    owner: 'AlaskaAirlines',
-    repo: 'auro-templates',
-    path: path,
-    headers: {
-      'X-GitHub-Api-Version': '2022-11-28'
+  try {
+    const response = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
+      ref,
+      owner: 'AlaskaAirlines',
+      repo: 'auro-templates',
+      path: path,
+      headers: {
+        'X-GitHub-Api-Version': '2022-11-28'
+      }
+    });
+
+    const responseData = response.data;
+    if (typeof responseData !== 'object' || !Array.isArray(responseData)) {
+      const errorMessage = `Unexpected response format: ${JSON.stringify(responseData)}`;
+      const errorSpinner = ora().start();
+      errorSpinner.fail(errorMessage);
+      throw new Error("Failed to retrieve folder items");
     }
-  });
 
-  const responseData = response.data;
-  if (typeof responseData !== 'object' || !Array.isArray(responseData)) {
-    const errorMessage = `Unexpected response format: ${JSON.stringify(responseData)}`;
+    return responseData;
+  } catch (error: any) {
     const errorSpinner = ora().start();
-    errorSpinner.fail(errorMessage);
-    throw new Error("Failed to retrieve folder items");
+    if (error.status === 404) {
+      errorSpinner.fail(`Template '${path.split('/')[1]}' not found`);
+    } else {
+      errorSpinner.fail(`Error accessing template: ${error.message}`);
+    }
+    throw error;
   }
-
-  return responseData;
 }
 
 interface ProcessIntoFileConfigArgs {
@@ -189,21 +199,7 @@ export async function syncDotGithubDir(rootDir: string, ref = 'main', template =
   if (!rootDir) {
     const errorSpinner = ora().start();
     errorSpinner.fail("Root directory must be specified");
-    // eslint-disable-next-line no-undef
-    process.exit(1);
-  }
-
-  // Remove .github directory if it exists
-  const githubPath = ".github";
-
-  const removeSpinner = ora("Removing existing .github directory...").start();
-  try {
-    await removeDirectory(githubPath);
-    removeSpinner.succeed(".github directory removed successfully");
-  } catch (error: any) {
-    removeSpinner.fail(`Error removing .github directory: ${error.message}`);
-    // eslint-disable-next-line no-undef
-    process.exit(1);
+    throw new Error("Root directory must be specified");
   }
 
   // Setup
@@ -212,11 +208,25 @@ export async function syncDotGithubDir(rootDir: string, ref = 'main', template =
   if (!process.env.GITHUB_TOKEN) {
     const tokenErrorSpinner = ora().start();
     tokenErrorSpinner.fail("GITHUB_TOKEN environment variable is not set.");
-    process.exit(1);
+    throw new Error("GITHUB_TOKEN environment variable is not set");
   }
 
   const templatesDefaultGithubPath = `templates/${template}/.github`;
+  
+  // Validate template exists BEFORE removing anything
   const folderItems = await getFolderItemsFromRelativeRepoPath(templatesDefaultGithubPath, ref);
+
+  // Only remove .github directory after successful template validation
+  const githubPath = ".github";
+  const removeSpinner = ora("Removing existing .github directory...").start();
+  try {
+    await removeDirectory(githubPath);
+    removeSpinner.succeed(".github directory removed successfully");
+  } catch (error: any) {
+    removeSpinner.fail(`Error removing .github directory: ${error.message}`);
+    throw new Error(`Failed to remove .github directory: ${error.message}`);
+  }
+
   const fileConfigs = await processFolderItemsIntoFileConfigs({
     folderItems,
     templatePathToReplace: templatesDefaultGithubPath,
@@ -246,7 +256,6 @@ export async function syncDotGithubDir(rootDir: string, ref = 'main', template =
 
   } catch (error: any) {
     processSpinner.fail(`Error processing files: ${error.message}`);
-    // eslint-disable-next-line no-undef
-    process.exit(1);
+    throw new Error(`Failed to process files: ${error.message}`);
   }
 }
