@@ -31,7 +31,7 @@ export class Git {
     }
   }
 
-  static async getCommitMessages(): Promise<
+  static async getCommitMessages(sourceBranch = ""): Promise<
     Array<{
       type: string;
       hash: string;
@@ -53,8 +53,12 @@ export class Git {
         type: string;
       }
 
-      const currentBranch = await git.branchLocal();
-      Logger.info(`Current branch: ${currentBranch.current}`);
+      // Use the provided branch parameter, or fall back to current branch if not specified
+      if (!sourceBranch) {
+        const currentBranch = await git.branchLocal();
+        sourceBranch = currentBranch.current;
+      }
+      Logger.info(`Comparing branch: ${sourceBranch}`);
 
       // ---- Get target branch (main) and PR commits ----
       let targetBranch = "main";
@@ -73,24 +77,33 @@ export class Git {
           await git.fetch("origin", targetBranch);
           Logger.info(`Fetched target branch: origin/${targetBranch}`);
 
-          // Use the merge base between target branch and current HEAD to get PR-specific commits
+          // Ensure source branch is available
+          if (sourceBranch !== "HEAD") {
+            try {
+              await git.raw(["rev-parse", "--verify", sourceBranch]);
+            } catch {
+              await git.fetch("origin", sourceBranch);
+            }
+          }
+
+          // Use the merge base between target branch and source branch to get commits
           const mergeBase = await git.raw([
             "merge-base",
             `origin/${targetBranch}`,
-            "HEAD",
+            sourceBranch,
           ]);
 
-          // Get commits between merge base and HEAD - these are the PR commits
-          commitRange = `${mergeBase.trim()}..HEAD`;
+          // Get commits between merge base and source branch
+          commitRange = `${mergeBase.trim()}..${sourceBranch}`;
           Logger.info(`Using commit range: ${commitRange}`);
         } catch (error) {
           Logger.warn(`Error setting up commit range in CI: ${error}`);
           // Fall back to simpler approach (just compare with origin/targetBranch)
-          commitRange = `origin/${targetBranch}..HEAD`;
+          commitRange = `origin/${targetBranch}..${sourceBranch}`;
           Logger.info(`Falling back to commit range: ${commitRange}`);
         }
       } else {
-        // Local environment - try to determine PR commits
+        // Local environment - try to determine commits
         Logger.info("Running in local environment");
 
         try {
@@ -102,21 +115,31 @@ export class Git {
             await git.fetch("origin", targetBranch);
           }
 
-          // Find merge base between current branch and target branch
+          // Ensure source branch is available
+          if (sourceBranch !== "HEAD") {
+            try {
+              await git.raw(["rev-parse", "--verify", sourceBranch]);
+            } catch {
+              Logger.info(`Fetching ${sourceBranch} from origin`);
+              await git.fetch("origin", sourceBranch);
+            }
+          }
+
+          // Find merge base between source branch and target branch
           const mergeBase = await git.raw([
             "merge-base",
             `origin/${targetBranch}`,
-            currentBranch.current,
+            sourceBranch,
           ]);
 
-          commitRange = `${mergeBase.trim()}..HEAD`;
-          Logger.info(`Using commit range for PR commits: ${commitRange}`);
+          commitRange = `${mergeBase.trim()}..${sourceBranch}`;
+          Logger.info(`Using commit range for commits: ${commitRange}`);
         } catch (error) {
-          Logger.warn(`Error determining PR commits locally: ${error}`);
+          Logger.warn(`Error determining commits locally: ${error}`);
 
-          // Fallback - use last few commits
+          // Fallback - use last few commits from source branch
           Logger.info("Falling back to analyzing recent commits");
-          commitRange = "HEAD~10..HEAD";
+          commitRange = `${sourceBranch}~10..${sourceBranch}`;
           Logger.info(`Using fallback commit range: ${commitRange}`);
         }
       }
@@ -127,6 +150,53 @@ export class Git {
       Logger.error(`Error getting commit messages: ${err}`);
       return [];
     }
+  }
+
+  static async getRepoOwnerAndName(): Promise<{ owner: string; repo: string } | null> {
+    try {
+      // Get remote URLs
+      const remotes = await git.getRemotes(true);
+      
+      if (remotes.length === 0) {
+        Logger.warn("No remotes found");
+        return null;
+      }
+
+      // Get the origin remote (or first available)
+      const originRemote = remotes.find(remote => remote.name === 'origin') || remotes[0];
+      const remoteUrl = originRemote.refs.fetch || originRemote.refs.push;
+
+      return Git.parseGitUrl(remoteUrl);
+    } catch (err) {
+      Logger.error(`Error getting repo owner and name: ${err}`);
+      return null;
+    }
+  }
+
+  private static parseGitUrl(url: string): { owner: string; repo: string } | null {
+    // Handle different URL formats
+    // SSH: git@github.com:owner/repo.git
+    // HTTPS: https://github.com/owner/repo.git
+    // HTTPS with auth: https://user:token@github.com/owner/repo.git
+
+    let match;
+
+    // SSH format
+    if (url.includes('@') && url.includes(':')) {
+      match = url.match(/@([^:]+):([^/]+)\/(.+?)(?:\.git)?$/);
+      if (match) {
+        return { owner: match[2], repo: match[3] };
+      }
+    }
+
+    // HTTPS format
+    match = url.match(/https?:\/\/(?:[^@]+@)?[^/]+\/([^/]+)\/(.+?)(?:\.git)?$/);
+    if (match) {
+      return { owner: match[1], repo: match[2] };
+    }
+
+    Logger.warn(`Could not parse git URL: ${url}`);
+    return null;
   }
 
   // Helper function to get formatted commits for a given git range
