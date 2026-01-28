@@ -341,9 +341,11 @@ const updateGitHubProject = async (
 /**
  * Creates a user story work item in Azure DevOps
  * @param issue - GitHub issue details
+ * @param copyContent - Whether to copy GitHub issue body content to ADO description
+ * @param tags - Tags to attach to the work item
  * @returns Created work item
  */
-const createADOWorkItem = async (issue: GitHubIssue): Promise<WorkItem> => {
+const createADOWorkItem = async (issue: GitHubIssue, copyContent = false, tags: string[] = []): Promise<WorkItem> => {
   const adoToken = process.env.ADO_TOKEN;
   if (!adoToken) {
     throw new Error("ADO_TOKEN environment variable is required");
@@ -360,6 +362,16 @@ const createADOWorkItem = async (issue: GitHubIssue): Promise<WorkItem> => {
   const workItemTrackingApi = await connection.getWorkItemTrackingApi();
 
   try {
+    // Prepare description based on copyContent flag
+    let description: string;
+    if (copyContent && issue.body?.trim()) {
+      // Include GitHub issue body with link at the top when copying content
+      description = `GitHub Issue: [${issue.html_url}](${issue.html_url})\n\n${issue.body.trim()}`;
+    } else {
+      // Default behavior - just the link
+      description = `GitHub Issue: <a href="${issue.html_url}">${issue.html_url}</a>`;
+    }
+
     // Prepare work item data - omitting iteration path to use project default
     const workItemData = [
       {
@@ -370,7 +382,7 @@ const createADOWorkItem = async (issue: GitHubIssue): Promise<WorkItem> => {
       {
         op: "add",
         path: "/fields/System.Description",
-        value: `GitHub Issue: <a href="${issue.html_url}">${issue.html_url}</a>`,
+        value: description,
       },
       {
         op: "add",
@@ -378,6 +390,24 @@ const createADOWorkItem = async (issue: GitHubIssue): Promise<WorkItem> => {
         value: areaPath,
       },
     ];
+
+    // Add tags if provided
+    if (tags.length > 0) {
+      workItemData.push({
+        op: "add",
+        path: "/fields/System.Tags",
+        value: tags.join('; '), // ADO uses semicolon-space separator for tags
+      });
+    }
+
+    // Add markdown format setting when copying content
+    if (copyContent && issue.body?.trim()) {
+      workItemData.push({
+        op: "add",
+        path: "/multilineFieldsFormat/System.Description",
+        value: "Markdown",
+      });
+    }
 
     return await workItemTrackingApi.createWorkItem(
       null,
@@ -390,7 +420,7 @@ const createADOWorkItem = async (issue: GitHubIssue): Promise<WorkItem> => {
   }
 };
 
-export const createADOItem = async (ghIssue: string) => {
+export const createADOItem = async (ghIssue: string, copyContent = false, tags: string[] = []) => {
   const spinner = ora(`Processing GitHub issue: ${ghIssue}`).start();
   
   try {
@@ -418,8 +448,8 @@ export const createADOItem = async (ghIssue: string) => {
     
     checkSpinner.succeed("No existing ADO work item found");
 
-    const createSpinner = ora("Creating new ADO work item...").start();
-    const workItem = await createADOWorkItem(issue);
+    const createSpinner = ora(`Creating new ADO work item${copyContent ? ' with GitHub content' : ''}${tags.length > 0 ? ` with tags: ${tags.join(', ')}` : ''}...`).start();
+    const workItem = await createADOWorkItem(issue, copyContent, tags);
     createSpinner.succeed(`Successfully created ADO work item #${workItem.id}`);
     
     console.log(`Work item: ${workItem._links?.html?.href || 'N/A'}`);
