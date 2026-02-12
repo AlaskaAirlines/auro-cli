@@ -68,25 +68,29 @@ export class Git {
           // Ensure source branch is available
           if (branch !== "HEAD") {
             try {
-              await git.raw(["rev-parse", "--verify", branch]);
+              await git.raw(["rev-parse", "--verify", `origin/${branch}`]);
             } catch {
               await git.fetch("origin", branch);
             }
           }
 
+          // Use remote refs consistently since we're in CI
+          const sourceBranchRef = branch === "HEAD" ? "HEAD" : `origin/${branch}`;
+
           // Use the merge base between target branch and source branch to get commits
           const mergeBase = await git.raw([
             "merge-base",
             `origin/${targetBranch}`,
-            branch,
+            sourceBranchRef,
           ]);
 
           // Get commits between merge base and source branch
-          commitRange = `${mergeBase.trim()}..${branch}`;
+          commitRange = `${mergeBase.trim()}..${sourceBranchRef}`;
         } catch (error) {
           Logger.warn(`Error setting up commit range in CI: ${error}`);
           // Fall back to simpler approach (just compare with origin/targetBranch)
-          commitRange = `origin/${targetBranch}..${branch}`;
+          const sourceBranchRef = branch === "HEAD" ? "HEAD" : `origin/${branch}`;
+          commitRange = `origin/${targetBranch}..${sourceBranchRef}`;
         }
       } else {
         // Local environment - try to determine commits
