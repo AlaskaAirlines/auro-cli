@@ -60,7 +60,7 @@ export function generateReleaseNotes(commitList: CommitInfo[], showLog = true): 
   }
 
   if (showLog) {
-    console.log(chalk.green(`✓ Showing ${commitList.length} commits of types: ${RELEASE_COMMIT_TYPES.join(", ")}`));
+    console.log(chalk.green(`✓ Generating release notes for ${commitList.length} commits`));
   }
 
   return releaseNotes;
