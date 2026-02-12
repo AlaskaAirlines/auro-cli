@@ -13,8 +13,9 @@ const RELEASE_COMMIT_TYPES = ["feat", "fix", "breaking", "perf"];
  * First tries to show only feat, fix, and breaking commits
  * If none found, shows all commits for user selection
  * @param commitList The list of commits to process
+ * @param showLog Whether to show the commit count log (default: true)
  */
-export function generateReleaseNotes(commitList: CommitInfo[]): string {
+export function generateReleaseNotes(commitList: CommitInfo[], showLog = true): string {
   let releaseNotes = "### In this release\n";
 
   for (const commit of commitList) {
@@ -55,11 +56,13 @@ export function generateReleaseNotes(commitList: CommitInfo[]): string {
 
   // Show helpful info about what was included
   if (commitList.length === 0) {
-    console.log(chalk.yellow(`⚠ No feat/fix/breaking commits found. Showing all ${commitList.length} commits for your selection.`));
     return "";
   }
 
-  console.log(chalk.green(`✓ Showing ${commitList.length} commits of types: ${RELEASE_COMMIT_TYPES.join(", ")}`));
+  if (showLog) {
+    console.log(chalk.green(`✓ Showing ${commitList.length} commits of types: ${RELEASE_COMMIT_TYPES.join(", ")}`));
+  }
+
   return releaseNotes;
 }
 
