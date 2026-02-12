@@ -1,11 +1,6 @@
 import { program } from "commander";
-import { generateReleaseNotes, filterCommitList } from "#scripts/check-commits/commit-analyzer.ts";
 import { RCWorkflow } from "#scripts/rc-workflow/index.ts";
 
-const LABEL = "Release Candidate";
-
-// YYYY-MM-DD
-const DATE = new Date().toISOString().split("T")[0]; 
 
 export default program
   .command("rc-workflow")

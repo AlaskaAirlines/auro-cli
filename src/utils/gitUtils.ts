@@ -43,22 +43,12 @@ export class Git {
     }>
   > {
     try {
-      interface GitCommitType {
-        hash: string;
-        date: string;
-        subject: string;
-        body: string;
-        message: string;
-        author_name: string;
-        type: string;
-      }
-
       // Use the provided branch parameter, or fall back to current branch if not specified
-      if (!sourceBranch) {
+      let branch = sourceBranch;
+      if (!branch) {
         const currentBranch = await git.branchLocal();
-        sourceBranch = currentBranch.current;
+        branch = currentBranch.current;
       }
-      Logger.info(`Comparing branch: ${sourceBranch}`);
 
       // ---- Get target branch (main) and PR commits ----
       let targetBranch = "main";
@@ -68,21 +58,19 @@ export class Git {
       const isGitHubAction = !!process.env.GITHUB_ACTIONS;
 
       if (isGitHubAction) {
-        Logger.info("Running in GitHub Actions environment");
         // In GitHub Actions, we can use environment variables to determine the PR branch and base
         targetBranch = process.env.GITHUB_BASE_REF || "main";
 
         try {
           // Ensure target branch is fetched
           await git.fetch("origin", targetBranch);
-          Logger.info(`Fetched target branch: origin/${targetBranch}`);
 
           // Ensure source branch is available
-          if (sourceBranch !== "HEAD") {
+          if (branch !== "HEAD") {
             try {
-              await git.raw(["rev-parse", "--verify", sourceBranch]);
+              await git.raw(["rev-parse", "--verify", branch]);
             } catch {
-              await git.fetch("origin", sourceBranch);
+              await git.fetch("origin", branch);
             }
           }
 
@@ -90,21 +78,18 @@ export class Git {
           const mergeBase = await git.raw([
             "merge-base",
             `origin/${targetBranch}`,
-            sourceBranch,
+            branch,
           ]);
 
           // Get commits between merge base and source branch
-          commitRange = `${mergeBase.trim()}..${sourceBranch}`;
-          Logger.info(`Using commit range: ${commitRange}`);
+          commitRange = `${mergeBase.trim()}..${branch}`;
         } catch (error) {
           Logger.warn(`Error setting up commit range in CI: ${error}`);
           // Fall back to simpler approach (just compare with origin/targetBranch)
-          commitRange = `origin/${targetBranch}..${sourceBranch}`;
-          Logger.info(`Falling back to commit range: ${commitRange}`);
+          commitRange = `origin/${targetBranch}..${branch}`;
         }
       } else {
         // Local environment - try to determine commits
-        Logger.info("Running in local environment");
 
         try {
           // First check if origin/main exists, fetch it if needed
@@ -116,12 +101,11 @@ export class Git {
           }
 
           // Ensure source branch is available
-          if (sourceBranch !== "HEAD") {
+          if (branch !== "HEAD") {
             try {
-              await git.raw(["rev-parse", "--verify", sourceBranch]);
+              await git.raw(["rev-parse", "--verify", branch]);
             } catch {
-              Logger.info(`Fetching ${sourceBranch} from origin`);
-              await git.fetch("origin", sourceBranch);
+              await git.fetch("origin", branch);
             }
           }
 
@@ -129,18 +113,15 @@ export class Git {
           const mergeBase = await git.raw([
             "merge-base",
             `origin/${targetBranch}`,
-            sourceBranch,
+            branch,
           ]);
 
-          commitRange = `${mergeBase.trim()}..${sourceBranch}`;
-          Logger.info(`Using commit range for commits: ${commitRange}`);
+          commitRange = `${mergeBase.trim()}..${branch}`;
         } catch (error) {
           Logger.warn(`Error determining commits locally: ${error}`);
 
           // Fallback - use last few commits from source branch
-          Logger.info("Falling back to analyzing recent commits");
-          commitRange = `${sourceBranch}~10..${sourceBranch}`;
-          Logger.info(`Using fallback commit range: ${commitRange}`);
+          commitRange = `${branch}~10..${branch}`;
         }
       }
 
@@ -173,13 +154,23 @@ export class Git {
     }
   }
 
+  static async getCurrentBranchName(): Promise<string | null> {
+    try {
+      const branchInfo = await git.branchLocal();
+      return branchInfo.current || null;
+    } catch (err) {
+      Logger.error(`Error getting current branch name: ${err}`);
+      return null;
+    }
+  }
+
   private static parseGitUrl(url: string): { owner: string; repo: string } | null {
     // Handle different URL formats
     // SSH: git@github.com:owner/repo.git
     // HTTPS: https://github.com/owner/repo.git
     // HTTPS with auth: https://user:token@github.com/owner/repo.git
 
-    let match;
+    let match: RegExpMatchArray | null;
 
     // SSH format
     if (url.includes('@') && url.includes(':')) {
