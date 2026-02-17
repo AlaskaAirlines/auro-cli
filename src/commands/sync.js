@@ -8,6 +8,7 @@ import { syncDotGithubDir } from "#scripts/syncDotGithubDir.js";
 export default program
   .command("sync")
   .option("-r, --ref <branch/tag/commit>", "Git reference (branch/tag/commit) to use", "main")
+  .option("-t, --template <name>", "Template based on which to sync", "default")
   .description(
     "Script runner to synchronize local repository configuration files",
   )
@@ -20,25 +21,35 @@ export default program
 
     const cwd = process.cwd();
 
-    await syncDotGithubDir(cwd, options.ref);
+    try {
+      await syncDotGithubDir(cwd, options.ref, options.template);
 
-    // Cleanup for specific files
-    // ------------------------------------------------------
+      // Cleanup for specific files
+      // ------------------------------------------------------
 
-    // Some files have specific cleanup tasks that need to be run after syncing
+      // Some files have specific cleanup tasks that need to be run after syncing
 
-    // CODEOWNERS - has a bizarre issue with line endings. This is a workaround!
-    // Maybe it has to do with the file type since there's no ending?
-    const codeownersPath = `${cwd}/.github/CODEOWNERS`;
-    const codeowners = await readFile(codeownersPath, { encoding: "utf-8" });
+      try {
+        // CODEOWNERS - has a bizarre issue with line endings. This is a workaround!
+        // Maybe it has to do with the file type since there's no ending?
+        const codeownersPath = `${cwd}/.github/CODEOWNERS`;
+        const codeowners = await readFile(codeownersPath, { encoding: "utf-8" });
 
-    // Convert line endings to \n
-    const codeownersFixed = codeowners
-      .replace(/\r\n/gu, "\n")
-      .replace(/\n\n/gu, "\n");
-    await writeFile(codeownersPath, codeownersFixed, { encoding: "utf-8" });
+        // Convert line endings to \n
+        const codeownersFixed = codeowners
+          .replace(/\r\n/gu, "\n")
+          .replace(/\n\n/gu, "\n");
+        await writeFile(codeownersPath, codeownersFixed, { encoding: "utf-8" });
 
-    if (codeownersFixed.includes("\r") || codeownersFixed.includes("\n\n")) {
-      Logger.error("CODEOWNERS file still has Windows line endings.");
+        if (codeownersFixed.includes("\r") || codeownersFixed.includes("\n\n")) {
+          Logger.error("CODEOWNERS file still has Windows line endings.");
+        }
+      } catch (codeownersError) {
+        Logger.error(`Error processing CODEOWNERS file: ${codeownersError.message}`);
+        throw codeownersError;
+      }
+    } catch (error) {
+      Logger.error(`Sync operation failed: ${error.message}`);
+      process.exit(1);
     }
   });

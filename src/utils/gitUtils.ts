@@ -31,7 +31,7 @@ export class Git {
     }
   }
 
-  static async getCommitMessages(): Promise<
+  static async getCommitMessages(sourceBranch = ""): Promise<
     Array<{
       type: string;
       hash: string;
@@ -43,18 +43,12 @@ export class Git {
     }>
   > {
     try {
-      interface GitCommitType {
-        hash: string;
-        date: string;
-        subject: string;
-        body: string;
-        message: string;
-        author_name: string;
-        type: string;
+      // Use the provided branch parameter, or fall back to current branch if not specified
+      let branch = sourceBranch;
+      if (!branch) {
+        const currentBranch = await git.branchLocal();
+        branch = currentBranch.current;
       }
-
-      const currentBranch = await git.branchLocal();
-      Logger.info(`Current branch: ${currentBranch.current}`);
 
       // ---- Get target branch (main) and PR commits ----
       let targetBranch = "main";
@@ -64,34 +58,42 @@ export class Git {
       const isGitHubAction = !!process.env.GITHUB_ACTIONS;
 
       if (isGitHubAction) {
-        Logger.info("Running in GitHub Actions environment");
         // In GitHub Actions, we can use environment variables to determine the PR branch and base
         targetBranch = process.env.GITHUB_BASE_REF || "main";
 
         try {
           // Ensure target branch is fetched
           await git.fetch("origin", targetBranch);
-          Logger.info(`Fetched target branch: origin/${targetBranch}`);
 
-          // Use the merge base between target branch and current HEAD to get PR-specific commits
+          // Ensure source branch is available
+          if (branch !== "HEAD") {
+            try {
+              await git.raw(["rev-parse", "--verify", `origin/${branch}`]);
+            } catch {
+              await git.fetch("origin", branch);
+            }
+          }
+
+          // Use remote refs consistently since we're in CI
+          const sourceBranchRef = branch === "HEAD" ? "HEAD" : `origin/${branch}`;
+
+          // Use the merge base between target branch and source branch to get commits
           const mergeBase = await git.raw([
             "merge-base",
             `origin/${targetBranch}`,
-            "HEAD",
+            sourceBranchRef,
           ]);
 
-          // Get commits between merge base and HEAD - these are the PR commits
-          commitRange = `${mergeBase.trim()}..HEAD`;
-          Logger.info(`Using commit range: ${commitRange}`);
+          // Get commits between merge base and source branch
+          commitRange = `${mergeBase.trim()}..${sourceBranchRef}`;
         } catch (error) {
           Logger.warn(`Error setting up commit range in CI: ${error}`);
           // Fall back to simpler approach (just compare with origin/targetBranch)
-          commitRange = `origin/${targetBranch}..HEAD`;
-          Logger.info(`Falling back to commit range: ${commitRange}`);
+          const sourceBranchRef = branch === "HEAD" ? "HEAD" : `origin/${branch}`;
+          commitRange = `origin/${targetBranch}..${sourceBranchRef}`;
         }
       } else {
-        // Local environment - try to determine PR commits
-        Logger.info("Running in local environment");
+        // Local environment - try to determine commits
 
         try {
           // First check if origin/main exists, fetch it if needed
@@ -102,22 +104,28 @@ export class Git {
             await git.fetch("origin", targetBranch);
           }
 
-          // Find merge base between current branch and target branch
+          // Ensure source branch is available
+          if (branch !== "HEAD") {
+            try {
+              await git.raw(["rev-parse", "--verify", branch]);
+            } catch {
+              await git.fetch("origin", branch);
+            }
+          }
+
+          // Find merge base between source branch and target branch
           const mergeBase = await git.raw([
             "merge-base",
             `origin/${targetBranch}`,
-            currentBranch.current,
+            branch,
           ]);
 
-          commitRange = `${mergeBase.trim()}..HEAD`;
-          Logger.info(`Using commit range for PR commits: ${commitRange}`);
+          commitRange = `${mergeBase.trim()}..${branch}`;
         } catch (error) {
-          Logger.warn(`Error determining PR commits locally: ${error}`);
+          Logger.warn(`Error determining commits locally: ${error}`);
 
-          // Fallback - use last few commits
-          Logger.info("Falling back to analyzing recent commits");
-          commitRange = "HEAD~10..HEAD";
-          Logger.info(`Using fallback commit range: ${commitRange}`);
+          // Fallback - use last few commits from source branch
+          commitRange = `${branch}~10..${branch}`;
         }
       }
 
@@ -127,6 +135,63 @@ export class Git {
       Logger.error(`Error getting commit messages: ${err}`);
       return [];
     }
+  }
+
+  static async getRepoOwnerAndName(): Promise<{ owner: string; repo: string } | null> {
+    try {
+      // Get remote URLs
+      const remotes = await git.getRemotes(true);
+      
+      if (remotes.length === 0) {
+        Logger.warn("No remotes found");
+        return null;
+      }
+
+      // Get the origin remote (or first available)
+      const originRemote = remotes.find(remote => remote.name === 'origin') || remotes[0];
+      const remoteUrl = originRemote.refs.fetch || originRemote.refs.push;
+
+      return Git.parseGitUrl(remoteUrl);
+    } catch (err) {
+      Logger.error(`Error getting repo owner and name: ${err}`);
+      return null;
+    }
+  }
+
+  static async getCurrentBranchName(): Promise<string | null> {
+    try {
+      const branchInfo = await git.branchLocal();
+      return branchInfo.current || null;
+    } catch (err) {
+      Logger.error(`Error getting current branch name: ${err}`);
+      return null;
+    }
+  }
+
+  private static parseGitUrl(url: string): { owner: string; repo: string } | null {
+    // Handle different URL formats
+    // SSH: git@github.com:owner/repo.git
+    // HTTPS: https://github.com/owner/repo.git
+    // HTTPS with auth: https://user:token@github.com/owner/repo.git
+
+    let match: RegExpMatchArray | null;
+
+    // SSH format
+    if (url.includes('@') && url.includes(':')) {
+      match = url.match(/@([^:]+):([^/]+)\/(.+?)(?:\.git)?$/);
+      if (match) {
+        return { owner: match[2], repo: match[3] };
+      }
+    }
+
+    // HTTPS format
+    match = url.match(/https?:\/\/(?:[^@]+@)?[^/]+\/([^/]+)\/(.+?)(?:\.git)?$/);
+    if (match) {
+      return { owner: match[1], repo: match[2] };
+    }
+
+    Logger.warn(`Could not parse git URL: ${url}`);
+    return null;
   }
 
   // Helper function to get formatted commits for a given git range
