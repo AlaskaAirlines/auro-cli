@@ -3,6 +3,7 @@ import { watch } from "rollup";
 import {
   buildCombinedBundle,
   cleanupDist,
+  compileDemoScss,
   generateDocs,
 } from "./bundleHandlers.js";
 import {
@@ -32,6 +33,9 @@ async function runProductionBuild(options) {
   // Generate docs if enabled
   await generateDocs(options);
 
+  // Compile demo SCSS to CSS
+  await compileDemoScss();
+
   // Build main and demo bundles
   await buildCombinedBundle(mainBundleConfig.config, demoConfig.config);
 }
@@ -56,8 +60,47 @@ async function setupWatchMode(options) {
     isDevMode ? async () => startDevelopmentServer(options) : undefined,
   );
 
+  // Watch demo SCSS files separately since they are not part of the rollup bundle
+  const chokidar = await import("chokidar");
+  let scssCompiling = false;
+  let scssPending = false;
+  let scssTimer = null;
+
+  const scssWatcher = chokidar.watch("./demo/**/*.scss", {
+    ignoreInitial: true,
+    ignored: ["**/demo/**/*.min.css"],
+    awaitWriteFinish: {
+      stabilityThreshold: 500,
+      pollInterval: 100,
+    },
+  });
+
+  scssWatcher.on("all", () => {
+    if (scssTimer) clearTimeout(scssTimer);
+
+    scssTimer = setTimeout(async () => {
+      if (scssCompiling) {
+        scssPending = true;
+        return;
+      }
+
+      scssCompiling = true;
+      try {
+        await compileDemoScss();
+      } catch (error) {
+        console.error("Demo SCSS watch compilation error:", error);
+      } finally {
+        scssCompiling = false;
+        if (scssPending) {
+          scssPending = false;
+          scssWatcher.emit("all");
+        }
+      }
+    }, 500);
+  });
+
   // Set up clean shutdown
-  setupWatchModeListeners(watcher);
+  setupWatchModeListeners(watcher, scssWatcher);
 
   return watcher;
 }

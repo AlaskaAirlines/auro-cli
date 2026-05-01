@@ -1,9 +1,15 @@
-import { rmSync } from "node:fs";
-import { join } from "node:path";
+import { copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import { glob } from "glob";
 import ora from "ora";
 import { rollup } from "rollup";
+import * as sass from "sass";
 import { analyzeComponents } from "#scripts/analyze.js";
 import { runDefaultDocsBuild } from "#scripts/build/defaultDocsBuild.js";
+import { getDemoConfig } from "#scripts/build/configUtils.js";
+
+const MODULE_DIRS = ["node_modules", "../node_modules", "../../node_modules", "../../../node_modules"];
 
 /**
  * Clean up the dist folder
@@ -109,8 +115,130 @@ export async function generateDocs(options) {
     async () => {
       await analyzeComponents(sourceFiles, outFile);
       await runDefaultDocsBuild();
+      copyReadmeToDemo();
     },
     "Docs ready! Looking good.",
     "Doc troubles!",
+  );
+}
+
+/**
+ * Copies the processed README.md from the project root into the demo directory.
+ */
+function copyReadmeToDemo() {
+  const cwd = process.cwd();
+  const readmeSrc = resolve(cwd, "README.md");
+  const demoDir = resolve(cwd, "demo");
+  const readmeDest = join(demoDir, "readme.md");
+
+  if (!existsSync(readmeSrc)) {
+    return;
+  }
+
+  if (!existsSync(demoDir)) {
+    mkdirSync(demoDir, { recursive: true });
+  }
+
+  copyFileSync(readmeSrc, readmeDest);
+}
+
+/**
+ * Sass FileImporter that resolves bare package imports from node_modules
+ * and redirects hoisted dependencies. Returns file: URLs so that
+ * within-package relative imports resolve natively on disk. When a
+ * relative import fails (e.g. ./../../node_modules/@pkg/foo pointing at
+ * a hoisted location that doesn't exist), Sass falls back to findFileUrl,
+ * where we redirect to the actual hoisted location.
+ */
+function createNodeModulesImporter() {
+  const cwd = process.cwd();
+
+  function tryResolve(filePath) {
+    const candidates = [
+      filePath,
+      `${filePath}.scss`,
+      `${filePath}.css`,
+      join(dirname(filePath), `_${basename(filePath)}.scss`),
+      join(filePath, "_index.scss"),
+      join(filePath, "index.scss"),
+    ];
+    return candidates.find((c) => existsSync(c));
+  }
+
+  function findInModuleDirs(pkgPath) {
+    for (const dir of MODULE_DIRS) {
+      const found = tryResolve(resolve(cwd, dir, pkgPath));
+      if (found) return found;
+    }
+    return null;
+  }
+
+  return {
+    findFileUrl(url) {
+      // Failed relative import containing a node_modules path that
+      // doesn't exist due to hoisting — redirect to hoisted location
+      if (url.includes("/node_modules/")) {
+        const lastIdx = url.lastIndexOf("/node_modules/");
+        const pkgPath = url.slice(lastIdx + "/node_modules/".length);
+        const found = findInModuleDirs(pkgPath);
+        if (found) return pathToFileURL(found);
+      }
+
+      // Bare package import (e.g. @aurodesignsystem/webcorestylesheets/...)
+      if (!url.startsWith(".") && !url.startsWith("/") && !url.startsWith("file:")) {
+        const found = findInModuleDirs(url);
+        if (found) return pathToFileURL(found);
+      }
+
+      return null;
+    },
+  };
+}
+
+/**
+ * Compiles all SCSS files in the demo directory to CSS.
+ * @param {string} [demoDir="./demo"] - Path to the demo directory
+ */
+export async function compileDemoScss(demoDir = "./demo") {
+  return runBuildStep(
+    "Compiling demo SCSS...",
+    async () => {
+      const scssFiles = glob.sync(join(demoDir, "**/*.scss"));
+      const importer = createNodeModulesImporter();
+
+      for (const scssFile of scssFiles) {
+        const result = sass.compile(scssFile, {
+          importers: [importer],
+          silenceDeprecations: ["import"],
+          style: "compressed",
+        });
+
+        const cssFile = scssFile.replace(/\.scss$/, ".min.css");
+        writeFileSync(cssFile, result.css);
+      }
+
+      return scssFiles.length;
+    },
+    "Demo SCSS compiled.",
+    "SCSS compilation failed.",
+  );
+}
+
+/**
+ * Bundles demo JS files to minified ESM output.
+ * @param {object} [options={}] - Options passed to getDemoConfig
+ */
+export async function buildDemoBundle(options = {}) {
+  const demoConfig = getDemoConfig(options);
+
+  return runBuildStep(
+    "Bundling demo JS...",
+    async () => {
+      const bundle = await rollup(demoConfig.config);
+      await bundle.write(demoConfig.config.output);
+      await bundle.close();
+    },
+    "Demo JS bundled.",
+    "Demo JS bundling failed.",
   );
 }
