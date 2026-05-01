@@ -8,6 +8,7 @@ let docsCommand = program
   .option("-c, --cem", "Generate Custom Elements Manifest (CEM) file", false)
   .option("-a, --api", "Creates api md file from CEM", false)
   .option("-w, --watch", "Watch for changes and rebuild docs", false)
+  .option("-r, --readme-template <url>", "URL to the README template file")
   .option("--skip-readme", "Skip README.md processing", false)
   
   docsCommand = withServerOptions(docsCommand);

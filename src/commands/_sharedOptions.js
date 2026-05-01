@@ -7,6 +7,7 @@ export function withBuildOptions(command) {
     .option("-m, --module-paths [paths...]", "Path(s) to node_modules folder")
     .option("-w, --watch", "Watches for changes")
     .option("--skip-docs", "Skip documentation generation", false)
+    .option("-r, --readme-template <url>", "URL to the README template file")
     .option(
       "--wca-input [files...]",
       "Source file(s) to analyze for API documentation",
