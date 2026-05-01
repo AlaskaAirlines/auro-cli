@@ -1,9 +1,9 @@
 import ora from "ora";
-import fs from "node:fs";
-import path from "node:path";
 import { shell } from "#utils/shell.js";
 import Docs from "./docs-generator.ts";
 import { configPath } from "#utils/pathUtils.js";
+import { copyReadmeToDemo } from "#utils/copyReadmeToDemo.js";
+import { registerWatcher, installShutdownHandler } from "#utils/shutdown.js";
 import { buildDemoBundle, compileDemoScss } from "../build/bundleHandlers.js";
 import { runDefaultDocsBuild } from "../build/defaultDocsBuild.js";
 import { startDevelopmentServer } from "../build/devServerUtils.js";
@@ -52,25 +52,6 @@ export async function docs(options = {}) {
   copyReadmeToDemo();
   await compileDemoScss();
   await buildDemoBundle(options);
-}
-
-/**
- * Copies the processed README.md from the project root into the demo directory.
- */
-function copyReadmeToDemo() {
-  const readmeSrc = path.resolve(process.cwd(), "README.md");
-  const demoDir = path.resolve(process.cwd(), "demo");
-  const readmeDest = path.join(demoDir, "readme.md");
-
-  if (!fs.existsSync(readmeSrc)) {
-    return;
-  }
-
-  if (!fs.existsSync(demoDir)) {
-    fs.mkdirSync(demoDir, { recursive: true });
-  }
-
-  fs.copyFileSync(readmeSrc, readmeDest);
 }
 
 export async function serve(options = {}) {
@@ -169,10 +150,7 @@ export async function watchDocs(options = {}) {
     }, 1000);
   });
 
-  // Keep process alive and handle clean shutdown
-  process.on("SIGINT", () => {
-    watcher.close();
-    ora().succeed("Doc watch stopped.");
-    process.exit(0);
-  });
+  // Register watcher for clean shutdown
+  registerWatcher(watcher);
+  installShutdownHandler();
 }

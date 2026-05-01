@@ -2,6 +2,7 @@ import path from "node:path";
 import ora from "ora";
 import { rollup } from "rollup";
 import { analyzeComponents } from "#scripts/analyze.js";
+import { registerWatcher, installShutdownHandler } from "#utils/shutdown.js";
 import { compileDemoScss, generateDocs } from "./bundleHandlers.js";
 
 // Track if any build is in progress to prevent overlapping operations
@@ -283,13 +284,9 @@ export async function handleWatcherEvents(
  * @param {object} [scssWatcher] - Optional chokidar watcher for demo SCSS
  */
 export function setupWatchModeListeners(watcher, scssWatcher) {
-  process.on("SIGINT", () => {
-    const closeSpinner = ora("Wrapping up...").start();
-    watcher.close();
-    if (scssWatcher) scssWatcher.close();
-    closeSpinner.succeed("All done! See you next time. ✨");
-    process.exit(0);
-  });
+  registerWatcher(watcher);
+  if (scssWatcher) registerWatcher(scssWatcher);
+  installShutdownHandler();
 
   return watcher;
 }

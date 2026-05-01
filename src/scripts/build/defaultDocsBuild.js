@@ -43,18 +43,22 @@ export async function fileConfigs(config, skipReadme = false) {
   // ---------- README.md ----------
   // Don't need to check for existence of README.md since it's always created
   if (!skipReadme) {
+    const inputConfig = config.localReadmePath
+      ? config.localReadmePath
+      : {
+          remoteUrl:
+            config.remoteReadmeUrl ||
+            generateReadmeUrl(
+              config.remoteReadmeVersion,
+              config.remoteReadmeVariant,
+            ),
+          fileName: pathFromCwd("/docTemplates/README.md"),
+          overwrite: config.overwriteLocalCopies,
+        };
+
     configs.push({
       identifier: "README.md",
-      input: {
-        remoteUrl:
-          config.remoteReadmeUrl ||
-          generateReadmeUrl(
-            config.remoteReadmeVersion,
-            config.remoteReadmeVariant,
-          ),
-        fileName: pathFromCwd("/docTemplates/README.md"),
-        overwrite: config.overwriteLocalCopies,
-      },
+      input: inputConfig,
       output: pathFromCwd("/README.md"),
     });
   }
@@ -124,10 +128,18 @@ export async function processDocFiles(config = defaultDocsProcessorConfig, skipR
 }
 
 export async function runDefaultDocsBuild(options = {}) {
+  const readmeTemplate = options.readmeTemplate;
+  const isLocalPath = readmeTemplate && !readmeTemplate.startsWith("http");
+
   await processDocFiles({
     ...defaultDocsProcessorConfig,
-    remoteReadmeUrl:
-      "https://raw.githubusercontent.com/AlaskaAirlines/auro-templates/main/templates/default/README.md",
+    ...(isLocalPath
+      ? { localReadmePath: path.resolve(process.cwd(), readmeTemplate) }
+      : {
+          remoteReadmeUrl:
+            readmeTemplate ||
+            "https://raw.githubusercontent.com/AlaskaAirlines/auro-templates/main/templates/default/README.md",
+        }),
   }, options.skipReadme);
 }
 

@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { glob } from "glob";
@@ -8,8 +8,8 @@ import * as sass from "sass";
 import { analyzeComponents } from "#scripts/analyze.js";
 import { runDefaultDocsBuild } from "#scripts/build/defaultDocsBuild.js";
 import { getDemoConfig } from "#scripts/build/configUtils.js";
-
-const MODULE_DIRS = ["node_modules", "../node_modules", "../../node_modules", "../../../node_modules"];
+import { MODULE_DIRS } from "#scripts/build/paths.js";
+import { copyReadmeToDemo } from "#utils/copyReadmeToDemo.js";
 
 /**
  * Clean up the dist folder
@@ -114,7 +114,7 @@ export async function generateDocs(options) {
     "Analyzing components and making docs...",
     async () => {
       await analyzeComponents(sourceFiles, outFile);
-      await runDefaultDocsBuild();
+      await runDefaultDocsBuild(options);
       copyReadmeToDemo();
     },
     "Docs ready! Looking good.",
@@ -122,25 +122,7 @@ export async function generateDocs(options) {
   );
 }
 
-/**
- * Copies the processed README.md from the project root into the demo directory.
- */
-function copyReadmeToDemo() {
-  const cwd = process.cwd();
-  const readmeSrc = resolve(cwd, "README.md");
-  const demoDir = resolve(cwd, "demo");
-  const readmeDest = join(demoDir, "readme.md");
 
-  if (!existsSync(readmeSrc)) {
-    return;
-  }
-
-  if (!existsSync(demoDir)) {
-    mkdirSync(demoDir, { recursive: true });
-  }
-
-  copyFileSync(readmeSrc, readmeDest);
-}
 
 /**
  * Sass FileImporter that resolves bare package imports from node_modules
