@@ -1,4 +1,4 @@
-import { existsSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { glob } from "glob";
@@ -152,6 +152,57 @@ function createNodeModulesImporter() {
       const found = tryResolve(resolve(cwd, dir, pkgPath));
       if (found) return found;
     }
+
+    // Try resolving via package.json "exports" map
+    const exportResolved = resolveViaExports(pkgPath);
+    if (exportResolved) return exportResolved;
+
+    return null;
+  }
+
+  /**
+   * Resolves a bare specifier using the package.json "exports" field.
+   * e.g. "@scope/pkg/demo-styles" looks up "./demo-styles" in the exports map
+   * of @scope/pkg/package.json and resolves the mapped path.
+   */
+  function resolveViaExports(pkgPath) {
+    let pkgName;
+    let subpath;
+
+    if (pkgPath.startsWith("@")) {
+      const parts = pkgPath.split("/");
+      if (parts.length < 3) return null;
+      pkgName = `${parts[0]}/${parts[1]}`;
+      subpath = `./${parts.slice(2).join("/")}`;
+    } else {
+      const slashIdx = pkgPath.indexOf("/");
+      if (slashIdx === -1) return null;
+      pkgName = pkgPath.slice(0, slashIdx);
+      subpath = `./${pkgPath.slice(slashIdx + 1)}`;
+    }
+
+    for (const dir of MODULE_DIRS) {
+      const pkgJsonPath = resolve(cwd, dir, pkgName, "package.json");
+      if (!existsSync(pkgJsonPath)) continue;
+
+      try {
+        const pkgJson = JSON.parse(readFileSync(pkgJsonPath, "utf-8"));
+        const exports = pkgJson.exports;
+        if (!exports || typeof exports !== "object") continue;
+
+        const mapped = exports[subpath];
+        if (!mapped) continue;
+
+        const target = typeof mapped === "string" ? mapped : mapped.default || mapped.import;
+        if (!target) continue;
+
+        const resolved = tryResolve(resolve(cwd, dir, pkgName, target));
+        if (resolved) return resolved;
+      } catch {
+        continue;
+      }
+    }
+
     return null;
   }
 
@@ -187,10 +238,13 @@ export async function compileDemoScss(demoDir = "./demo") {
     async () => {
       const scssFiles = glob.sync(join(demoDir, "**/*.scss"));
       const importer = createNodeModulesImporter();
+      const cwd = process.cwd();
+      const loadPaths = MODULE_DIRS.map((dir) => resolve(cwd, dir));
 
       for (const scssFile of scssFiles) {
         const result = sass.compile(scssFile, {
           importers: [importer],
+          loadPaths,
           silenceDeprecations: ["import"],
           style: "compressed",
         });
