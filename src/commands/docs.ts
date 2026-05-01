@@ -1,5 +1,5 @@
 import { program } from "commander";
-import { api, cem, docs, serve } from "#scripts/docs/index.ts";
+import { api, cem, docs, serve, watchDocs } from "#scripts/docs/index.ts";
 import { withServerOptions } from "#commands/_sharedOptions.js";
 
 let docsCommand = program
@@ -7,6 +7,7 @@ let docsCommand = program
   .description("Generate API documentation")
   .option("-c, --cem", "Generate Custom Elements Manifest (CEM) file", false)
   .option("-a, --api", "Creates api md file from CEM", false)
+  .option("-w, --watch", "Watch for changes and rebuild docs", false)
   .option("--skip-readme", "Skip README.md processing", false)
   
   docsCommand = withServerOptions(docsCommand);
@@ -25,6 +26,10 @@ let docsCommand = program
 
     if( options.serve ) {
         await serve(options);
+    }
+
+    if (options.watch) {
+        await watchDocs(options);
     }
 
   });
