@@ -252,7 +252,9 @@ async function postProcessMarkdownFile(outputPath) {
       insidePre = true;
     }
     if (!insidePre) {
-      outputLines[i] = outputLines[i].replace(/^[ \t]+/, '');
+      // Only strip leading whitespace before HTML tags — not before markdown
+      // content like indented list items, which rely on indentation for structure.
+      outputLines[i] = outputLines[i].replace(/^[ \t]+(?=<)/, '');
     }
     if (/<\/pre>/i.test(outputLines[i])) {
       insidePre = false;
