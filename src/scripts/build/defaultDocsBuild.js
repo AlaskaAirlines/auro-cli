@@ -17,6 +17,8 @@ const PAGE_TEMPLATE_PATH = "/docs/pages";
  * @property {string} [remoteReadmeVersion="master"] - The release version tag to use instead of master.
  * @property {string} [remoteReadmeUrl] - The release version tag to use instead of master.
  * @property {string} [remoteReadmeVariant=""] - The variant string to use for the README source (like "_esm" to make README_esm.md).
+ * @property {string} [monorepoName] - The name of the monorepo, used as a template variable.
+ * @property {Record<string, unknown>} [extraVars] - Additional template variables to pass to the template filler.
  * @param {ProcessorConfig} config - The configuration for this processor.
  */
 export const defaultDocsProcessorConfig = {
@@ -26,11 +28,39 @@ export const defaultDocsProcessorConfig = {
   // TODO: remove this variant when all components are updated to use latest auro-library
   // AND the default README.md is updated to use the new paths
   remoteReadmeVariant: "_updated_paths",
+  monorepoName: undefined,
+  extraVars: {},
 };
 
 function pathFromCwd(pathLike) {
   const cwd = process.cwd();
   return `${cwd}/${pathLike}`;
+}
+
+/**
+ * Walk up the directory tree from the given start directory to find the monorepo
+ * root — identified as the nearest ancestor (or self) whose package.json has a
+ * "workspaces" field. Falls back to the start directory if none is found.
+ * @param {string} [startDir=process.cwd()] - Directory to start searching from.
+ * @returns {string} Absolute path to the monorepo root directory.
+ */
+function findMonorepoRoot(startDir = process.cwd()) {
+  let dir = startDir;
+  while (true) {
+    const pkgPath = path.join(dir, "package.json");
+    if (existsSync(pkgPath)) {
+      try {
+        const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+        if (pkg.workspaces) return dir;
+      } catch {
+        // malformed package.json — keep walking up
+      }
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break; // reached filesystem root
+    dir = parent;
+  }
+  return startDir;
 }
 
 /**
@@ -118,14 +148,32 @@ export async function processDocFiles(config = defaultDocsProcessorConfig, skipR
 
   const fileConfigsList = await fileConfigs(config, skipReadme);
 
+  let monorepoName = config.monorepoName;
+  if (!monorepoName) {
+    try {
+      const rootPkgPath = path.join(findMonorepoRoot(), "package.json");
+      const pkgJson = JSON.parse(readFileSync(rootPkgPath, "utf8"));
+      // Strip the npm scope prefix ("@scope/") to get the bare package name used in
+      // template variables such as {{ monorepoName }} (e.g. "auro-formkit").
+      monorepoName = pkgJson.name?.replace(/^@[^/]+\//, '');
+    } catch {
+      // no root package.json or name field — leave undefined
+    }
+  }
+
+  const extraVars = {
+    ...(monorepoName ? { monorepoName } : {}),
+    ...(config.extraVars || {}),
+  };
+
   for (const fileConfig of fileConfigsList) {
     try {
       // eslint-disable-next-line no-await-in-loop
-      await processContentForFile(fileConfig);
+      await processContentForFile({ ...fileConfig, extraVars });
 
       // Post-processing for markdown output files
       if (fileConfig.output.endsWith('.md')) {
-        await postProcessMarkdownFile(fileConfig.output);
+        await postProcessMarkdownFile(fileConfig.output, extraVars);
       }
     } catch (err) {
       Logger.error(`Error processing ${fileConfig.identifier}: ${err.message}`);
@@ -137,8 +185,9 @@ export async function processDocFiles(config = defaultDocsProcessorConfig, skipR
  * Post-process a markdown file to resolve second-pass AURO-GENERATED-CONTENT tags,
  * convert markdown code fences to HTML, and normalize whitespace for marked.js.
  * @param {string} outputPath - The absolute path to the output markdown file.
+ * @param {Record<string, unknown>} [extraVars={}] - Additional template variables for second-pass replacement.
  */
-async function postProcessMarkdownFile(outputPath) {
+async function postProcessMarkdownFile(outputPath, extraVars = {}) {
   const outputDir = path.dirname(outputPath);
 
   // --- Second-pass: resolve empty AURO-GENERATED-CONTENT tags ---
@@ -192,7 +241,7 @@ async function postProcessMarkdownFile(outputPath) {
     // Replace template variables (e.g. {{ componentName }}) in content
     // introduced by second-pass inlining — the first pass only
     // replaces variables in the original file, not in nested partials.
-    outputContents = templateFiller.replaceTemplateValues(outputContents);
+    outputContents = templateFiller.replaceTemplateValues(outputContents, extraVars);
     await fs.promises.writeFile(outputPath, outputContents);
   }
 
