@@ -58,3 +58,69 @@ Open the server to a specific directory:
 ```
 auro dev --open src/
 ```
+
+`auro version-scan`
+Scans a GitHub organization for repos using outdated `@aurodesignsystem/*` and `@alaskaairux/*` packages, and writes two JSON files under `~/.auro/version-bot/`:
+
+- `auro-deps-by-ecommerce-repo.json` — full per-repo Auro dependency snapshot (incremental, keyed by `pushed_at`).
+- `auro-upgrade-candidates.json` — flat list of `(repo, package, pinned, latest, majorsBehind)` rows for every pair at least one major version behind. This is the input to `auro version-tickets`.
+
+Re-runs are incremental — repos whose `pushed_at` matches the cache are skipped.
+
+#### Required environment variables
+
+- `GH_TOKEN` — GitHub token with read access to the target org and to `AlaskaAirlines` (used to fetch each `package.json` and to detect archived Auro source repos).
+
+#### Options
+
+- `--org <name>` GitHub org to scan (default: value of `ECOM_ORG` env var, or `Alaska-ECommerce`).
+- `--force` Re-scan every repo, ignoring the `pushed_at` incremental short-circuit (default: false).
+
+#### Examples
+
+Initial scan of the default org:
+
+```
+auro version-scan
+```
+
+Scan a different org and force a full refresh:
+
+```
+auro version-scan --org SomeOtherOrg --force
+```
+
+`auro version-tickets`
+Reads `~/.auro/version-bot/auro-upgrade-candidates.json` (produced by `auro version-scan`) and creates an Azure DevOps User Story per `(repo, package)` upgrade candidate under `E_Retain_Content\Auro Design System`. Defaults to dry-run; pass `--apply` to actually write to ADO. Every ticket is tagged `auro`, `version-upgrade`, and `majors-behind-<n>`.
+
+#### Required environment variables
+
+- `GH_TOKEN` — GitHub token used to fetch CHANGELOG.md from `AlaskaAirlines/<package-name>` for the migration-guide section. If unset, tickets fall back to a plain CHANGELOG link.
+- `ADO_TOKEN` — Azure DevOps Personal Access Token with **Work Items: Read, write, & manage** scope on the `itsals` org. Required only with `--apply`.
+
+#### Options
+
+- `--min-majors <n>` Only ticket candidates at or above this majors-behind threshold (default: 2).
+- `--apply` Actually create tickets in ADO. Without this flag, the command runs in dry-run mode (default: false).
+- `--limit <n>` Cap on how many tickets to process this run.
+- `--repo <name>` Only process candidates from this consumer repo.
+
+#### Examples
+
+Dry-run preview of all candidates 2+ majors behind:
+
+```
+auro version-tickets
+```
+
+Bounded first live run — one ticket from one repo:
+
+```
+auro version-tickets --apply --limit 1 --repo my-safe-repo
+```
+
+Lower the threshold and dry-run everything 1+ major behind:
+
+```
+auro version-tickets --min-majors 1
+```
