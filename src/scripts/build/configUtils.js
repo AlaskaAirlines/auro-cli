@@ -1,4 +1,5 @@
 import { basename, join } from "node:path";
+import commonjs from "@rollup/plugin-commonjs";
 import { nodeResolve } from "@rollup/plugin-node-resolve";
 import { glob } from "glob";
 import { litScss } from "rollup-plugin-scss-lit";
@@ -33,6 +34,7 @@ export function getPluginsConfig(modulePaths = [], options = {}) {
       preferBuiltins: false,
       moduleDirectories: DEFAULTS.moduleDirectories,
     }),
+    commonjs(),
     litScss({
       // Disable CSS minification in dev for readability and faster rebuilds
       minify: dev ? false : { fast: true },
@@ -146,6 +148,7 @@ export function getWatcherConfig(watchOptions) {
         "**/custom-elements.json",
         "**/demo/*.md",
         "**/demo/**/*.min.js",
+        "**/demo/**/*.min.css",
         "**/docs/api.md",
         "**/node_modules/**",
         "**/.git/**",

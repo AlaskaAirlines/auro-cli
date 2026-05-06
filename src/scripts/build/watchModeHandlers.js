@@ -2,7 +2,8 @@ import path from "node:path";
 import ora from "ora";
 import { rollup } from "rollup";
 import { analyzeComponents } from "#scripts/analyze.js";
-import { generateDocs } from "./bundleHandlers.js";
+import { registerWatcher, installShutdownHandler } from "#utils/shutdown.js";
+import { compileDemoScss, generateDocs } from "./bundleHandlers.js";
 
 // Track if any build is in progress to prevent overlapping operations
 let buildInProgress = false;
@@ -11,6 +12,7 @@ let buildInProgress = false;
 const builds = {
   analyze: { active: false, lastTime: 0 },
   docs: { active: false, lastTime: 0 },
+  scss: { active: false, lastTime: 0 },
 };
 
 // Minimum time between builds of the same type (in ms)
@@ -40,6 +42,7 @@ function isOutputFile(filePath) {
       OUTPUT_PATHS.some((outputPath) => normalizedPath.endsWith(outputPath)) ||
       normalizedPath.includes("/dist/") ||
       normalizedPath.endsWith(".min.js") ||
+      normalizedPath.endsWith(".min.css") ||
       normalizedPath.endsWith(".d.ts")
     );
   } catch (error) {
@@ -88,7 +91,7 @@ export async function handleWatcherEvents(
   // Track if this is the first build
   let isInitialBuild = true;
   // biome-ignore lint/style/useConst: This is an object that is mutated.
-  let buildTasksResults = {analyze: false, docs: false };
+  let buildTasksResults = {analyze: false, docs: false, scss: false };
   let scheduledTasksTimer = null;
   let bundleSpinner;
 
@@ -148,6 +151,21 @@ export async function handleWatcherEvents(
         console.error("Documentation rebuild error:", error);
       }
     },
+
+    // Function to compile demo SCSS
+    scss: async () => {
+      if (buildInProgress) {
+        return false;
+      }
+
+      try {
+        await compileDemoScss();
+        return true;
+      } catch (error) {
+        console.error("Demo SCSS compilation error:", error);
+        return false;
+      }
+    },
   };
 
   // Check if all initial build tasks completed successfully
@@ -156,6 +174,7 @@ export async function handleWatcherEvents(
       isInitialBuild &&
       buildTasksResults.analyze &&
       buildTasksResults.docs &&
+      buildTasksResults.scss &&
       typeof onInitialBuildComplete === "function"
     ) {
       isInitialBuild = false;
@@ -180,7 +199,11 @@ export async function handleWatcherEvents(
 
         setTimeout(async () => {
           buildTasksResults.docs = await runBuildTask("docs", buildTasks.docs);
-          checkInitialBuildComplete();
+
+          setTimeout(async () => {
+            buildTasksResults.scss = await runBuildTask("scss", buildTasks.scss);
+            checkInitialBuildComplete();
+          }, 500);
         }, 1000);
       }, 1000);
     }, delay);
@@ -258,14 +281,12 @@ export async function handleWatcherEvents(
 /**
  * Setup watch mode for rollup
  * @param {object} watcher - Rollup watcher instance
+ * @param {object} [scssWatcher] - Optional chokidar watcher for demo SCSS
  */
-export function setupWatchModeListeners(watcher) {
-  process.on("SIGINT", () => {
-    const closeSpinner = ora("Wrapping up...").start();
-    watcher.close();
-    closeSpinner.succeed("All done! See you next time. ✨");
-    process.exit(0);
-  });
+export function setupWatchModeListeners(watcher, scssWatcher) {
+  registerWatcher(watcher);
+  if (scssWatcher) registerWatcher(scssWatcher);
+  installShutdownHandler();
 
   return watcher;
 }
