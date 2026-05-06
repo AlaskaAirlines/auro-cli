@@ -1,8 +1,7 @@
 /* eslint-disable jsdoc/require-jsdoc, no-magic-numbers */
 
-import { Logger } from "@aurodesignsystem/auro-library/scripts/utils/logger.mjs";
-
 import fs from "node:fs";
+import { Logger } from "@aurodesignsystem/auro-library/scripts/utils/logger.mjs";
 
 function updateBuildApiScript() {
   try {

@@ -1,12 +1,12 @@
 import ora from "ora";
-import { shell } from "#utils/shell.js";
-import Docs from "./docs-generator.ts";
 import { configPath } from "#utils/pathUtils.js";
 import { copyReadmeToDemo } from "#utils/copyReadmeToDemo.js";
 import { registerWatcher, installShutdownHandler } from "#utils/shutdown.js";
 import { buildDemoBundle, compileDemoScss } from "../build/bundleHandlers.js";
+import { shell } from "#utils/shell.js";
 import { runDefaultDocsBuild } from "../build/defaultDocsBuild.js";
 import { startDevelopmentServer } from "../build/devServerUtils.js";
+import Docs from "./docs-generator.ts";
 
 export async function cem() {
   const cemSpinner = ora("Generating Custom Elements Manifest...").start();
@@ -20,7 +20,7 @@ export async function cem() {
   } catch (error) {
     // Check if the error is just the plugin issue but the manifest was still created
     const errorMessage = error instanceof Error ? error.message : String(error);
-    cemSpinner.warn('CEM analyzer completed with warnings: ' + errorMessage);
+    cemSpinner.warn("CEM analyzer completed with warnings: " + errorMessage);
   }
 }
 

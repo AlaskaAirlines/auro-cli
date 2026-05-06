@@ -1,6 +1,7 @@
 import { program } from "commander";
 import { api, cem, docs, serve, watchDocs } from "#scripts/docs/index.ts";
 import { withServerOptions } from "#commands/_sharedOptions.js";
+import { api, cem, docs, serve } from "#scripts/docs/index.ts";
 
 let docsCommand = program
   .command("docs")
@@ -13,24 +14,22 @@ let docsCommand = program
   
   docsCommand = withServerOptions(docsCommand);
 
-  export default docsCommand.action(async (options) => {
+export default docsCommand.action(async (options) => {
+  if (options.cem) {
+    await cem();
+  }
 
-    if (options.cem) {
-      await cem();
-    }
+  if (options.api) {
+    await api();
+  }
 
-    if (options.api) {
-      await api();
-    }
+  await docs(options);
 
-    await docs(options);
-
-    if( options.serve ) {
-        await serve(options);
-    }
-
+  if (options.serve) {
+    await serve(options);
+  }
     if (options.watch) {
         await watchDocs(options);
     }
 
-  });
+});

@@ -6,7 +6,6 @@ export const adoCommand = program
   .description("Generate ADO item from GitHub issue")
   .option("-g, --gh-issue <issue>", "What GitHub issue to use")
   .action(async (options) => {
-
     if (options.ghIssue) {
       await createADOItem(options.ghIssue);
     }

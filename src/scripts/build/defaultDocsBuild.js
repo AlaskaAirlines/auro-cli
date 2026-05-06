@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { Logger } from "@aurodesignsystem/auro-library/scripts/utils/logger.mjs";
 import {
   generateReadmeUrl,
@@ -142,7 +144,10 @@ export async function fileConfigs(config, skipReadme = false) {
  * @param {boolean} [skipReadme=false] - Whether to skip README.md processing.
  * @return {Promise<void>}
  */
-export async function processDocFiles(config = defaultDocsProcessorConfig, skipReadme = false) {
+export async function processDocFiles(
+  config = defaultDocsProcessorConfig,
+  skipReadme = false,
+) {
   // setup
   await templateFiller.extractNames();
 

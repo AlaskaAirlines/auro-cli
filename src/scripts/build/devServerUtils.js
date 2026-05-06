@@ -6,6 +6,7 @@ import { hmrPlugin } from "@web/dev-server-hmr";
 import * as esbuild from "esbuild";
 import ora from "ora";
 
+
 import { MODULE_DIRS } from "#scripts/build/paths.js";
 const WDS_OUTSIDE_ROOT_RE = /^\/__wds-outside-root__\/(\d+)\/(.+)$/;
 
