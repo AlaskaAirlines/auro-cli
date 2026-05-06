@@ -1,6 +1,6 @@
 import chalk from "chalk";
-import ora from "ora";
 import type { Ora } from "ora";
+import ora from "ora";
 import { Git } from "#utils/gitUtils.ts";
 import type { CommitInfo } from "./display-utils.ts";
 import { displayDebugView, getColoredType } from "./display-utils.ts";
@@ -15,40 +15,43 @@ const RELEASE_COMMIT_TYPES = ["feat", "fix", "breaking", "perf"];
  * @param commitList The list of commits to process
  * @param showLog Whether to show the commit count log (default: true)
  */
-export function generateReleaseNotes(commitList: CommitInfo[], showLog = true): string {
+export function generateReleaseNotes(
+  commitList: CommitInfo[],
+  showLog = true,
+): string {
   let releaseNotes = "### In this release\n";
 
   for (const commit of commitList) {
     // Format: - {short commit hash} {commit message}
     releaseNotes += `- ${commit.hash} ${commit.subject}\n`;
-    
+
     // Add extra commit message content if body exists
     if (commit.body?.trim()) {
       // Split body into meaningful chunks, handling different separators
       const bodyText = commit.body.trim();
-      
+
       // Split by common separators and clean up
       const bodyLines = bodyText
-        .split(/\n+/)  // Split on one or more newlines
-        .map(line => line.trim())
-        .filter(line => line.length > 0);
-      
+        .split(/\n+/) // Split on one or more newlines
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+
       for (const line of bodyLines) {
         // Handle issue references and add proper spacing
         let formattedLine = line;
-        
+
         // Add spaces before issue references like AlaskaAirlines/auro-cli#108
         formattedLine = formattedLine.replace(
-          /([^\s])(AlaskaAirlines\/[a-zA-Z0-9-]+#\d+)/g, 
-          '$1 $2'
+          /([^\s])(AlaskaAirlines\/[a-zA-Z0-9-]+#\d+)/g,
+          "$1 $2",
         );
-        
+
         // Add spaces between consecutive issue references
         formattedLine = formattedLine.replace(
-          /(AlaskaAirlines\/[a-zA-Z0-9-]+#\d+)([^\s])/g, 
-          '$1 $2'
+          /(AlaskaAirlines\/[a-zA-Z0-9-]+#\d+)([^\s])/g,
+          "$1 $2",
         );
-        
+
         releaseNotes += `  - ${formattedLine}`;
       }
     }
@@ -60,18 +63,25 @@ export function generateReleaseNotes(commitList: CommitInfo[], showLog = true): 
   }
 
   if (showLog) {
-    console.log(chalk.green(`✓ Generating release notes for ${commitList.length} commits`));
+    console.log(
+      chalk.green(
+        `✓ Generating release notes for ${commitList.length} commits`,
+      ),
+    );
   }
 
   return releaseNotes;
 }
 
-export function filterCommitList(commitList: CommitInfo[], fallbackCommits = true): CommitInfo[] {
+export function filterCommitList(
+  commitList: CommitInfo[],
+  fallbackCommits = true,
+): CommitInfo[] {
   // Filter for preferred commit types first
-  const releaseCommits = commitList.filter(commit => 
-    RELEASE_COMMIT_TYPES.includes(commit.type)
+  const releaseCommits = commitList.filter((commit) =>
+    RELEASE_COMMIT_TYPES.includes(commit.type),
   );
-  
+
   // Use filtered commits if any found, otherwise use all commits
   let commitsToShow;
 
@@ -80,7 +90,7 @@ export function filterCommitList(commitList: CommitInfo[], fallbackCommits = tru
   } else {
     commitsToShow = releaseCommits;
   }
-  
+
   if (commitsToShow.length === 0) {
     console.log("No commits found to include in release notes.\n");
   }

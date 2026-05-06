@@ -5,10 +5,7 @@ import {
   cleanupDist,
   generateDocs,
 } from "./bundleHandlers.js";
-import {
-  getDemoConfig,
-  getMainBundleConfig,
-} from "./configUtils.js";
+import { getDemoConfig, getMainBundleConfig } from "./configUtils.js";
 import { startDevelopmentServer } from "./devServerUtils.js";
 import {
   handleWatcherEvents,

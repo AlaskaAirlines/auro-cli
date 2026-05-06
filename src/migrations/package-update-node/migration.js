@@ -1,6 +1,6 @@
+import fs from "node:fs";
 import { Logger } from "@aurodesignsystem/auro-library/scripts/utils/logger.mjs";
 
-import fs from "node:fs";
 // import { path } from "path";
 
 // Run tasks sequentially

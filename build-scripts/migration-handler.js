@@ -1,6 +1,5 @@
 import crypto from "node:crypto";
-import fs from "node:fs";
-import { watch } from "node:fs";
+import fs, { watch } from "node:fs";
 import { dirname, join } from "node:path";
 import { build } from "esbuild";
 import ora from "ora";

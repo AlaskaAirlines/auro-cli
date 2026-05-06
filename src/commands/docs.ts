@@ -1,30 +1,28 @@
 import { program } from "commander";
-import { api, cem, docs, serve } from "#scripts/docs/index.ts";
 import { withServerOptions } from "#commands/_sharedOptions.js";
+import { api, cem, docs, serve } from "#scripts/docs/index.ts";
 
 let docsCommand = program
   .command("docs")
   .description("Generate API documentation")
   .option("-c, --cem", "Generate Custom Elements Manifest (CEM) file", false)
   .option("-a, --api", "Creates api md file from CEM", false)
-  .option("--skip-readme", "Skip README.md processing", false)
-  
-  docsCommand = withServerOptions(docsCommand);
+  .option("--skip-readme", "Skip README.md processing", false);
 
-  export default docsCommand.action(async (options) => {
+docsCommand = withServerOptions(docsCommand);
 
-    if (options.cem) {
-      await cem();
-    }
+export default docsCommand.action(async (options) => {
+  if (options.cem) {
+    await cem();
+  }
 
-    if (options.api) {
-      await api();
-    }
+  if (options.api) {
+    await api();
+  }
 
-    await docs(options);
+  await docs(options);
 
-    if( options.serve ) {
-        await serve(options);
-    }
-
-  });
+  if (options.serve) {
+    await serve(options);
+  }
+});

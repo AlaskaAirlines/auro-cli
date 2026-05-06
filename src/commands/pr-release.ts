@@ -2,8 +2,8 @@ import fs from "node:fs";
 import { get } from "node:https"; // Change to https
 import chalk from "chalk";
 import { program } from "commander";
-import ora from "ora";
 import type { Ora } from "ora";
+import ora from "ora";
 
 export default program
   .command("pr-release")

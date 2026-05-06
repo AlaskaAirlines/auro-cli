@@ -1,9 +1,12 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+// @ts-expect-error: No types available currently
+import {
+  processContentForFile,
+  templateFiller,
+} from "@aurodesignsystem/auro-library/scripts/utils/sharedFileProcessorUtils.mjs";
 import { Octokit } from "@octokit/rest";
 import ora from "ora";
-// @ts-expect-error: No types available currently
-import { processContentForFile, templateFiller } from "@aurodesignsystem/auro-library/scripts/utils/sharedFileProcessorUtils.mjs";
 
 // BELOW TYPES ARE COPIED DIRECTLY FROM THE LIBRARY
 // How can we import JSDoc types from the library?
@@ -18,17 +21,18 @@ import { processContentForFile, templateFiller } from "@aurodesignsystem/auro-li
 
 interface FileProcessorConfig {
   identifier: string;
-  input: string | {
-    remoteUrl: string;
-    fileName: string;
-    overwrite?: boolean;
-  };
+  input:
+    | string
+    | {
+        remoteUrl: string;
+        fileName: string;
+        overwrite?: boolean;
+      };
   output: string;
   mdMagicConfig?: Partial<any>;
   preProcessors?: Array<(contents: string) => string>;
   postProcessors?: Array<(contents: string) => string>;
 }
-
 
 /**
  * Get folder items from a repository-relative path.
@@ -37,22 +41,25 @@ interface FileProcessorConfig {
  */
 async function getFolderItemsFromRelativeRepoPath(path: string, ref: string) {
   const octokit = new Octokit({
-    auth: process.env.GITHUB_TOKEN || ''
+    auth: process.env.GITHUB_TOKEN || "",
   });
 
   try {
-    const response = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
-      ref,
-      owner: 'AlaskaAirlines',
-      repo: 'auro-templates',
-      path: path,
-      headers: {
-        'X-GitHub-Api-Version': '2022-11-28'
-      }
-    });
+    const response = await octokit.request(
+      "GET /repos/{owner}/{repo}/contents/{path}",
+      {
+        ref,
+        owner: "AlaskaAirlines",
+        repo: "auro-templates",
+        path: path,
+        headers: {
+          "X-GitHub-Api-Version": "2022-11-28",
+        },
+      },
+    );
 
     const responseData = response.data;
-    if (typeof responseData !== 'object' || !Array.isArray(responseData)) {
+    if (typeof responseData !== "object" || !Array.isArray(responseData)) {
       const errorMessage = `Unexpected response format: ${JSON.stringify(responseData)}`;
       const errorSpinner = ora().start();
       errorSpinner.fail(errorMessage);
@@ -63,7 +70,7 @@ async function getFolderItemsFromRelativeRepoPath(path: string, ref: string) {
   } catch (error: any) {
     const errorSpinner = ora().start();
     if (error.status === 404) {
-      errorSpinner.fail(`Template '${path.split('/')[1]}' not found`);
+      errorSpinner.fail(`Template '${path.split("/")[1]}' not found`);
     } else {
       errorSpinner.fail(`Error accessing template: ${error.message}`);
     }
@@ -90,32 +97,39 @@ async function processFolderItemsIntoFileConfigs({
   const fileConfigs: Array<FileProcessorConfig> = [];
 
   for (const item of folderItems) {
-    if (item.type == 'dir') {
-      const directorySpinner = ora(`Processing directory: ${item.path}`).start();
+    if (item.type == "dir") {
+      const directorySpinner = ora(
+        `Processing directory: ${item.path}`,
+      ).start();
 
-      const nestedFolderItems = await getFolderItemsFromRelativeRepoPath(item.path, ref);
-    
-      directorySpinner.succeed(`Found ${nestedFolderItems.length} additional items in ${item.path}`);
+      const nestedFolderItems = await getFolderItemsFromRelativeRepoPath(
+        item.path,
+        ref,
+      );
+
+      directorySpinner.succeed(
+        `Found ${nestedFolderItems.length} additional items in ${item.path}`,
+      );
 
       const nestedConfigs = await processFolderItemsIntoFileConfigs({
         folderItems: nestedFolderItems,
         templatePathToReplace,
         rootDir,
         ref,
-      })
+      });
 
       fileConfigs.push(...nestedConfigs);
 
       continue;
     }
 
-    const finalPath = item.path.replace(`${templatePathToReplace}/`, '');
+    const finalPath = item.path.replace(`${templatePathToReplace}/`, "");
     const outputPath = `${rootDir}/.github/${finalPath}`;
 
     const config = {
       identifier: item.name,
       input: {
-        remoteUrl: item.download_url || '',
+        remoteUrl: item.download_url || "",
         fileName: outputPath,
         overwrite: true,
       },
@@ -127,7 +141,6 @@ async function processFolderItemsIntoFileConfigs({
 
   return fileConfigs;
 }
-
 
 /**
  * Recursively removes a directory and all its contents.
@@ -154,37 +167,45 @@ async function removeDirectory(dirPath: string) {
  * @param {boolean} [isLast=true] - Whether this is the last item at the current level.
  * @returns {Promise<string>} A promise that resolves to the tree structure as a string.
  */
-async function generateDirectoryTree(dirPath: string, prefix: string = '', isLast: boolean = true): Promise<string> {
+async function generateDirectoryTree(
+  dirPath: string,
+  prefix = "",
+  isLast = true,
+): Promise<string> {
   try {
     const stats = await fs.stat(dirPath);
     const baseName = path.basename(dirPath);
-    
+
     if (!stats.isDirectory()) {
-      return `${prefix}${isLast ? '└── ' : '├── '}${baseName}\n`;
+      return `${prefix}${isLast ? "└── " : "├── "}${baseName}\n`;
     }
 
-    let result = `${prefix}${isLast ? '└── ' : '├── '}${baseName}/\n`;
-    
+    let result = `${prefix}${isLast ? "└── " : "├── "}${baseName}/\n`;
+
     try {
       const entries = await fs.readdir(dirPath);
       const sortedEntries = entries.sort();
-      
+
       for (let i = 0; i < sortedEntries.length; i++) {
         const entry = sortedEntries[i];
         const entryPath = path.join(dirPath, entry);
         const isLastEntry = i === sortedEntries.length - 1;
-        const newPrefix = prefix + (isLast ? '    ' : '│   ');
-        
-        result += await generateDirectoryTree(entryPath, newPrefix, isLastEntry);
+        const newPrefix = prefix + (isLast ? "    " : "│   ");
+
+        result += await generateDirectoryTree(
+          entryPath,
+          newPrefix,
+          isLastEntry,
+        );
       }
     } catch (readError) {
       // If we can't read the directory, just show it as a directory
-      result += `${prefix}${isLast ? '    ' : '│   '}└── [Permission denied or error reading directory]\n`;
+      result += `${prefix}${isLast ? "    " : "│   "}└── [Permission denied or error reading directory]\n`;
     }
-    
+
     return result;
   } catch (error) {
-    return `${prefix}${isLast ? '└── ' : '├── '}[Error: ${error}]\n`;
+    return `${prefix}${isLast ? "└── " : "├── "}[Error: ${error}]\n`;
   }
 }
 
@@ -195,7 +216,11 @@ async function generateDirectoryTree(dirPath: string, prefix: string = '', isLas
  * @param {string} template - The template based on which to sync.
  * @returns {Promise<void>} A promise that resolves when syncing is complete.
  */
-export async function syncDotGithubDir(rootDir: string, ref = 'main', template = 'default') {
+export async function syncDotGithubDir(
+  rootDir: string,
+  ref = "main",
+  template = "default",
+) {
   if (!rootDir) {
     const errorSpinner = ora().start();
     errorSpinner.fail("Root directory must be specified");
@@ -212,9 +237,12 @@ export async function syncDotGithubDir(rootDir: string, ref = 'main', template =
   }
 
   const templatesDefaultGithubPath = `templates/${template}/.github`;
-  
+
   // Validate template exists BEFORE removing anything
-  const folderItems = await getFolderItemsFromRelativeRepoPath(templatesDefaultGithubPath, ref);
+  const folderItems = await getFolderItemsFromRelativeRepoPath(
+    templatesDefaultGithubPath,
+    ref,
+  );
 
   // Only remove .github directory after successful template validation
   const githubPath = ".github";
@@ -234,7 +262,7 @@ export async function syncDotGithubDir(rootDir: string, ref = 'main', template =
     ref,
   });
 
-    // Process all files
+  // Process all files
   const processSpinner = ora("Processing all files...").start();
   try {
     await Promise.all(
@@ -245,7 +273,7 @@ export async function syncDotGithubDir(rootDir: string, ref = 'main', template =
     // Generate and display tree output of the rootDir directory
     const treeSpinner = ora("Generating directory tree...").start();
     try {
-      const githubDirPath = path.join(rootDir, '.github');
+      const githubDirPath = path.join(rootDir, ".github");
       const treeOutput = await generateDirectoryTree(githubDirPath);
       treeSpinner.succeed("Synced .github directory structure:");
       console.log(treeOutput);
@@ -253,7 +281,6 @@ export async function syncDotGithubDir(rootDir: string, ref = 'main', template =
       treeSpinner.fail(`Error generating directory tree: ${treeError.message}`);
       // Don't exit here since the main operation succeeded
     }
-
   } catch (error: any) {
     processSpinner.fail(`Error processing files: ${error.message}`);
     throw new Error(`Failed to process files: ${error.message}`);

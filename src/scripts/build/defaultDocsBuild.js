@@ -1,11 +1,11 @@
+import fs from "node:fs";
+import path from "node:path";
 import { Logger } from "@aurodesignsystem/auro-library/scripts/utils/logger.mjs";
 import {
   generateReadmeUrl,
   processContentForFile,
   templateFiller,
 } from "@aurodesignsystem/auro-library/scripts/utils/sharedFileProcessorUtils.mjs";
-import fs from "node:fs";
-import path from "node:path";
 
 const PAGE_TEMPLATE_PATH = "/docs/pages";
 
@@ -107,7 +107,10 @@ export async function fileConfigs(config, skipReadme = false) {
  * @param {boolean} [skipReadme=false] - Whether to skip README.md processing.
  * @return {Promise<void>}
  */
-export async function processDocFiles(config = defaultDocsProcessorConfig, skipReadme = false) {
+export async function processDocFiles(
+  config = defaultDocsProcessorConfig,
+  skipReadme = false,
+) {
   // setup
   await templateFiller.extractNames();
 
@@ -124,11 +127,14 @@ export async function processDocFiles(config = defaultDocsProcessorConfig, skipR
 }
 
 export async function runDefaultDocsBuild(options = {}) {
-  await processDocFiles({
-    ...defaultDocsProcessorConfig,
-    remoteReadmeUrl:
-      "https://raw.githubusercontent.com/AlaskaAirlines/auro-templates/main/templates/default/README.md",
-  }, options.skipReadme);
+  await processDocFiles(
+    {
+      ...defaultDocsProcessorConfig,
+      remoteReadmeUrl:
+        "https://raw.githubusercontent.com/AlaskaAirlines/auro-templates/main/templates/default/README.md",
+    },
+    options.skipReadme,
+  );
 }
 
 /**

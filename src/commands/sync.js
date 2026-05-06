@@ -1,13 +1,16 @@
-import process from "node:process";
-import { program } from "commander";
-
 import { readFile, writeFile } from "node:fs/promises";
+import process from "node:process";
 import { Logger } from "@aurodesignsystem/auro-library/scripts/utils/logger.mjs";
+import { program } from "commander";
 import { syncDotGithubDir } from "#scripts/syncDotGithubDir.js";
 
 export default program
   .command("sync")
-  .option("-r, --ref <branch/tag/commit>", "Git reference (branch/tag/commit) to use", "main")
+  .option(
+    "-r, --ref <branch/tag/commit>",
+    "Git reference (branch/tag/commit) to use",
+    "main",
+  )
   .option("-t, --template <name>", "Template based on which to sync", "default")
   .description(
     "Script runner to synchronize local repository configuration files",
@@ -33,7 +36,9 @@ export default program
         // CODEOWNERS - has a bizarre issue with line endings. This is a workaround!
         // Maybe it has to do with the file type since there's no ending?
         const codeownersPath = `${cwd}/.github/CODEOWNERS`;
-        const codeowners = await readFile(codeownersPath, { encoding: "utf-8" });
+        const codeowners = await readFile(codeownersPath, {
+          encoding: "utf-8",
+        });
 
         // Convert line endings to \n
         const codeownersFixed = codeowners
@@ -41,11 +46,16 @@ export default program
           .replace(/\n\n/gu, "\n");
         await writeFile(codeownersPath, codeownersFixed, { encoding: "utf-8" });
 
-        if (codeownersFixed.includes("\r") || codeownersFixed.includes("\n\n")) {
+        if (
+          codeownersFixed.includes("\r") ||
+          codeownersFixed.includes("\n\n")
+        ) {
           Logger.error("CODEOWNERS file still has Windows line endings.");
         }
       } catch (codeownersError) {
-        Logger.error(`Error processing CODEOWNERS file: ${codeownersError.message}`);
+        Logger.error(
+          `Error processing CODEOWNERS file: ${codeownersError.message}`,
+        );
         throw codeownersError;
       }
     } catch (error) {

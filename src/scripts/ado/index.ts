@@ -1,7 +1,7 @@
 import { Octokit } from "@octokit/rest";
 import * as azdev from "azure-devops-node-api";
-import ora from "ora";
 import type { WorkItem } from "azure-devops-node-api/interfaces/WorkItemTrackingInterfaces.js";
+import ora from "ora";
 
 interface GitHubIssue {
   title: string;
@@ -34,22 +34,26 @@ const fetchGitHubIssue = async (issueUrl: string): Promise<GitHubIssue> => {
   let issueNumberStr: string;
 
   // Parse the issue URL or reference
-  if (issueUrl.includes('github.com')) {
+  if (issueUrl.includes("github.com")) {
     // Full URL format: https://github.com/owner/repo/issues/123
-    const urlMatch = issueUrl.match(/github\.com\/([^\/]+)\/([^\/]+)\/issues\/(\d+)/);
+    const urlMatch = issueUrl.match(
+      /github\.com\/([^/]+)\/([^/]+)\/issues\/(\d+)/,
+    );
     if (!urlMatch) {
       throw new Error("Invalid GitHub issue URL format");
     }
     [, owner, repo, issueNumberStr] = urlMatch;
-  } else if (issueUrl.includes('#')) {
+  } else if (issueUrl.includes("#")) {
     // Short format: owner/repo#123
-    const shortMatch = issueUrl.match(/([^\/]+)\/([^#]+)#(\d+)/);
+    const shortMatch = issueUrl.match(/([^/]+)\/([^#]+)#(\d+)/);
     if (!shortMatch) {
       throw new Error("Invalid GitHub issue reference format");
     }
     [, owner, repo, issueNumberStr] = shortMatch;
   } else {
-    throw new Error("Issue must be provided as full URL or in format 'owner/repo#number'");
+    throw new Error(
+      "Issue must be provided as full URL or in format 'owner/repo#number'",
+    );
   }
 
   const issueNumber = Number.parseInt(issueNumberStr, 10);
@@ -81,7 +85,9 @@ const fetchGitHubIssue = async (issueUrl: string): Promise<GitHubIssue> => {
  * @param issue - GitHub issue details
  * @returns ADO URL if found, null otherwise
  */
-const getExistingADOLink = async (issue: GitHubIssue): Promise<string | null> => {
+const getExistingADOLink = async (
+  issue: GitHubIssue,
+): Promise<string | null> => {
   const ghToken = process.env.GH_TOKEN;
   if (!ghToken) {
     return null;
@@ -127,7 +133,7 @@ const getExistingADOLink = async (issue: GitHubIssue): Promise<string | null> =>
       issueNumber: issue.number,
     };
 
-    const response = await octokit.graphql(query, variables) as {
+    const response = (await octokit.graphql(query, variables)) as {
       repository: {
         issue: {
           projectItems: {
@@ -147,12 +153,14 @@ const getExistingADOLink = async (issue: GitHubIssue): Promise<string | null> =>
 
     // Look for project #19 with ado field
     const project19Item = response.repository.issue.projectItems.nodes.find(
-      item => item.project.number === 19
+      (item) => item.project.number === 19,
     );
 
     if (project19Item) {
       const adoFieldValue = project19Item.fieldValues.nodes.find(
-        fieldValue => fieldValue.field?.name?.toLowerCase() === 'ado' && fieldValue.text?.trim()
+        (fieldValue) =>
+          fieldValue.field?.name?.toLowerCase() === "ado" &&
+          fieldValue.text?.trim(),
       );
 
       if (adoFieldValue?.text?.trim()) {
@@ -174,7 +182,7 @@ const getExistingADOLink = async (issue: GitHubIssue): Promise<string | null> =>
  */
 const updateGitHubProject = async (
   issue: GitHubIssue,
-  adoWorkItemUrl: string
+  adoWorkItemUrl: string,
 ): Promise<void> => {
   const ghToken = process.env.GH_TOKEN;
   if (!ghToken) {
@@ -236,7 +244,7 @@ const updateGitHubProject = async (
       issueNumber: issue.number,
     };
 
-    const response = await octokit.graphql(query, variables) as {
+    const response = (await octokit.graphql(query, variables)) as {
       organization: {
         projectV2: {
           id: string;
@@ -261,12 +269,12 @@ const updateGitHubProject = async (
     const projectId = response.organization.projectV2.id;
     const issueId = response.repository.issue.id;
     const adoField = response.organization.projectV2.fields.nodes.find(
-      field => field.name?.toLowerCase() === 'ado'
+      (field) => field.name?.toLowerCase() === "ado",
     );
 
     // Check if issue is already in the project
     let projectItemId = response.repository.issue.projectItems.nodes.find(
-      item => item.project.number === projectNumber
+      (item) => item.project.number === projectNumber,
     )?.id;
 
     // Add to project if not already there
@@ -286,10 +294,10 @@ const updateGitHubProject = async (
         }
       `;
 
-      const addResponse = await octokit.graphql(addMutation, {
+      const addResponse = (await octokit.graphql(addMutation, {
         projectId,
         contentId: issueId,
-      }) as {
+      })) as {
         addProjectV2ItemById: {
           item: { id: string };
         };
@@ -331,7 +339,6 @@ const updateGitHubProject = async (
     } else if (!adoField) {
       throw new Error("No 'ado' field found in GitHub project");
     }
-
   } catch (error) {
     console.error(`Failed to update GitHub project: ${error}`);
     // Don't throw - we don't want to fail the entire process
@@ -383,7 +390,7 @@ const createADOWorkItem = async (issue: GitHubIssue): Promise<WorkItem> => {
       null,
       workItemData,
       projectName,
-      "User Story"
+      "User Story",
     );
   } catch (error) {
     throw new Error(`Failed to create ADO work item: ${error}`);
@@ -392,7 +399,7 @@ const createADOWorkItem = async (issue: GitHubIssue): Promise<WorkItem> => {
 
 export const createADOItem = async (ghIssue: string) => {
   const spinner = ora(`Processing GitHub issue: ${ghIssue}`).start();
-  
+
   try {
     // Validate environment variables
     if (!process.env.GH_TOKEN) {
@@ -409,29 +416,31 @@ export const createADOItem = async (ghIssue: string) => {
     // Check if issue already has an ADO work item linked in the project
     const checkSpinner = ora("Checking for existing ADO work item...").start();
     const existingADOLink = await getExistingADOLink(issue);
-    
+
     if (existingADOLink) {
       checkSpinner.succeed("ADO work item already exists for this issue!");
       console.log(`${existingADOLink}`);
       return; // Exit early - no need to create a new work item
     }
-    
+
     checkSpinner.succeed("No existing ADO work item found");
 
     const createSpinner = ora("Creating new ADO work item...").start();
     const workItem = await createADOWorkItem(issue);
     createSpinner.succeed(`Successfully created ADO work item #${workItem.id}`);
-    
-    console.log(`Work item: ${workItem._links?.html?.href || 'N/A'}`);
+
+    console.log(`Work item: ${workItem._links?.html?.href || "N/A"}`);
 
     // Add to GitHub project and update the ado field with the new work item
     if (workItem._links?.html?.href) {
-      const projectSpinner = ora("Adding to GitHub project and updating ADO field...").start();
+      const projectSpinner = ora(
+        "Adding to GitHub project and updating ADO field...",
+      ).start();
       await updateGitHubProject(issue, workItem._links.html.href);
       projectSpinner.succeed("Updated GitHub project with ADO link");
-    }    
+    }
   } catch (error) {
     spinner.fail(`Error: ${error instanceof Error ? error.message : error}`);
     process.exit(1);
   }
-}
+};

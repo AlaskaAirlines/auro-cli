@@ -1,7 +1,7 @@
 import { appendFile, readFile } from "node:fs/promises";
 import { Logger } from "@aurodesignsystem/auro-library/scripts/utils/logger.mjs";
-import { simpleGit } from "simple-git";
 import type { SimpleGit } from "simple-git";
+import { simpleGit } from "simple-git";
 
 // Initialize simple-git with proper typing
 let git: SimpleGit;
@@ -75,7 +75,8 @@ export class Git {
           }
 
           // Use remote refs consistently since we're in CI
-          const sourceBranchRef = branch === "HEAD" ? "HEAD" : `origin/${branch}`;
+          const sourceBranchRef =
+            branch === "HEAD" ? "HEAD" : `origin/${branch}`;
 
           // Use the merge base between target branch and source branch to get commits
           const mergeBase = await git.raw([
@@ -89,7 +90,8 @@ export class Git {
         } catch (error) {
           Logger.warn(`Error setting up commit range in CI: ${error}`);
           // Fall back to simpler approach (just compare with origin/targetBranch)
-          const sourceBranchRef = branch === "HEAD" ? "HEAD" : `origin/${branch}`;
+          const sourceBranchRef =
+            branch === "HEAD" ? "HEAD" : `origin/${branch}`;
           commitRange = `origin/${targetBranch}..${sourceBranchRef}`;
         }
       } else {
@@ -137,18 +139,22 @@ export class Git {
     }
   }
 
-  static async getRepoOwnerAndName(): Promise<{ owner: string; repo: string } | null> {
+  static async getRepoOwnerAndName(): Promise<{
+    owner: string;
+    repo: string;
+  } | null> {
     try {
       // Get remote URLs
       const remotes = await git.getRemotes(true);
-      
+
       if (remotes.length === 0) {
         Logger.warn("No remotes found");
         return null;
       }
 
       // Get the origin remote (or first available)
-      const originRemote = remotes.find(remote => remote.name === 'origin') || remotes[0];
+      const originRemote =
+        remotes.find((remote) => remote.name === "origin") || remotes[0];
       const remoteUrl = originRemote.refs.fetch || originRemote.refs.push;
 
       return Git.parseGitUrl(remoteUrl);
@@ -168,7 +174,9 @@ export class Git {
     }
   }
 
-  private static parseGitUrl(url: string): { owner: string; repo: string } | null {
+  private static parseGitUrl(
+    url: string,
+  ): { owner: string; repo: string } | null {
     // Handle different URL formats
     // SSH: git@github.com:owner/repo.git
     // HTTPS: https://github.com/owner/repo.git
@@ -177,7 +185,7 @@ export class Git {
     let match: RegExpMatchArray | null;
 
     // SSH format
-    if (url.includes('@') && url.includes(':')) {
+    if (url.includes("@") && url.includes(":")) {
       match = url.match(/@([^:]+):([^/]+)\/(.+?)(?:\.git)?$/);
       if (match) {
         return { owner: match[2], repo: match[3] };

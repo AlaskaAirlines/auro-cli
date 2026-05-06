@@ -88,7 +88,7 @@ export async function handleWatcherEvents(
   // Track if this is the first build
   let isInitialBuild = true;
   // biome-ignore lint/style/useConst: This is an object that is mutated.
-  let buildTasksResults = {analyze: false, docs: false };
+  let buildTasksResults = { analyze: false, docs: false };
   let scheduledTasksTimer = null;
   let bundleSpinner;
 
