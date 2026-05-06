@@ -12,7 +12,11 @@ export const versionScanCommand = program
   .description(
     "Scan a GitHub org for repos using outdated Auro packages and write upgrade candidates JSON.",
   )
-  .option("--org <name>", "GitHub org to scan", "Alaska-ECommerce")
+  .option(
+    "--org <name>",
+    "GitHub org to scan (overrides ECOM_ORG env var)",
+    process.env.ECOM_ORG ?? "Alaska-ECommerce",
+  )
   .option(
     "--force",
     "Re-scan all repos, ignoring the pushed_at incremental short-circuit",
