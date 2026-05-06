@@ -16,6 +16,7 @@ import "#commands/docs.ts";
 import "#commands/ado.ts";
 import "#commands/rc-workflow.ts";
 import "#commands/version-scan.ts";
+import "#commands/version-tickets.ts";
 
 program
   .name("auro")
