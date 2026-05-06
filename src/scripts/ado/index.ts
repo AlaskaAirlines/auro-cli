@@ -345,12 +345,23 @@ const updateGitHubProject = async (
   }
 };
 
+export interface CreateADOWorkItemInput {
+  title: string;
+  descriptionHtml: string;
+  tags?: string[];
+}
+
 /**
- * Creates a user story work item in Azure DevOps
- * @param issue - GitHub issue details
- * @returns Created work item
+ * Creates a User Story work item in Azure DevOps under the
+ * E_Retain_Content\Auro Design System area path.
+ *
+ * Generic over input source — the GitHub-issue path supplies its own
+ * title + description, and Phase 5's version-tickets command does the same
+ * with its generated upgrade story.
  */
-const createADOWorkItem = async (issue: GitHubIssue): Promise<WorkItem> => {
+export const createADOWorkItem = async (
+  input: CreateADOWorkItemInput,
+): Promise<WorkItem> => {
   const adoToken = process.env.ADO_TOKEN;
   if (!adoToken) {
     throw new Error("ADO_TOKEN environment variable is required");
@@ -368,16 +379,16 @@ const createADOWorkItem = async (issue: GitHubIssue): Promise<WorkItem> => {
 
   try {
     // Prepare work item data - omitting iteration path to use project default
-    const workItemData = [
+    const workItemData: Array<{ op: string; path: string; value: string }> = [
       {
         op: "add",
         path: "/fields/System.Title",
-        value: issue.title,
+        value: input.title,
       },
       {
         op: "add",
         path: "/fields/System.Description",
-        value: `GitHub Issue: <a href="${issue.html_url}">${issue.html_url}</a>`,
+        value: input.descriptionHtml,
       },
       {
         op: "add",
@@ -385,6 +396,14 @@ const createADOWorkItem = async (issue: GitHubIssue): Promise<WorkItem> => {
         value: areaPath,
       },
     ];
+
+    if (input.tags && input.tags.length > 0) {
+      workItemData.push({
+        op: "add",
+        path: "/fields/System.Tags",
+        value: input.tags.join("; "),
+      });
+    }
 
     return await workItemTrackingApi.createWorkItem(
       null,
@@ -426,7 +445,10 @@ export const createADOItem = async (ghIssue: string) => {
     checkSpinner.succeed("No existing ADO work item found");
 
     const createSpinner = ora("Creating new ADO work item...").start();
-    const workItem = await createADOWorkItem(issue);
+    const workItem = await createADOWorkItem({
+      title: issue.title,
+      descriptionHtml: `GitHub Issue: <a href="${issue.html_url}">${issue.html_url}</a>`,
+    });
     createSpinner.succeed(`Successfully created ADO work item #${workItem.id}`);
 
     console.log(`Work item: ${workItem._links?.html?.href || "N/A"}`);
