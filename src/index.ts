@@ -15,6 +15,7 @@ import "#commands/agent.ts";
 import "#commands/docs.ts";
 import "#commands/ado.ts";
 import "#commands/rc-workflow.ts";
+import "#commands/version-scan.ts";
 
 program
   .name("auro")
