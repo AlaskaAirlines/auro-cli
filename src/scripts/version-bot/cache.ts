@@ -1,33 +1,45 @@
 import fs from "node:fs";
 import path from "node:path";
-import { withHomeDir } from "#utils/pathUtils.js";
 import type { ScanCache, UpgradeCandidate } from "./types.ts";
 
-const VERSION_BOT_DIR = "version-bot";
 const SCAN_CACHE_FILE = "auro-deps-by-ecommerce-repo.json";
 const UPGRADE_CANDIDATES_FILE = "auro-upgrade-candidates.json";
 
-export function versionBotDir(): string {
-  return withHomeDir(VERSION_BOT_DIR);
+/**
+ * Default output dir for the version-bot — project-local under the cwd.
+ * Matches the existing `.cache/` convention already in auro-cli's
+ * .gitignore. Override at the CLI layer with --output-dir / --candidates.
+ */
+const DEFAULT_OUTPUT_SUBPATH = path.join(".cache", "version-bot");
+
+export function defaultOutputDir(): string {
+  return path.resolve(process.cwd(), DEFAULT_OUTPUT_SUBPATH);
 }
 
-export function scanCachePath(): string {
-  return withHomeDir(VERSION_BOT_DIR, SCAN_CACHE_FILE);
+function resolveOutputDir(dir?: string): string {
+  return dir ? path.resolve(dir) : defaultOutputDir();
 }
 
-export function upgradeCandidatesPath(): string {
-  return withHomeDir(VERSION_BOT_DIR, UPGRADE_CANDIDATES_FILE);
+export function versionBotDir(dir?: string): string {
+  return resolveOutputDir(dir);
 }
 
-function ensureDir(): void {
-  const dir = versionBotDir();
+export function scanCachePath(dir?: string): string {
+  return path.join(resolveOutputDir(dir), SCAN_CACHE_FILE);
+}
+
+export function upgradeCandidatesPath(dir?: string): string {
+  return path.join(resolveOutputDir(dir), UPGRADE_CANDIDATES_FILE);
+}
+
+function ensureDir(dir: string): void {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
 }
 
-export function readScanCache(): ScanCache {
-  const file = scanCachePath();
+export function readScanCache(dir?: string): ScanCache {
+  const file = scanCachePath(dir);
   if (!fs.existsSync(file)) {
     return { version: 1, lastFullScan: null, repos: {} };
   }
@@ -42,22 +54,25 @@ export function readScanCache(): ScanCache {
   return { version: 1, lastFullScan: null, repos: {} };
 }
 
-export function writeScanCache(cache: ScanCache): void {
-  ensureDir();
+export function writeScanCache(cache: ScanCache, dir?: string): void {
+  ensureDir(resolveOutputDir(dir));
   cache.lastFullScan = new Date().toISOString();
-  fs.writeFileSync(scanCachePath(), JSON.stringify(cache, null, 2));
+  fs.writeFileSync(scanCachePath(dir), JSON.stringify(cache, null, 2));
 }
 
-export function writeUpgradeCandidates(candidates: UpgradeCandidate[]): void {
-  ensureDir();
+export function writeUpgradeCandidates(
+  candidates: UpgradeCandidate[],
+  dir?: string,
+): void {
+  ensureDir(resolveOutputDir(dir));
   fs.writeFileSync(
-    upgradeCandidatesPath(),
+    upgradeCandidatesPath(dir),
     JSON.stringify(candidates, null, 2),
   );
 }
 
-export function readUpgradeCandidates(): UpgradeCandidate[] {
-  const file = upgradeCandidatesPath();
+export function readUpgradeCandidates(dir?: string): UpgradeCandidate[] {
+  const file = upgradeCandidatesPath(dir);
   if (!fs.existsSync(file)) {
     throw new Error(
       `Upgrade candidates file not found at ${file}. Run \`auro version-scan\` first.`,
@@ -66,9 +81,14 @@ export function readUpgradeCandidates(): UpgradeCandidate[] {
   return JSON.parse(fs.readFileSync(file, "utf8")) as UpgradeCandidate[];
 }
 
-export function relativeToHome(filePath: string): string {
-  const home = path.dirname(path.dirname(filePath));
-  return filePath.startsWith(home)
-    ? `~${filePath.slice(home.length)}`
-    : filePath;
+/**
+ * Format a path for human display: prefer cwd-relative when the path is
+ * inside the project, fall back to absolute otherwise.
+ */
+export function displayPath(filePath: string): string {
+  const rel = path.relative(process.cwd(), filePath);
+  if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) {
+    return filePath;
+  }
+  return `./${rel}`;
 }

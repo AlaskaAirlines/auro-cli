@@ -97,7 +97,7 @@ auro dev --open src/
 ```
 
 `auro version-scan`
-Scans a GitHub organization for repos using outdated `@aurodesignsystem/*` and `@alaskaairux/*` packages, and writes two JSON files under `~/.auro/version-bot/`:
+Scans a GitHub organization for repos using outdated `@aurodesignsystem/*` and `@alaskaairux/*` packages, and writes two JSON files under `./.cache/version-bot/`:
 
 - `auro-deps-by-ecommerce-repo.json` — full per-repo Auro dependency snapshot (incremental, keyed by `pushed_at`).
 - `auro-upgrade-candidates.json` — flat list of `(repo, package, pinned, latest, majorsBehind)` rows for every pair at least one major version behind. This is the input to `auro version-tickets`.
@@ -112,6 +112,7 @@ Re-runs are incremental — repos whose `pushed_at` matches the cache are skippe
 
 - `--org <name>` GitHub org to scan (default: value of `ECOM_ORG` env var, or `Alaska-ECommerce`).
 - `--force` Re-scan every repo, ignoring the `pushed_at` incremental short-circuit (default: false).
+- `--output-dir <dir>` Directory to write the cache + candidates JSON (default: `./.cache/version-bot/`). Override for CI artifact paths or one-off runs.
 
 #### Examples
 
@@ -128,7 +129,7 @@ auro version-scan --org SomeOtherOrg --force
 ```
 
 `auro version-tickets`
-Reads `~/.auro/version-bot/auro-upgrade-candidates.json` (produced by `auro version-scan`) and creates an Azure DevOps User Story per `(repo, package)` upgrade candidate under `E_Retain_Content\Auro Design System`. Defaults to dry-run; pass `--apply` to actually write to ADO. Every ticket is tagged `auro`, `version-upgrade`, and `majors-behind-<n>`.
+Reads `./.cache/version-bot/auro-upgrade-candidates.json` (produced by `auro version-scan`) and creates an Azure DevOps User Story per `(repo, package)` upgrade candidate under `E_Retain_Content\Auro Design System`. Defaults to dry-run; pass `--apply` to actually write to ADO. Every ticket is tagged `auro`, `version-upgrade`, and `majors-behind-<n>`.
 
 #### Required environment variables
 
