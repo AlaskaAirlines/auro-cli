@@ -348,6 +348,7 @@ const updateGitHubProject = async (
 export interface CreateADOWorkItemInput {
   title: string;
   descriptionHtml: string;
+  acceptanceCriteriaHtml?: string;
   tags?: string[];
 }
 
@@ -396,6 +397,14 @@ export const createADOWorkItem = async (
         value: areaPath,
       },
     ];
+
+    if (input.acceptanceCriteriaHtml) {
+      workItemData.push({
+        op: "add",
+        path: "/fields/Microsoft.VSTS.Common.AcceptanceCriteria",
+        value: input.acceptanceCriteriaHtml,
+      });
+    }
 
     if (input.tags && input.tags.length > 0) {
       workItemData.push({

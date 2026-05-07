@@ -287,6 +287,42 @@ npm run check-tokens
 Read-only; never echoes the token values; reports pass/fail with metadata
 (your GitHub username, the ADO project name, work item type list).
 
+### Token rotation
+
+Both PATs expire (Alaska's max for the ADO PAT is 90 days; GitHub PATs you
+set yourself). The right way to rotate is to overlap the new and old PATs
+briefly so you never hit a window where neither works.
+
+**For your local `.env`:**
+
+1. **Generate the replacement PAT before the existing one expires.** Same
+   URLs and scopes as the first-time setup section in `README.md`.
+2. **Edit `.env`** and replace the `GH_TOKEN=` or `ADO_TOKEN=` value with
+   the new token. (Keep the old value in a password manager temporarily
+   in case you need to roll back.)
+3. **Validate:** `npm run check-tokens`. Should print `valid as <you>` for
+   GH_TOKEN and `valid against itsals/E_Retain_Content` for ADO_TOKEN.
+4. **Smoke test:** dry-run scenario 1 to confirm the new GH_TOKEN actually
+   works against real GitHub APIs:
+   ```bash
+   node ./dist/auro-cli.js version-tickets \
+     --candidates ./test-fixtures/version-bot/scenario-1-clean-upgrade.json \
+     --preview-dir ./test-fixtures/version-bot/preview-output \
+     --min-majors 1
+   ```
+   Look for `changelog: inlined` (green). If it falls back to `link only`,
+   the new GH_TOKEN doesn't have the required `repo` scope — regenerate.
+5. **Revoke the old PAT** in GitHub and ADO once the new ones are
+   confirmed working. Don't skip this step — old PATs that "still work"
+   eventually leak.
+
+**For CI / scheduled automation:** the same rotation pattern applies, but
+the secret store (GitHub Actions repository secrets, Azure Pipelines
+variable groups) is the source of truth instead of `.env`. Update the
+secret store first, redeploy / re-run the workflow once to confirm, then
+revoke. This is deferred work — see [Tier 3 in `project-plan.md`](./project-plan.md)
+for the full automation track.
+
 ---
 
 ## Known gaps

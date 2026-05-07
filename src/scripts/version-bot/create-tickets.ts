@@ -5,7 +5,11 @@ import { createADOWorkItem } from "#scripts/ado/index.ts";
 import { readUpgradeCandidates } from "./cache.ts";
 import { fetchChangelogSlice } from "./changelog.ts";
 import { writePreviewFile } from "./html-preview.ts";
-import { buildStoryBody, buildStoryTitle } from "./template.ts";
+import {
+  buildAcceptanceCriteria,
+  buildStoryBody,
+  buildStoryTitle,
+} from "./template.ts";
 import type { UpgradeCandidate } from "./types.ts";
 
 export interface CreateTicketsOptions {
@@ -89,6 +93,9 @@ async function processCandidate(
     changelogHtml,
     changelogUrl,
   });
+  const acceptanceCriteriaHtml = buildAcceptanceCriteria(candidate);
+
+  warnIfBodyTooLong(title, descriptionHtml);
 
   if (!options.apply) {
     console.log("");
@@ -98,11 +105,15 @@ async function processCandidate(
       `  ${chalk.dim("changelog:")} ${changelogHtml ? chalk.green("inlined") : chalk.yellow("link only")}`,
     );
     console.log(`  ${chalk.dim("body:")}      ${descriptionHtml.length} chars`);
+    console.log(
+      `  ${chalk.dim("AC:")}        ${acceptanceCriteriaHtml.length} chars`,
+    );
     if (options.previewDir) {
       const filePath = writePreviewFile(options.previewDir, {
         candidate,
         title,
         bodyHtml: descriptionHtml,
+        acceptanceCriteriaHtml,
         tags,
         changelogInlined: changelogHtml !== null,
       });
@@ -117,6 +128,7 @@ async function processCandidate(
     const workItem = await createADOWorkItem({
       title,
       descriptionHtml,
+      acceptanceCriteriaHtml,
       tags,
     });
     const url = workItem._links?.html?.href ?? "(no URL returned)";
@@ -133,4 +145,19 @@ async function processCandidate(
 function buildChangelogUrl(pkg: string): string {
   const shortName = pkg.replace(/^@[^/]+\//, "");
   return `https://github.com/AlaskaAirlines/${shortName}/blob/main/CHANGELOG.md`;
+}
+
+// ADO accepts up to ~1 MB for System.Description, but rendering performance
+// suffers well before that. Flag anything noticeably large so the user can
+// decide whether to truncate the changelog slice manually.
+const BODY_LENGTH_WARN_THRESHOLD = 50_000;
+
+function warnIfBodyTooLong(title: string, descriptionHtml: string): void {
+  if (descriptionHtml.length > BODY_LENGTH_WARN_THRESHOLD) {
+    console.log(
+      chalk.yellow(
+        `  ⚠  ${title}: description body is ${descriptionHtml.length} chars (> ${BODY_LENGTH_WARN_THRESHOLD}). ADO will accept it, but rendering may be slow. Consider hand-trimming the candidates JSON or breaking the upgrade into smaller jumps.`,
+      ),
+    );
+  }
 }

@@ -6,6 +6,7 @@ export interface PreviewInput {
   candidate: UpgradeCandidate;
   title: string;
   bodyHtml: string;
+  acceptanceCriteriaHtml: string;
   tags: string[];
   changelogInlined: boolean;
 }
@@ -39,7 +40,14 @@ function sanitize(s: string): string {
 }
 
 function renderHtml(input: PreviewInput): string {
-  const { candidate, title, bodyHtml, tags, changelogInlined } = input;
+  const {
+    candidate,
+    title,
+    bodyHtml,
+    acceptanceCriteriaHtml,
+    tags,
+    changelogInlined,
+  } = input;
   const tagPills = tags
     .map((t) => `<span class="tag">${escapeHtml(t)}</span>`)
     .join(" ");
@@ -88,6 +96,8 @@ function renderHtml(input: PreviewInput): string {
   </div>
   <hr>
   ${bodyHtml}
+  <h3>Acceptance criteria</h3>
+  ${acceptanceCriteriaHtml}
 </body>
 </html>
 `;
