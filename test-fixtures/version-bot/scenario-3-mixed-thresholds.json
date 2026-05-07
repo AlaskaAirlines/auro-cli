@@ -1,0 +1,26 @@
+[
+  {
+    "repo": "fixture-mixed-app-a",
+    "package": "@aurodesignsystem/auro-button",
+    "pinned": "10.5.0",
+    "latest": "11.5.1",
+    "majorsBehind": 1,
+    "repoUrl": "https://github.com/Alaska-ECommerce/fixture-mixed-app-a"
+  },
+  {
+    "repo": "fixture-mixed-app-b",
+    "package": "@aurodesignsystem/auro-input",
+    "pinned": "3.2.0",
+    "latest": "5.1.0",
+    "majorsBehind": 2,
+    "repoUrl": "https://github.com/Alaska-ECommerce/fixture-mixed-app-b"
+  },
+  {
+    "repo": "fixture-mixed-app-c",
+    "package": "@alaskaairux/icons",
+    "pinned": "4.0.1",
+    "latest": "7.0.0",
+    "majorsBehind": 3,
+    "repoUrl": "https://github.com/Alaska-ECommerce/fixture-mixed-app-c"
+  }
+]

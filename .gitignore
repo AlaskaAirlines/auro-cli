@@ -11,3 +11,9 @@ dist/
 ## Code coverage reports
 coverage/
 .secrets
+
+## Local environment file — never commit PATs
+.env
+
+## Generated test scenario output
+test-fixtures/version-bot/preview-output/

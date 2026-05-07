@@ -1,0 +1,10 @@
+[
+  {
+    "repo": "fixture-link-fallback",
+    "package": "@aurodesignsystem/this-package-does-not-exist",
+    "pinned": "1.0.0",
+    "latest": "3.0.0",
+    "majorsBehind": 2,
+    "repoUrl": "https://github.com/Alaska-ECommerce/fixture-link-fallback"
+  }
+]

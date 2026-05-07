@@ -12,6 +12,7 @@ Auro CLI is a command-line interface designed to help consumers of the Auro Desi
 ## Table of Contents
 
 - [Installation](#installation)
+- [First time setup](#first-time-setup)
 - [Usage](#usage)
 - [Commands](#commands)
 - [Options](#options)
@@ -24,6 +25,42 @@ To install Auro CLI, clone the repository and install the dependencies:
 ```bash
 npm install @aurodesignsystem/auro-cli
 ```
+
+## First time setup
+
+Some commands talk to GitHub or Azure DevOps and need Personal Access Tokens.
+The CLI auto-loads variables from a `.env` file in your **current working
+directory**, so each user manages their own tokens locally.
+
+1. Copy the template into a real `.env`:
+
+   ```bash
+   cp .env.example .env
+   ```
+
+   `.env` is gitignored — never commit it.
+
+2. Generate a **GitHub PAT** at <https://github.com/settings/tokens> →
+   *Personal access tokens (classic)* → *Generate new token (classic)*.
+   - Scope: `repo` (read access to private repos and CHANGELOG content).
+   - You also need read access to the `Alaska-ECommerce` and
+     `AlaskaAirlines` orgs.
+   - Paste the token into `GH_TOKEN=` in your `.env`.
+
+3. Generate an **Azure DevOps PAT** at
+   <https://dev.azure.com/itsals/_usersSettings/tokens> → *+ New Token*.
+   - Organization: `itsals`.
+   - Scope: *Custom defined* → **Work Items: Read, write, & manage**.
+   - Paste the token into `ADO_TOKEN=` in your `.env`.
+
+4. (Optional) Override `ECOM_ORG` in `.env` if you want `auro version-scan`
+   to default to a different GitHub org than `Alaska-ECommerce`.
+
+For CI / scheduled automation, skip the `.env` file entirely — export the
+same variables from your CI's secret store (GitHub Actions secrets, Azure
+Pipelines variables marked secret, etc.) and the CLI will read them
+directly. Use a dedicated bot/service-account PAT for automation, not a
+personal one.
 
 ## Usage
 
