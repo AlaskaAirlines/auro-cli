@@ -6,6 +6,29 @@ export interface StoryBodyInput {
   changelogUrl: string;
 }
 
+/**
+ * Default acceptance criteria for an Auro version-upgrade story. Each bullet
+ * is independently verifiable — pass/fail is unambiguous to a reviewer.
+ * Reviewers can edit or extend this list per ticket; the goal here is to
+ * give every auto-created story a usable starting point so no human has
+ * to fill it in by hand.
+ */
+export function buildAcceptanceCriteria(c: UpgradeCandidate): string {
+  const pkg = escapeHtml(c.package);
+  const latest = escapeHtml(c.latest);
+  return [
+    "<ul>",
+    `  <li>Update <code>${pkg}</code> to <code>${latest}</code> in the consumer's <code>package.json</code> (and lockfile).</li>`,
+    "  <li><code>npm ci</code> succeeds with no peer-dep warnings or lockfile drift caused by the upgrade.</li>",
+    "  <li>Build / TypeScript compile passes with no new errors introduced by the upgrade.</li>",
+    "  <li>Lint passes (no new violations).</li>",
+    "  <li>Existing test suite passes.</li>",
+    `  <li>Manual smoke check: every UI surface using <code>${pkg}</code> renders without new console errors and matches the prior visual baseline (or the deliberate change called out in the migration guide).</li>`,
+    "  <li>Each breaking change called out in the migration guide above is addressed in the diff or explicitly noted as not-applicable in the PR description.</li>",
+    "</ul>",
+  ].join("\n");
+}
+
 export function buildStoryTitle(c: UpgradeCandidate): string {
   const plural = c.majorsBehind > 1 ? "s" : "";
   return `Upgrade ${c.package} in ${c.repo} (${c.pinned} -> ${c.latest}, ${c.majorsBehind} major${plural} behind)`;
