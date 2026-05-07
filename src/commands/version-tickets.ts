@@ -30,7 +30,7 @@ export const versionTicketsCommand = program
   .option("--repo <name>", "Only process candidates from this consumer repo")
   .option(
     "--candidates <file>",
-    "Read candidates from a custom JSON file instead of ~/.auro/version-bot/auro-upgrade-candidates.json",
+    "Read candidates from a custom JSON file instead of the default ./.cache/version-bot/auro-upgrade-candidates.json",
   )
   .option(
     "--preview-dir <dir>",

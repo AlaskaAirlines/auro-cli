@@ -1,8 +1,8 @@
 import { Octokit } from "@octokit/rest";
 import ora from "ora";
 import {
+  displayPath,
   readScanCache,
-  relativeToHome,
   scanCachePath,
   upgradeCandidatesPath,
   writeScanCache,
@@ -21,6 +21,7 @@ const AURO_ORG = "AlaskaAirlines";
 interface ScanOptions {
   org: string;
   force: boolean;
+  outputDir?: string;
 }
 
 interface ScanSummary {
@@ -39,7 +40,7 @@ export async function runScan(options: ScanOptions): Promise<ScanSummary> {
   }
 
   const octokit = new Octokit({ auth: ghToken });
-  const cache = readScanCache();
+  const cache = readScanCache(options.outputDir);
 
   const archivedSpinner = ora(
     `Listing archived Auro packages in ${AURO_ORG}...`,
@@ -88,22 +89,22 @@ export async function runScan(options: ScanOptions): Promise<ScanSummary> {
     scanned++;
   }
 
-  writeScanCache(cache);
+  writeScanCache(cache, options.outputDir);
 
   const candidates = await buildUpgradeCandidates(
     cache,
     archivedPackages,
     options.org,
   );
-  writeUpgradeCandidates(candidates);
+  writeUpgradeCandidates(candidates, options.outputDir);
 
   return {
     reposScanned: scanned,
     reposSkipped: skipped,
     reposErrored: errored,
     candidatesFound: candidates.length,
-    cachePath: relativeToHome(scanCachePath()),
-    candidatesPath: relativeToHome(upgradeCandidatesPath()),
+    cachePath: displayPath(scanCachePath(options.outputDir)),
+    candidatesPath: displayPath(upgradeCandidatesPath(options.outputDir)),
   };
 }
 

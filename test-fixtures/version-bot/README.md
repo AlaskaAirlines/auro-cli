@@ -17,7 +17,7 @@ batched `version-tickets` path.
 
 | Flag | What it does |
 |---|---|
-| `--candidates <file>` | Read upgrade candidates from a custom JSON file instead of `~/.auro/version-bot/auro-upgrade-candidates.json`. Lets you point at a fixture without stomping your real cache. |
+| `--candidates <file>` | Read upgrade candidates from a custom JSON file instead of `./.cache/version-bot/auro-upgrade-candidates.json`. Lets you point at a fixture without stomping your real cache. |
 | `--preview-dir <dir>` | During dry-run only, write one styled HTML file per candidate to `<dir>`. Open the file in a browser to see what `System.Description` would render as in ADO. |
 
 The `--apply` flag is intentionally never passed in any scenario below.

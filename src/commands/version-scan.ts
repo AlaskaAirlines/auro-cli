@@ -5,6 +5,7 @@ import { runScan } from "#scripts/version-bot/scan.ts";
 interface VersionScanOptions {
   org: string;
   force: boolean;
+  outputDir?: string;
 }
 
 export const versionScanCommand = program
@@ -22,11 +23,16 @@ export const versionScanCommand = program
     "Re-scan all repos, ignoring the pushed_at incremental short-circuit",
     false,
   )
+  .option(
+    "--output-dir <dir>",
+    "Directory to write the cache + candidates JSON files (default: ./.cache/version-bot/)",
+  )
   .action(async (options: VersionScanOptions) => {
     try {
       const summary = await runScan({
         org: options.org,
         force: options.force,
+        outputDir: options.outputDir,
       });
 
       console.log("");
