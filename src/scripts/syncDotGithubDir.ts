@@ -1,10 +1,8 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-// @ts-expect-error: No types available currently
-import {
-  processContentForFile,
-  templateFiller,
-} from "@aurodesignsystem/auro-library/scripts/utils/sharedFileProcessorUtils.mjs";
+// @ts-ignore: No types available for this module
+// biome-ignore format: keep this import on a single line so @ts-ignore covers the from clause
+import { processContentForFile, templateFiller } from "@aurodesignsystem/auro-library/scripts/utils/sharedFileProcessorUtils.mjs";
 import { Octokit } from "@octokit/rest";
 import ora from "ora";
 
