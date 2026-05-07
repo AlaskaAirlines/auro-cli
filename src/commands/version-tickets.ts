@@ -7,6 +7,8 @@ interface VersionTicketsOptions {
   apply: boolean;
   limit?: string;
   repo?: string;
+  candidates?: string;
+  previewDir?: string;
 }
 
 export const versionTicketsCommand = program
@@ -26,6 +28,14 @@ export const versionTicketsCommand = program
   )
   .option("--limit <n>", "Maximum number of tickets to process this run")
   .option("--repo <name>", "Only process candidates from this consumer repo")
+  .option(
+    "--candidates <file>",
+    "Read candidates from a custom JSON file instead of ~/.auro/version-bot/auro-upgrade-candidates.json",
+  )
+  .option(
+    "--preview-dir <dir>",
+    "During dry-run, write one styled HTML preview file per candidate to this directory",
+  )
   .action(async (options: VersionTicketsOptions) => {
     try {
       const minMajors = Number.parseInt(options.minMajors, 10);
@@ -45,6 +55,8 @@ export const versionTicketsCommand = program
         apply: options.apply,
         limit,
         repo: options.repo,
+        candidatesPath: options.candidates,
+        previewDir: options.previewDir,
       });
 
       console.log("");

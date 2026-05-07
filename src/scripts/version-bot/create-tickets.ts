@@ -1,8 +1,10 @@
+import fs from "node:fs";
 import chalk from "chalk";
 import ora from "ora";
 import { createADOWorkItem } from "#scripts/ado/index.ts";
 import { readUpgradeCandidates } from "./cache.ts";
 import { fetchChangelogSlice } from "./changelog.ts";
+import { writePreviewFile } from "./html-preview.ts";
 import { buildStoryBody, buildStoryTitle } from "./template.ts";
 import type { UpgradeCandidate } from "./types.ts";
 
@@ -11,6 +13,8 @@ export interface CreateTicketsOptions {
   apply: boolean;
   limit?: number;
   repo?: string;
+  candidatesPath?: string;
+  previewDir?: string;
 }
 
 export interface CreateTicketsSummary {
@@ -24,7 +28,9 @@ export interface CreateTicketsSummary {
 export async function runCreateTickets(
   options: CreateTicketsOptions,
 ): Promise<CreateTicketsSummary> {
-  const all = readUpgradeCandidates();
+  const all = options.candidatesPath
+    ? readCandidatesFromPath(options.candidatesPath)
+    : readUpgradeCandidates();
   const filtered = all.filter((c) => {
     if (c.majorsBehind < options.minMajors) return false;
     if (options.repo && c.repo !== options.repo) return false;
@@ -42,15 +48,22 @@ export async function runCreateTickets(
   };
 
   for (const candidate of selected) {
-    await processCandidate(candidate, options.apply, summary);
+    await processCandidate(candidate, options, summary);
   }
 
   return summary;
 }
 
+function readCandidatesFromPath(filePath: string): UpgradeCandidate[] {
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Candidates file not found: ${filePath}`);
+  }
+  return JSON.parse(fs.readFileSync(filePath, "utf8")) as UpgradeCandidate[];
+}
+
 async function processCandidate(
   candidate: UpgradeCandidate,
-  apply: boolean,
+  options: CreateTicketsOptions,
   summary: CreateTicketsSummary,
 ): Promise<void> {
   const title = buildStoryTitle(candidate);
@@ -77,7 +90,7 @@ async function processCandidate(
     changelogUrl,
   });
 
-  if (!apply) {
+  if (!options.apply) {
     console.log("");
     console.log(chalk.bold.cyan(`[DRY RUN] ${title}`));
     console.log(`  ${chalk.dim("tags:")}      ${tags.join(", ")}`);
@@ -85,6 +98,16 @@ async function processCandidate(
       `  ${chalk.dim("changelog:")} ${changelogHtml ? chalk.green("inlined") : chalk.yellow("link only")}`,
     );
     console.log(`  ${chalk.dim("body:")}      ${descriptionHtml.length} chars`);
+    if (options.previewDir) {
+      const filePath = writePreviewFile(options.previewDir, {
+        candidate,
+        title,
+        bodyHtml: descriptionHtml,
+        tags,
+        changelogInlined: changelogHtml !== null,
+      });
+      console.log(`  ${chalk.dim("preview:")}   ${filePath}`);
+    }
     summary.dryRun++;
     return;
   }

@@ -54,7 +54,7 @@
   ],
   "dependencies": {
     "@actions/github": "^9.1.1",
-    "@aurodesignsystem/auro-library": "^5.5.4",
+    "@aurodesignsystem/auro-library": "^5.12.3",
     "@babel/preset-env": "^7.28.3",
     "@custom-elements-manifest/analyzer": "^0.11.0",
     "@npmcli/package-json": "^7.0.1",
@@ -74,6 +74,7 @@
     "azure-devops-node-api": "^15.1.1",
     "chalk": "^5.6.2",
     "commander": "^13.1.0",
+    "dotenv": "^17.4.2",
     "figlet": "^1.9.3",
     "glob": "^11.0.3",
     "gradient-string": "^3.0.0",
