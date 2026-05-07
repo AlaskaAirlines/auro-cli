@@ -8,6 +8,7 @@
   },
   "scripts": {
     "lint": "biome check --fix --no-errors-on-unmatched",
+    "check-tokens": "node scripts/check-tokens.js",
     "prepare": "husky",
     "test": "echo \"Notice: no tests available\" && exit 0",
     "dev": "tsc && npm run copy-files && npm run bundle -- --watch --dev",
