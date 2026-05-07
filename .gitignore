@@ -17,3 +17,7 @@ coverage/
 
 ## Generated test scenario output
 test-fixtures/version-bot/preview-output/
+
+## Personal scratchpad for Claude collaboration. Narrow to the notes/ subdir so future
+## intentional .claude/ subdirs (settings, hooks, skills) can still be tracked.
+.claude/notes/
