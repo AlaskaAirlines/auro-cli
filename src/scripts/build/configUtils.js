@@ -1,8 +1,9 @@
-import { basename, join } from "node:path";
+import { basename, join, resolve } from "node:path";
 import commonjs from "@rollup/plugin-commonjs";
 import { nodeResolve } from "@rollup/plugin-node-resolve";
 import { glob } from "glob";
 import { litScss } from "rollup-plugin-scss-lit";
+import { MODULE_DIRS } from "./paths.js";
 import { watchGlobs } from "./plugins.js";
 
 // Default paths used across configurations
@@ -28,11 +29,18 @@ export function getPluginsConfig(modulePaths = [], options = {}) {
   // Combine default paths with any user-provided paths
   const allModulePaths = [...DEFAULTS.modulePaths, ...modulePaths];
 
+  // Absolute fallback paths so nodeResolve finds workspace/hoisted packages
+  // when the importer's auto-walkup chain doesn't reach the hoist root
+  // (e.g. CLI invoked from a sibling repo, symlinked workspaces).
+  const cwd = process.cwd();
+  const absoluteModulePaths = MODULE_DIRS.map((dir) => resolve(cwd, dir));
+
   return [
     nodeResolve({
       dedupe,
       preferBuiltins: false,
       moduleDirectories: DEFAULTS.moduleDirectories,
+      modulePaths: absoluteModulePaths,
     }),
     commonjs(),
     litScss({
