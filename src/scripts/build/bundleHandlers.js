@@ -73,23 +73,26 @@ export async function buildTypeDefinitions(config, outputConfig) {
 /**
  * Builds both the main bundle and demo files in one operation
  * @param {object} mainConfig - Rollup config for the main bundle
- * @param {object} demoConfig - Rollup config for the demo files
+ * @param {object[]} demoConfigs - One Rollup config per demo entry file
  */
-export async function buildCombinedBundle(mainConfig, demoConfig) {
+export async function buildCombinedBundle(mainConfig, demoConfigs) {
   return runBuildStep(
-    `Bundling ${mainConfig.name || "main"} and ${demoConfig.name || "demo"}...`,
+    `Bundling ${mainConfig.name || "main"} and demo...`,
     async () => {
       // Build main bundle
       const mainBundle = await rollup(mainConfig);
       await mainBundle.write(mainConfig.output);
       await mainBundle.close();
 
-      // Build demo files
-      const demoBundle = await rollup(demoConfig);
-      await demoBundle.write(demoConfig.output);
-      await demoBundle.close();
+      // Build demo entries individually so shared imports inline into each
+      // <name>.min.js instead of producing a shared <name>2.min.js chunk.
+      for (const cfg of demoConfigs) {
+        const bundle = await rollup(cfg);
+        await bundle.write(cfg.output);
+        await bundle.close();
+      }
     },
-    `Bundles ready! ${mainConfig.name || "Main"} and ${demoConfig.name || "demo"} built.`,
+    `Bundles ready! ${mainConfig.name || "Main"} and demo built.`,
     "Bundle hiccup! Build failed.",
   );
 }
@@ -265,14 +268,16 @@ export async function compileDemoScss(demoDir = "./demo") {
  * @param {object} [options={}] - Options passed to getDemoConfig
  */
 export async function buildDemoBundle(options = {}) {
-  const demoConfig = getDemoConfig(options);
+  const { configs } = getDemoConfig(options);
 
   return runBuildStep(
     "Bundling demo JS...",
     async () => {
-      const bundle = await rollup(demoConfig.config);
-      await bundle.write(demoConfig.config.output);
-      await bundle.close();
+      for (const cfg of configs) {
+        const bundle = await rollup(cfg);
+        await bundle.write(cfg.output);
+        await bundle.close();
+      }
     },
     "Demo JS bundled.",
     "Demo JS bundling failed.",

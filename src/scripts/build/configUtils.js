@@ -87,9 +87,12 @@ export function getMainBundleConfig(options = {}) {
 }
 
 /**
- * Creates Rollup configuration for demo files.
+ * Creates Rollup configurations for demo files. Each demo entry is built as
+ * its own bundle with `inlineDynamicImports` so shared imports get duplicated
+ * into each `<name>.min.js` rather than emitted as a separate `<name>2.min.js`
+ * chunk. This guarantees demo HTML only needs to load its matching `.min.js`.
  * @param {object} options - Build options.
- * @returns {object} - Rollup configuration object.
+ * @returns {{name: string, configs: object[]}} - One Rollup config per demo entry.
  */
 export function getDemoConfig(options = {}) {
   const {
@@ -101,26 +104,28 @@ export function getDemoConfig(options = {}) {
     dev = false,
   } = options;
 
-  return {
-    name: "Demo",
-    config: {
-      input: Object.fromEntries(
-        glob.sync(globPattern, { ignore: ignorePattern }).map((file) => {
-          const name = basename(file, ".js");
-          return [name, file];
-        }),
-      ),
+  const entries = glob.sync(globPattern, { ignore: ignorePattern });
+  const plugins = getPluginsConfig(modulePaths, { dev });
+  const watcher = getWatcherConfig(watch);
+
+  const configs = entries.map((file) => {
+    const name = basename(file, ".js");
+    return {
+      input: { [name]: file },
       output: {
         format: "esm",
         dir: outputDir,
         entryFileNames: "[name].min.js",
         chunkFileNames: "[name].min.js",
         assetFileNames: dev ? "[name][extname]" : "[name]-[hash][extname]",
+        inlineDynamicImports: true,
       },
-      plugins: getPluginsConfig(modulePaths, { dev }),
-      watch: getWatcherConfig(watch),
-    },
-  };
+      plugins,
+      watch: watcher,
+    };
+  });
+
+  return { name: "Demo", configs };
 }
 
 /**
