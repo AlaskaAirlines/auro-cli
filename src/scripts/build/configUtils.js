@@ -129,6 +129,19 @@ export function getDemoConfig(options = {}) {
         inlineDynamicImports: true,
       },
       plugins,
+      // Fail the build if any import can't be resolved instead of letting
+      // Rollup silently externalize it — a bare specifier in a demo .min.js
+      // breaks at runtime in the browser. Most common cause: a workspace
+      // dep wasn't built yet (fix the build order, e.g. turbo `^build`).
+      onwarn(warning, defaultHandler) {
+        if (warning.code === "UNRESOLVED_IMPORT") {
+          throw new Error(
+            `Unresolved import "${warning.exporter ?? warning.source}" in ${warning.id ?? file}. ` +
+              "Make sure workspace dependencies are built before bundling demos.",
+          );
+        }
+        defaultHandler(warning);
+      },
       watch: watcher,
     };
   });
