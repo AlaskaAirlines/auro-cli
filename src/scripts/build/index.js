@@ -37,7 +37,7 @@ async function runProductionBuild(options) {
   await compileDemoScss();
 
   // Build main and demo bundles
-  await buildCombinedBundle(mainBundleConfig.config, demoConfig.config);
+  await buildCombinedBundle(mainBundleConfig.config, demoConfig.configs);
 }
 
 /**
@@ -50,8 +50,10 @@ async function setupWatchMode(options) {
   const mainBundleConfig = getMainBundleConfig({ ...options, watch: true });
   const demoConfig = getDemoConfig({ ...options, watch: true });
 
-  // Create and configure the watcher
-  const watcher = watch([mainBundleConfig.config, demoConfig.config]);
+  // Create and configure the watcher. Each demo entry is its own config so
+  // shared imports inline into <name>.min.js rather than emitting a separate
+  // <name>2.min.js chunk.
+  const watcher = watch([mainBundleConfig.config, ...demoConfig.configs]);
 
   // Set up watcher event handlers
   handleWatcherEvents(

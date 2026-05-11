@@ -1,4 +1,4 @@
-import github from "@actions/github";
+import * as github from "@actions/github";
 
 /**
  * Get existing labels from the current pull request in a GitHub Actions environment
@@ -40,7 +40,7 @@ export async function getExistingLabels(): Promise<string[]> {
       });
 
     // Return array of label names
-    return existingLabels.map((label) => label.name);
+    return existingLabels.map((label: { name: string }) => label.name);
   } catch (error) {
     if (error instanceof Error) {
       throw new Error(`Failed to get existing labels: ${error.message}`);

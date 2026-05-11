@@ -1,8 +1,9 @@
-import { basename, join } from "node:path";
+import { basename, join, resolve } from "node:path";
 import commonjs from "@rollup/plugin-commonjs";
 import { nodeResolve } from "@rollup/plugin-node-resolve";
 import { glob } from "glob";
 import { litScss } from "rollup-plugin-scss-lit";
+import { MODULE_DIRS } from "./paths.js";
 import { watchGlobs } from "./plugins.js";
 
 // Default paths used across configurations
@@ -28,11 +29,18 @@ export function getPluginsConfig(modulePaths = [], options = {}) {
   // Combine default paths with any user-provided paths
   const allModulePaths = [...DEFAULTS.modulePaths, ...modulePaths];
 
+  // Absolute fallback paths so nodeResolve finds workspace/hoisted packages
+  // when the importer's auto-walkup chain doesn't reach the hoist root
+  // (e.g. CLI invoked from a sibling repo, symlinked workspaces).
+  const cwd = process.cwd();
+  const absoluteModulePaths = MODULE_DIRS.map((dir) => resolve(cwd, dir));
+
   return [
     nodeResolve({
       dedupe,
       preferBuiltins: false,
       moduleDirectories: DEFAULTS.moduleDirectories,
+      modulePaths: absoluteModulePaths,
     }),
     commonjs(),
     litScss({
@@ -87,9 +95,12 @@ export function getMainBundleConfig(options = {}) {
 }
 
 /**
- * Creates Rollup configuration for demo files.
+ * Creates Rollup configurations for demo files. Each demo entry is built as
+ * its own bundle with `inlineDynamicImports` so shared imports get duplicated
+ * into each `<name>.min.js` rather than emitted as a separate `<name>2.min.js`
+ * chunk. This guarantees demo HTML only needs to load its matching `.min.js`.
  * @param {object} options - Build options.
- * @returns {object} - Rollup configuration object.
+ * @returns {{name: string, configs: object[]}} - One Rollup config per demo entry.
  */
 export function getDemoConfig(options = {}) {
   const {
@@ -101,26 +112,41 @@ export function getDemoConfig(options = {}) {
     dev = false,
   } = options;
 
-  return {
-    name: "Demo",
-    config: {
-      input: Object.fromEntries(
-        glob.sync(globPattern, { ignore: ignorePattern }).map((file) => {
-          const name = basename(file, ".js");
-          return [name, file];
-        }),
-      ),
+  const entries = glob.sync(globPattern, { ignore: ignorePattern });
+  const plugins = getPluginsConfig(modulePaths, { dev });
+  const watcher = getWatcherConfig(watch);
+
+  const configs = entries.map((file) => {
+    const name = basename(file, ".js");
+    return {
+      input: { [name]: file },
       output: {
         format: "esm",
         dir: outputDir,
         entryFileNames: "[name].min.js",
         chunkFileNames: "[name].min.js",
         assetFileNames: dev ? "[name][extname]" : "[name]-[hash][extname]",
+        inlineDynamicImports: true,
       },
-      plugins: getPluginsConfig(modulePaths, { dev }),
-      watch: getWatcherConfig(watch),
-    },
-  };
+      plugins,
+      // Fail the build if any import can't be resolved instead of letting
+      // Rollup silently externalize it — a bare specifier in a demo .min.js
+      // breaks at runtime in the browser. Most common cause: a workspace
+      // dep wasn't built yet (fix the build order, e.g. turbo `^build`).
+      onwarn(warning, defaultHandler) {
+        if (warning.code === "UNRESOLVED_IMPORT") {
+          throw new Error(
+            `Unresolved import "${warning.exporter ?? warning.source}" in ${warning.id ?? file}. ` +
+              "Make sure workspace dependencies are built before bundling demos.",
+          );
+        }
+        defaultHandler(warning);
+      },
+      watch: watcher,
+    };
+  });
+
+  return { name: "Demo", configs };
 }
 
 /**
