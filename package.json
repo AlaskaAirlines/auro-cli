@@ -11,7 +11,8 @@
     "check-tokens": "node scripts/check-tokens.js",
     "demo": "node demo/server.mjs",
     "prepare": "husky",
-    "test": "echo \"Notice: no tests available\" && exit 0",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "dev": "tsc && npm run copy-files && npm run bundle -- --watch --dev",
     "build": "tsc && npm run copy-files && npm run bundle",
     "build:dev": "tsc && npm run copy-files && npm run bundle -- --dev",
@@ -96,7 +97,8 @@
     "husky": "^9.1.7",
     "open": "^10.2.0",
     "plop": "^4.0.3",
-    "tsc-alias": "^1.8.16"
+    "tsc-alias": "^1.8.16",
+    "vitest": "^4.1.6"
   },
   "optionalDependencies": {
     "@rollup/rollup-linux-x64-gnu": "*"
