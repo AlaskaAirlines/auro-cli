@@ -18,13 +18,18 @@ export interface StoryBodyInput {
 function genericAcceptanceBullets(c: UpgradeCandidate): string[] {
   const pkg = escapeHtml(c.package);
   const latest = escapeHtml(c.latest);
+  const target = c.targetPackage ? escapeHtml(c.targetPackage) : null;
+  const firstBullet = target
+    ? `Replace <code>${pkg}</code> with <code>${target}@${latest}</code> in the consumer's <code>package.json</code> (and lockfile). Update all import paths from <code>${pkg}</code> to <code>${target}</code>.`
+    : `Update <code>${pkg}</code> to <code>${latest}</code> in the consumer's <code>package.json</code> (and lockfile).`;
+  const smokeRef = target ?? pkg;
   return [
-    `Update <code>${pkg}</code> to <code>${latest}</code> in the consumer's <code>package.json</code> (and lockfile).`,
+    firstBullet,
     "<code>npm ci</code> succeeds with no peer-dep warnings or lockfile drift caused by the upgrade.",
     "Build / TypeScript compile passes with no new errors introduced by the upgrade.",
     "Lint passes (no new violations).",
     "Existing test suite passes.",
-    `Manual smoke check: every UI surface using <code>${pkg}</code> renders without new console errors and matches the prior visual baseline.`,
+    `Manual smoke check: every UI surface using <code>${smokeRef}</code> renders without new console errors and matches the prior visual baseline.`,
   ];
 }
 
@@ -68,9 +73,13 @@ export function buildStoryBody({
   } = candidate;
   const plural = majorsBehind > 1 ? "s" : "";
 
+  const targetPackage = candidate.targetPackage;
   const contextSection = [
     "<h3>Context</h3>",
     `<p>The repo <a href="${repoUrl}"><b>${escapeHtml(repo)}</b></a> is using <code>${escapeHtml(pkg)}@${escapeHtml(pinned)}</code> but the latest published version is <code>${escapeHtml(latest)}</code> — that's <b>${majorsBehind} major version${plural} behind</b>. Staying current keeps a11y, security patches, and design-system parity in step with the rest of the Auro fleet.</p>`,
+    targetPackage
+      ? `<p><b>⚠ Namespace rename:</b> active development of this library moved to <code>${escapeHtml(targetPackage)}</code>. Upgrading requires renaming the dependency in <code>package.json</code> from <code>${escapeHtml(pkg)}</code> to <code>${escapeHtml(targetPackage)}</code> AND updating any matching import paths in source files. The version number bridges both scopes — <code>${escapeHtml(latest)}</code> is the latest on the new scope.</p>`
+      : "",
     supersedes !== undefined
       ? `<p><i>This ticket supersedes work item #${supersedes}, which was closed because a newer version of <code>${escapeHtml(pkg)}</code> has shipped since that ticket was created.</i></p>`
       : "",
