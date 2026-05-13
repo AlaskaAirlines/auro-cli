@@ -116,11 +116,7 @@ versionTicketsCommand
   .option("--run-id <id>", "Target a specific run id from the audit log")
   .option("--last", "Target the most recent run id", false)
   .option("--list", "List available run ids and exit (no writes)", false)
-  .option(
-    "--apply",
-    "Actually close tickets in ADO (otherwise dry-run)",
-    false,
-  )
+  .option("--apply", "Actually close tickets in ADO (otherwise dry-run)", false)
   .action(async (options: CleanupCliOptions) => {
     try {
       const summary = await runCleanup({

@@ -278,7 +278,9 @@ export interface BreakingChange {
   text: string;
 }
 
-export function extractBreakingChanges(slice: ChangelogSlice): BreakingChange[] {
+export function extractBreakingChanges(
+  slice: ChangelogSlice,
+): BreakingChange[] {
   const out: BreakingChange[] = [];
   for (const v of slice.versions) {
     for (const sec of v.sections) {

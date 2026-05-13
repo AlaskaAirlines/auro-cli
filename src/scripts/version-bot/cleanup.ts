@@ -2,8 +2,8 @@ import chalk from "chalk";
 import ora from "ora";
 import { closeADOWorkItem } from "#scripts/ado/index.ts";
 import {
-  appendAuditEntry,
   type AuditEntry,
+  appendAuditEntry,
   lastRunId,
   listRunIds,
   newRunId,
