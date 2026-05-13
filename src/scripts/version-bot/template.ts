@@ -34,18 +34,25 @@ function genericAcceptanceBullets(c: UpgradeCandidate): string[] {
 }
 
 /**
- * Acceptance criteria starts with the generic verification bullets and
- * appends one verifiable bullet per breaking change so the reviewer can
- * tick them off individually.
+ * Acceptance criteria = the generic verification bullets + at most ONE
+ * summary bullet that points back to the body's "Breaking changes in this
+ * upgrade" section. Long-jump upgrades can carry double-digit breaking
+ * changes across many majors; per-item AC bullets become repetitive
+ * noise that pushes the meaningful build/lint/test/smoke checkpoints
+ * out of view. The body already enumerates each breaking change with
+ * version + description; the AC's job is the verification checkpoint,
+ * not a second copy of the list.
  */
 export function buildAcceptanceCriteria(
   c: UpgradeCandidate,
   breakingChanges: BreakingChange[] = [],
 ): string {
   const bullets = genericAcceptanceBullets(c).map((b) => `  <li>${b}</li>`);
-  for (const bc of breakingChanges) {
+  if (breakingChanges.length > 0) {
+    const count = breakingChanges.length;
+    const plural = count === 1 ? "" : "s";
     bullets.push(
-      `  <li>Verify the breaking change introduced in <code>${escapeHtml(bc.version)}</code> is handled: ${renderInline(bc.text)}</li>`,
+      `  <li>Verify each of the ${count} breaking change${plural} listed in the "Breaking changes in this upgrade" section is handled in your codebase.</li>`,
     );
   }
   return ["<ul>", ...bullets, "</ul>"].join("\n");
