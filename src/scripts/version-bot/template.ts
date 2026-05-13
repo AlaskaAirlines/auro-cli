@@ -1,11 +1,17 @@
 import type { BreakingChange, ChangelogSlice } from "./changelog.ts";
 import type { UpgradeCandidate } from "./types.ts";
+import type { UsageInventory } from "./usage-inventory.ts";
 
 export interface StoryBodyInput {
   candidate: UpgradeCandidate;
   changelogSlice: ChangelogSlice | null;
   changelogUrl: string;
   breakingChanges: BreakingChange[];
+  /** GitHub Code Search result for the consumer repo — list of files that
+   *  reference the package(s). Renders into a "Where this package is used"
+   *  section. Null means the search was skipped or failed; section is
+   *  omitted. */
+  usage?: UsageInventory | null;
   /** When this ticket replaces an earlier bot ticket via close-and-recreate. */
   supersedes?: number;
 }
@@ -68,6 +74,7 @@ export function buildStoryBody({
   changelogSlice,
   changelogUrl,
   breakingChanges,
+  usage,
   supersedes,
 }: StoryBodyInput): string {
   const {
@@ -94,10 +101,10 @@ export function buildStoryBody({
     .filter(Boolean)
     .join("\n");
 
+  const usageSection = buildUsageSection(usage ?? null, pkg, targetPackage);
+
   const breakingSection = buildBreakingChangesSection(
-    pkg,
-    pinned,
-    latest,
+    candidate,
     changelogSlice,
     breakingChanges,
   );
@@ -117,6 +124,8 @@ export function buildStoryBody({
   return [
     contextSection,
     "",
+    usageSection,
+    "",
     breakingSection,
     "",
     migrationSection,
@@ -128,6 +137,53 @@ export function buildStoryBody({
 }
 
 /**
+ * Renders a "Where this package is used in your codebase" section from a
+ * GitHub Code Search result. Returns an empty string when there's no
+ * inventory (search skipped/failed) or when totalCount is 0 — the body
+ * stays clean in those cases instead of carrying a "we couldn't find
+ * usages" disclaimer that adds no information.
+ *
+ * The section lives between Context and Breaking changes so it gives the
+ * reviewer a sense of scope (how big is the change in *my* repo?) before
+ * the migration content.
+ */
+function buildUsageSection(
+  usage: UsageInventory | null,
+  pkg: string,
+  targetPackage: string | undefined,
+): string {
+  if (!usage || usage.totalCount === 0) {
+    return "";
+  }
+  const fileWord = usage.totalCount === 1 ? "file" : "files";
+  const sampleSize = Math.min(usage.sampleFiles.length, 10);
+  const fileItems = usage.sampleFiles
+    .slice(0, sampleSize)
+    .map(
+      (f) =>
+        `  <li><a href="${f.htmlUrl}"><code>${escapeHtml(f.path)}</code></a></li>`,
+    )
+    .join("\n");
+  const moreNote =
+    usage.totalCount > sampleSize
+      ? `<p>… and ${usage.totalCount - sampleSize} more. <a href="${usage.searchUrl}">View all results on GitHub</a>.</p>`
+      : "";
+  const pkgLabel = targetPackage
+    ? `<code>${escapeHtml(pkg)}</code> or <code>${escapeHtml(targetPackage)}</code>`
+    : `<code>${escapeHtml(pkg)}</code>`;
+  return [
+    "<h3>Where this package is used in your codebase</h3>",
+    `<p>GitHub Code Search found ${pkgLabel} referenced in <b>${usage.totalCount}</b> ${fileWord} in this repo:</p>`,
+    "<ul>",
+    fileItems,
+    "</ul>",
+    moreNote,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+/**
  * Renders a "Breaking changes in this upgrade" section derived from the
  * BREAKING CHANGES subheadings in the CHANGELOG slice. Returns an empty
  * string when the changelog wasn't fetchable (so the section is omitted
@@ -135,12 +191,11 @@ export function buildStoryBody({
  * changelog exists but contains no breaking-change entries.
  */
 function buildBreakingChangesSection(
-  pkg: string,
-  pinned: string,
-  latest: string,
+  candidate: UpgradeCandidate,
   changelogSlice: ChangelogSlice | null,
   breakingChanges: BreakingChange[],
 ): string {
+  const { package: pkg, pinned, latest } = candidate;
   if (!changelogSlice) {
     return "";
   }
@@ -151,10 +206,7 @@ function buildBreakingChangesSection(
     ].join("\n");
   }
   const bullets = breakingChanges
-    .map(
-      (bc) =>
-        `  <li><b>${escapeHtml(bc.version)}:</b> ${renderInline(bc.text)}</li>`,
-    )
+    .map((bc) => renderBreakingChangeBullet(bc, candidate))
     .join("\n");
   return [
     "<h3>Breaking changes in this upgrade</h3>",
@@ -162,6 +214,79 @@ function buildBreakingChangesSection(
     bullets,
     "</ul>",
   ].join("\n");
+}
+
+function renderBreakingChangeBullet(
+  bc: BreakingChange,
+  candidate: UpgradeCandidate,
+): string {
+  const baseText = `<b>${escapeHtml(bc.version)}:</b> ${renderInline(bc.text)}`;
+  const searchLink = buildBreakingChangeSearchLink(bc.text, candidate);
+  if (!searchLink) {
+    return `  <li>${baseText}</li>`;
+  }
+  return `  <li>${baseText} <span class="bot-find-link">${searchLink}</span></li>`;
+}
+
+/**
+ * Returns an anchor tag pointing at a GitHub Code Search URL scoped to
+ * the consumer repo for any identifier-shaped tokens (alphanumeric +
+ * dashes/underscores) the CHANGELOG author wrapped in backticks.
+ * Returns null when the breaking-change text has no such tokens —
+ * the bullet renders without a search suffix in that case.
+ *
+ * The URL combines the package's short name AND the identifier(s) so the
+ * search returns files that reference both, which is a fair proxy for
+ * "files using this component that mention the changed identifier."
+ * Pure URL building — no API call from the bot side; the reviewer
+ * clicks if they want to investigate.
+ */
+function buildBreakingChangeSearchLink(
+  rawText: string,
+  candidate: UpgradeCandidate,
+): string | null {
+  const identifiers = extractIdentifiers(rawText);
+  if (identifiers.length === 0) return null;
+
+  let org: string;
+  let repoName: string;
+  try {
+    const url = new URL(candidate.repoUrl);
+    const segs = url.pathname.split("/").filter(Boolean);
+    if (segs.length < 2) return null;
+    [org, repoName] = segs;
+  } catch {
+    return null;
+  }
+
+  const shortName = (
+    candidate.targetPackage ?? candidate.package
+  ).replace(/^@[^/]+\//, "");
+  const idsQuoted = identifiers.map((i) => `"${i}"`).join(" OR ");
+  const idsClause = identifiers.length > 1 ? `(${idsQuoted})` : idsQuoted;
+  const q = `repo:${org}/${repoName} "${shortName}" ${idsClause}`;
+  const href = `https://github.com/search?q=${encodeURIComponent(q)}&type=code`;
+  const labelTokens = identifiers
+    .map((i) => `<code>${escapeHtml(i)}</code>`)
+    .join(", ");
+  return `<a href="${href}">→ find ${labelTokens} in this repo</a>`;
+}
+
+/**
+ * Pulls identifier-shaped tokens from backticked spans in CHANGELOG text.
+ * "Identifier-shaped" = starts with a letter, then letters/digits/dashes/
+ * underscores only, 2+ chars. This filters out non-searchable spans like
+ * sentence fragments, URLs, or quoted snippets.
+ */
+function extractIdentifiers(text: string): string[] {
+  const found = new Set<string>();
+  for (const match of text.matchAll(/`([^`]+)`/g)) {
+    const ident = match[1].trim();
+    if (/^[A-Za-z][\w-]{1,}$/.test(ident)) {
+      found.add(ident);
+    }
+  }
+  return [...found];
 }
 
 function renderInline(text: string): string {

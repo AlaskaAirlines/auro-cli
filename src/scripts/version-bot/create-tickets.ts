@@ -21,6 +21,7 @@ import {
   buildStoryBody,
   buildStoryTitle,
 } from "./template.ts";
+import { findUsageInRepo } from "./usage-inventory.ts";
 import type { UpgradeCandidate } from "./types.ts";
 
 export interface CreateTicketsOptions {
@@ -114,6 +115,8 @@ async function processCandidate(
     ? extractBreakingChanges(changelogSlice)
     : [];
 
+  const usage = await fetchUsageInventory(candidate);
+
   // Dry-run: print preview + return. WIQL/ADO writes only happen in --apply.
   if (!options.apply) {
     const { descriptionHtml, usedChangelogSlice } = buildBodyWithinLimit(
@@ -122,6 +125,7 @@ async function processCandidate(
         changelogSlice,
         changelogUrl,
         breakingChanges,
+        usage,
       },
       title,
     );
@@ -137,6 +141,9 @@ async function processCandidate(
     );
     console.log(
       `  ${chalk.dim("breaking:")} ${breakingChanges.length} change${breakingChanges.length === 1 ? "" : "s"} detected`,
+    );
+    console.log(
+      `  ${chalk.dim("usage:")}     ${usage ? `${usage.totalCount} file${usage.totalCount === 1 ? "" : "s"} reference${usage.totalCount === 1 ? "s" : ""} this package` : "(not searched)"}`,
     );
     console.log(`  ${chalk.dim("body:")}      ${descriptionHtml.length} chars`);
     console.log(
@@ -177,6 +184,7 @@ async function processCandidate(
       changelogSlice,
       changelogUrl,
       breakingChanges,
+      usage,
       supersedes,
     },
     title,
@@ -324,6 +332,32 @@ async function resolveDedupeAction(
 function buildChangelogUrl(pkg: string): string {
   const shortName = pkg.replace(/^@[^/]+\//, "");
   return `https://github.com/AlaskaAirlines/${shortName}/blob/main/CHANGELOG.md`;
+}
+
+/**
+ * Pulls org/repo from `candidate.repoUrl` and queries GitHub Code Search.
+ * Searches for both the consumer's pinned package name AND the
+ * `targetPackage` (when cross-namespace) so usage is counted across the
+ * scope swap. Returns null on any failure — the body just omits the
+ * "Where this package is used" section.
+ */
+async function fetchUsageInventory(
+  candidate: UpgradeCandidate,
+): Promise<Awaited<ReturnType<typeof findUsageInRepo>>> {
+  let org: string;
+  let repo: string;
+  try {
+    const url = new URL(candidate.repoUrl);
+    const segments = url.pathname.split("/").filter(Boolean);
+    if (segments.length < 2) return null;
+    [org, repo] = segments;
+  } catch {
+    return null;
+  }
+  const packages = candidate.targetPackage
+    ? [candidate.package, candidate.targetPackage]
+    : [candidate.package];
+  return findUsageInRepo({ org, repo, packages });
 }
 
 // ADO accepts up to ~1 MB for System.Description, but rendering performance

@@ -6,6 +6,7 @@ import {
   buildStoryTitle,
 } from "./template.ts";
 import type { UpgradeCandidate } from "./types.ts";
+import type { UsageInventory } from "./usage-inventory.ts";
 
 function makeCandidate(
   overrides: Partial<UpgradeCandidate> = {},
@@ -210,6 +211,101 @@ describe("buildStoryBody — migration section", () => {
   });
 });
 
+describe("buildStoryBody — Where this package is used", () => {
+  function makeUsage(overrides: Partial<UsageInventory> = {}): UsageInventory {
+    return {
+      totalCount: 3,
+      sampleFiles: [
+        { path: "src/Foo.svelte", htmlUrl: "https://github.com/x/y/blob/abc/src/Foo.svelte" },
+        { path: "src/Bar.svelte", htmlUrl: "https://github.com/x/y/blob/abc/src/Bar.svelte" },
+        { path: "src/Baz.svelte", htmlUrl: "https://github.com/x/y/blob/abc/src/Baz.svelte" },
+      ],
+      searchUrl: "https://github.com/search?q=fake",
+      ...overrides,
+    };
+  }
+
+  it("renders the section when usage is provided and has matches", () => {
+    const body = buildStoryBody({
+      candidate: makeCandidate(),
+      changelogSlice: null,
+      changelogUrl: "https://example/CHANGELOG.md",
+      breakingChanges: [],
+      usage: makeUsage(),
+    });
+    expect(body).toMatch(/Where this package is used in your codebase/);
+    expect(body).toMatch(/referenced in <b>3<\/b> files/);
+    expect(body).toMatch(/<code>src\/Foo\.svelte<\/code>/);
+  });
+
+  it("uses singular 'file' when only one match", () => {
+    const body = buildStoryBody({
+      candidate: makeCandidate(),
+      changelogSlice: null,
+      changelogUrl: "https://example/CHANGELOG.md",
+      breakingChanges: [],
+      usage: makeUsage({
+        totalCount: 1,
+        sampleFiles: [
+          { path: "src/Foo.svelte", htmlUrl: "https://github.com/x/y/blob/abc/src/Foo.svelte" },
+        ],
+      }),
+    });
+    expect(body).toMatch(/referenced in <b>1<\/b> file in this repo/);
+    expect(body).not.toMatch(/files in this repo/);
+  });
+
+  it("appends an 'and N more' note when totalCount exceeds sampled files", () => {
+    const body = buildStoryBody({
+      candidate: makeCandidate(),
+      changelogSlice: null,
+      changelogUrl: "https://example/CHANGELOG.md",
+      breakingChanges: [],
+      usage: makeUsage({ totalCount: 47 }),
+    });
+    expect(body).toMatch(/and 44 more/);
+    expect(body).toMatch(/View all results on GitHub/);
+  });
+
+  it("omits the section when usage is null", () => {
+    const body = buildStoryBody({
+      candidate: makeCandidate(),
+      changelogSlice: null,
+      changelogUrl: "https://example/CHANGELOG.md",
+      breakingChanges: [],
+      usage: null,
+    });
+    expect(body).not.toMatch(/Where this package is used/);
+  });
+
+  it("omits the section when usage.totalCount is 0", () => {
+    const body = buildStoryBody({
+      candidate: makeCandidate(),
+      changelogSlice: null,
+      changelogUrl: "https://example/CHANGELOG.md",
+      breakingChanges: [],
+      usage: makeUsage({ totalCount: 0, sampleFiles: [] }),
+    });
+    expect(body).not.toMatch(/Where this package is used/);
+  });
+
+  it("names both packages in the cross-namespace case", () => {
+    const body = buildStoryBody({
+      candidate: makeCandidate({
+        package: "@alaskaairux/auro-button",
+        targetPackage: "@aurodesignsystem/auro-button",
+      }),
+      changelogSlice: null,
+      changelogUrl: "https://example/CHANGELOG.md",
+      breakingChanges: [],
+      usage: makeUsage(),
+    });
+    expect(body).toMatch(
+      /<code>@alaskaairux\/auro-button<\/code> or <code>@aurodesignsystem\/auro-button<\/code>/,
+    );
+  });
+});
+
 describe("buildStoryBody — Breaking changes section", () => {
   it("is omitted entirely when changelogSlice is null", () => {
     const body = buildStoryBody({
@@ -234,6 +330,65 @@ describe("buildStoryBody — Breaking changes section", () => {
     });
     expect(body).toMatch(/Breaking changes in this upgrade/);
     expect(body).toMatch(/No breaking changes detected/);
+  });
+
+  it("appends a 'find in repo' search link per bullet when the breaking text contains backtick identifiers", () => {
+    const slice: ChangelogSlice = {
+      versions: [],
+      html: "<p>release notes</p>",
+    };
+    const breakingChanges: BreakingChange[] = [
+      { version: "11.0.0", text: "remove `slim` prop" },
+      // No backtick identifiers — should render without a link.
+      { version: "10.0.0", text: "general API restructure" },
+      // Multiple identifiers — single combined OR link.
+      { version: "9.0.0", text: "deprecate `iconOnly`, `rounded`, `tertiary`" },
+    ];
+    const body = buildStoryBody({
+      candidate: makeCandidate(),
+      changelogSlice: slice,
+      changelogUrl: "https://example/CHANGELOG.md",
+      breakingChanges,
+    });
+    // Single-identifier bullet links to a search containing the identifier
+    // AND the package short name.
+    expect(body).toMatch(
+      /find <code>slim<\/code> in this repo[^<]*<\/a>/,
+    );
+    expect(body).toMatch(/q=repo%3AAlaska-ECommerce%2Ffixture-repo[^"]*%22auro-button%22[^"]*%22slim%22/);
+
+    // Multi-identifier bullet: each identifier appears in the link label and
+    // in the URL as an OR clause.
+    expect(body).toMatch(
+      /find <code>iconOnly<\/code>, <code>rounded<\/code>, <code>tertiary<\/code> in this repo/,
+    );
+    expect(body).toMatch(/%22iconOnly%22%20OR%20%22rounded%22%20OR%20%22tertiary%22/);
+
+    // The no-identifier bullet should be untouched — no `find in this repo` suffix.
+    const noIdMatch = body.match(/<li><b>10\.0\.0:<\/b>[^<]*<\/li>/);
+    expect(noIdMatch).toBeTruthy();
+    expect(noIdMatch?.[0]).not.toMatch(/find /);
+  });
+
+  it("uses the targetPackage short-name in the search query for cross-namespace upgrades", () => {
+    const slice: ChangelogSlice = {
+      versions: [],
+      html: "<p>release notes</p>",
+    };
+    const body = buildStoryBody({
+      candidate: makeCandidate({
+        package: "@alaskaairux/auro-button",
+        targetPackage: "@aurodesignsystem/auro-button",
+      }),
+      changelogSlice: slice,
+      changelogUrl: "https://example/CHANGELOG.md",
+      breakingChanges: [{ version: "11.0.0", text: "remove `slim` prop" }],
+    });
+    // Short name extracted from the target package (auro-button), not the
+    // namespace-prefixed legacy name — the consumer is migrating TO the new
+    // scope, so the search should match files referencing the new name.
+    expect(body).toMatch(/%22auro-button%22/);
+    expect(body).not.toMatch(/%40alaskaairux/);
   });
 
   it("renders one bullet per breaking change when the slice has them", () => {
