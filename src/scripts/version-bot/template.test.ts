@@ -62,17 +62,33 @@ describe("buildAcceptanceCriteria — same-namespace path", () => {
     expect(ac).toMatch(/Manual smoke check/);
   });
 
-  it("appends one bullet per breaking change", () => {
+  it("appends a single summary bullet when breaking changes exist", () => {
     const breakingChanges: BreakingChange[] = [
       { version: "11.0.0", text: "Remove `legacy-mode` prop" },
       { version: "11.2.0", text: "Rename `onClick` to `onPress`" },
     ];
     const ac = buildAcceptanceCriteria(makeCandidate(), breakingChanges);
-    expect(ac).toMatch(/Verify the breaking change introduced in <code>11\.0\.0<\/code>/);
-    expect(ac).toMatch(/Verify the breaking change introduced in <code>11\.2\.0<\/code>/);
-    // Inline backticks should render as <code> tags
-    expect(ac).toMatch(/<code>legacy-mode<\/code>/);
-    expect(ac).toMatch(/<code>onPress<\/code>/);
+    expect(ac).toMatch(
+      /Verify each of the 2 breaking changes listed in the "Breaking changes in this upgrade" section/,
+    );
+    // The per-item details should NOT be duplicated into the AC — they
+    // live in the body's breaking-changes section.
+    expect(ac).not.toMatch(/Verify the breaking change introduced in/);
+    expect(ac).not.toMatch(/legacy-mode/);
+    expect(ac).not.toMatch(/onPress/);
+  });
+
+  it("uses singular wording when only 1 breaking change", () => {
+    const ac = buildAcceptanceCriteria(makeCandidate(), [
+      { version: "11.0.0", text: "Remove `legacy-mode` prop" },
+    ]);
+    expect(ac).toMatch(/Verify each of the 1 breaking change /);
+    expect(ac).not.toMatch(/1 breaking changes/);
+  });
+
+  it("omits the breaking-changes summary bullet when there are none", () => {
+    const ac = buildAcceptanceCriteria(makeCandidate(), []);
+    expect(ac).not.toMatch(/breaking change/i);
   });
 });
 
