@@ -1,0 +1,123 @@
+name: Version Bot Quarterly
+
+# Crawls Alaska-ECommerce for repos using outdated Auro deps and opens ADO
+# tickets recommending upgrades. Runs once a quarter (1st of Jan / Apr /
+# Jul / Oct). Supports manual trigger via the Actions tab for testing or
+# off-cycle runs.
+#
+# Required repository secrets (set in Settings → Secrets and variables →
+# Actions):
+#   GH_TOKEN  — PAT for the auro-version-bot service account. Scopes:
+#               `repo` and `read:org` against both the Alaska-ECommerce
+#               and AlaskaAirlines orgs.
+#   ADO_TOKEN — PAT for the same service account on
+#               dev.azure.com/itsals. Scope: Work Items: Read, write, &
+#               manage on the E_Retain_Content project.
+#
+# Until both secrets are set, the precheck job logs a warning and the
+# scan-and-create job is skipped — no red failures accumulate while we
+# wait on the service account being provisioned. See
+# .claude/notes/handoff-for-next-session.md section C for the
+# provisioning sequence.
+#
+# Security note: this workflow uses only `secrets.*` and `github.run_id`
+# interpolations. It deliberately avoids any `github.event.*` inputs that
+# could carry untrusted user-controlled strings.
+
+on:
+  schedule:
+    # 13:00 UTC on the 1st of Jan / Apr / Jul / Oct. Quarterly cadence is
+    # deliberately conservative while the bot is new — once it's earned
+    # trust we can tighten to monthly or weekly. Cron doesn't handle DST;
+    # the run drifts by one hour twice a year, immaterial at this cadence.
+    - cron: "0 13 1 1,4,7,10 *"
+  workflow_dispatch: {}
+
+concurrency:
+  # Serialize all runs. Prevents a manual dispatch from racing the cron —
+  # that race could theoretically create duplicate tickets despite the
+  # WIQL dedupe (two parallel queries seeing each other's pre-write state).
+  group: version-bot-quarterly
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  precheck:
+    runs-on: ubuntu-latest
+    outputs:
+      configured: ${{ steps.s.outputs.configured }}
+    steps:
+      - id: s
+        env:
+          HAS_GH: ${{ secrets.GH_TOKEN != '' }}
+          HAS_ADO: ${{ secrets.ADO_TOKEN != '' }}
+        run: |
+          if [ "$HAS_GH" = "true" ] && [ "$HAS_ADO" = "true" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Bot service account is not provisioned (GH_TOKEN and/or ADO_TOKEN repo secrets are missing). Skipping the scan/create job. See .claude/notes/handoff-for-next-session.md section C for provisioning steps."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  scan-and-create:
+    needs: precheck
+    if: needs.precheck.outputs.configured == 'true'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      ADO_TOKEN: ${{ secrets.ADO_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Scan Alaska-ECommerce for upgrade candidates
+        run: node ./dist/auro-cli.js version-scan
+
+      # --no-tags works around the current ADO permission limitation on
+      # writing System.Tags. Dedupe still works without tags via
+      # area-path + title-substring matching in src/scripts/ado/wiql.ts.
+      # When the bot service account gains tag-write permission, drop
+      # this flag and revisit whether to put the tag clause back in
+      # wiql.ts (handoff item D.6).
+      - name: Create tickets in ADO
+        run: node ./dist/auro-cli.js version-tickets --apply --no-tags --min-majors 2
+
+      # Both artifacts upload even if the create step fails so a debugger
+      # has the inputs and any partial outputs to work from.
+      - name: Upload candidates JSON
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: candidates-${{ github.run_id }}
+          path: .cache/version-bot/auro-upgrade-candidates.json
+          if-no-files-found: warn
+          retention-days: 30
+
+      # The audit log is the rollback surface. To roll back tickets from
+      # a CI run: download this artifact, drop it at
+      # .cache/version-bot/run-log.jsonl locally, then run
+      #   auro version-tickets cleanup --run-id <id> --apply
+      # Longer retention than candidates because rollback may be needed
+      # weeks after the tickets were created.
+      - name: Upload audit log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-${{ github.run_id }}
+          path: .cache/version-bot/run-log.jsonl
+          if-no-files-found: warn
+          retention-days: 90

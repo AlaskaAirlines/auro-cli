@@ -60,7 +60,7 @@ const SCENARIOS = [
     danger: false,
     description: "What the scan does, without actually running it.",
     walkthrough:
-      "This scenario describes `auro version-scan` rather than executing it. The real scan crawls every non-archived repo in Alaska-ECommerce (~2,500 of them), fetches each one's package.json over the GitHub API, and looks up the latest version of every Auro package on npm. That takes 3–5 minutes — too long for a live demo, and the cache makes subsequent runs incremental anyway. The candidates list scenario 2 will summarize comes from a real scan run on 2026-05-11 that found 436 upgrade candidates. In production, this command runs weekly via a GitHub Actions cron.",
+      "This scenario describes `auro version-scan` rather than executing it. The real scan crawls every non-archived repo in Alaska-ECommerce (~2,500 of them), fetches each one's package.json over the GitHub API, and looks up the latest version of every Auro package on npm. That takes 3–5 minutes — too long for a live demo, and the cache makes subsequent runs incremental anyway. The candidates list scenario 2 will summarize comes from a real scan run on 2026-05-11 that found 436 upgrade candidates. In production, this command runs quarterly via a GitHub Actions cron.",
     command: ["node", "demo/scan-info.mjs"],
     displayCommand: "auro version-scan",
   },
@@ -80,7 +80,7 @@ const SCENARIOS = [
     danger: false,
     description: "Aggregate stats from the cached scan output.",
     walkthrough:
-      "The numbers come from a real scan against Alaska-ECommerce (~2,500 repos, ~436 upgrade candidates). The scan itself takes 3–5 minutes so we cached its output rather than running it live. This gives a sense of how much work the bot would automate in one weekly cron run, and where the work clusters by package and repo.",
+      "The numbers come from a real scan against Alaska-ECommerce (~2,500 repos, ~436 upgrade candidates). The scan itself takes 3–5 minutes so we cached its output rather than running it live. This gives a sense of how much work the bot would automate in one quarterly cron run, and where the work clusters by package and repo.",
     command: ["node", "demo/scan-overview.mjs"],
   },
   {
@@ -155,7 +155,7 @@ const SCENARIOS = [
     danger: true,
     description: "Same as scenario 5 but creates up to 3 tickets in one run.",
     walkthrough:
-      "Identical to scenario 5 except `--limit 3` lets multiple tickets through. All tickets created here share a single run-id in the audit log, so the cleanup in scenario 8 will treat them as a unit. In production the weekly cron omits `--limit` entirely and creates as many tickets as candidates qualify — dedupe (scenario 7) is what prevents that from spamming.",
+      "Identical to scenario 5 except `--limit 3` lets multiple tickets through. All tickets created here share a single run-id in the audit log, so the cleanup in scenario 8 will treat them as a unit. In production the quarterly cron omits `--limit` entirely and creates as many tickets as candidates qualify — dedupe (scenario 7) is what prevents that from spamming.",
     command: [
       "node",
       "./dist/auro-cli.js",
