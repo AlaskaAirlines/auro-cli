@@ -1,32 +1,49 @@
+import type { BreakingChange, ChangelogSlice } from "./changelog.ts";
 import type { UpgradeCandidate } from "./types.ts";
 
 export interface StoryBodyInput {
   candidate: UpgradeCandidate;
-  changelogHtml: string | null;
+  changelogSlice: ChangelogSlice | null;
   changelogUrl: string;
+  breakingChanges: BreakingChange[];
+  /** When this ticket replaces an earlier bot ticket via close-and-recreate. */
+  supersedes?: number;
 }
 
 /**
- * Default acceptance criteria for an Auro version-upgrade story. Each bullet
- * is independently verifiable — pass/fail is unambiguous to a reviewer.
- * Reviewers can edit or extend this list per ticket; the goal here is to
- * give every auto-created story a usable starting point so no human has
- * to fill it in by hand.
+ * Generic verification bullets that apply to every upgrade. Per-upgrade
+ * specifics (e.g. "verify breaking change X is handled") are appended
+ * downstream by `buildAcceptanceCriteria`.
  */
-export function buildAcceptanceCriteria(c: UpgradeCandidate): string {
+function genericAcceptanceBullets(c: UpgradeCandidate): string[] {
   const pkg = escapeHtml(c.package);
   const latest = escapeHtml(c.latest);
   return [
-    "<ul>",
-    `  <li>Update <code>${pkg}</code> to <code>${latest}</code> in the consumer's <code>package.json</code> (and lockfile).</li>`,
-    "  <li><code>npm ci</code> succeeds with no peer-dep warnings or lockfile drift caused by the upgrade.</li>",
-    "  <li>Build / TypeScript compile passes with no new errors introduced by the upgrade.</li>",
-    "  <li>Lint passes (no new violations).</li>",
-    "  <li>Existing test suite passes.</li>",
-    `  <li>Manual smoke check: every UI surface using <code>${pkg}</code> renders without new console errors and matches the prior visual baseline (or the deliberate change called out in the migration guide).</li>`,
-    "  <li>Each breaking change called out in the migration guide above is addressed in the diff or explicitly noted as not-applicable in the PR description.</li>",
-    "</ul>",
-  ].join("\n");
+    `Update <code>${pkg}</code> to <code>${latest}</code> in the consumer's <code>package.json</code> (and lockfile).`,
+    "<code>npm ci</code> succeeds with no peer-dep warnings or lockfile drift caused by the upgrade.",
+    "Build / TypeScript compile passes with no new errors introduced by the upgrade.",
+    "Lint passes (no new violations).",
+    "Existing test suite passes.",
+    `Manual smoke check: every UI surface using <code>${pkg}</code> renders without new console errors and matches the prior visual baseline.`,
+  ];
+}
+
+/**
+ * Acceptance criteria starts with the generic verification bullets and
+ * appends one verifiable bullet per breaking change so the reviewer can
+ * tick them off individually.
+ */
+export function buildAcceptanceCriteria(
+  c: UpgradeCandidate,
+  breakingChanges: BreakingChange[] = [],
+): string {
+  const bullets = genericAcceptanceBullets(c).map((b) => `  <li>${b}</li>`);
+  for (const bc of breakingChanges) {
+    bullets.push(
+      `  <li>Verify the breaking change introduced in <code>${escapeHtml(bc.version)}</code> is handled: ${renderInline(bc.text)}</li>`,
+    );
+  }
+  return ["<ul>", ...bullets, "</ul>"].join("\n");
 }
 
 export function buildStoryTitle(c: UpgradeCandidate): string {
@@ -36,8 +53,10 @@ export function buildStoryTitle(c: UpgradeCandidate): string {
 
 export function buildStoryBody({
   candidate,
-  changelogHtml,
+  changelogSlice,
   changelogUrl,
+  breakingChanges,
+  supersedes,
 }: StoryBodyInput): string {
   const {
     repo,
@@ -49,42 +68,97 @@ export function buildStoryBody({
   } = candidate;
   const plural = majorsBehind > 1 ? "s" : "";
 
-  const migrationSection = changelogHtml
+  const contextSection = [
+    "<h3>Context</h3>",
+    `<p>The repo <a href="${repoUrl}"><b>${escapeHtml(repo)}</b></a> is using <code>${escapeHtml(pkg)}@${escapeHtml(pinned)}</code> but the latest published version is <code>${escapeHtml(latest)}</code> — that's <b>${majorsBehind} major version${plural} behind</b>. Staying current keeps a11y, security patches, and design-system parity in step with the rest of the Auro fleet.</p>`,
+    supersedes !== undefined
+      ? `<p><i>This ticket supersedes work item #${supersedes}, which was closed because a newer version of <code>${escapeHtml(pkg)}</code> has shipped since that ticket was created.</i></p>`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const breakingSection = buildBreakingChangesSection(
+    pkg,
+    pinned,
+    latest,
+    changelogSlice,
+    breakingChanges,
+  );
+
+  const migrationSection = changelogSlice
     ? [
         "<h3>Migration guide</h3>",
         `<p>Changes in <b>${escapeHtml(pkg)}</b> between <code>${escapeHtml(pinned)}</code> and <code>${escapeHtml(latest)}</code>:</p>`,
-        changelogHtml,
+        changelogSlice.html,
         `<p>Full CHANGELOG: <a href="${changelogUrl}">${changelogUrl}</a></p>`,
       ].join("\n")
     : [
         "<h3>Migration guide</h3>",
-        `<p>See the <a href="${changelogUrl}">CHANGELOG for ${escapeHtml(pkg)}</a> for breaking changes between <code>${escapeHtml(pinned)}</code> and <code>${escapeHtml(latest)}</code>.</p>`,
+        `<p>See the <a href="${changelogUrl}">CHANGELOG for ${escapeHtml(pkg)}</a> for changes between <code>${escapeHtml(pinned)}</code> and <code>${escapeHtml(latest)}</code>.</p>`,
       ].join("\n");
 
   return [
-    "<h3>Context</h3>",
-    `<p>The repo <a href="${repoUrl}"><b>${escapeHtml(repo)}</b></a> is using <code>${escapeHtml(pkg)}@${escapeHtml(pinned)}</code> but the latest published version is <code>${escapeHtml(latest)}</code> — that's <b>${majorsBehind} major version${plural} behind</b>.</p>`,
+    contextSection,
     "",
-    "<h3>Risks of not upgrading</h3>",
-    "<ul>",
-    "  <li>Missing critical accessibility (WCAG 2.2 AA) fixes shipped in newer majors</li>",
-    "  <li>Bug fixes and security patches landing only on the latest major</li>",
-    "  <li>Drift from the Auro design system — visual / behavioral inconsistency with other ecommerce surfaces</li>",
-    "  <li>Breaking changes accumulate; the longer you wait, the riskier the eventual upgrade</li>",
-    "</ul>",
+    breakingSection,
     "",
     migrationSection,
     "",
-    "<h3>Benefits of upgrading</h3>",
-    "<ul>",
-    "  <li>Latest a11y improvements + WCAG 2.2 AA token contrast fixes</li>",
-    "  <li>Performance and bundle-size improvements</li>",
-    "  <li>Continued support — older majors will not receive new fixes</li>",
-    "  <li>Stays in sync with the rest of the Auro fleet (lower long-term maintenance cost)</li>",
-    "</ul>",
-    "",
     "<p><i>This ticket was auto-generated by the Auro Version Support bot.</i></p>",
+  ]
+    .filter((s) => s !== "")
+    .join("\n");
+}
+
+/**
+ * Renders a "Breaking changes in this upgrade" section derived from the
+ * BREAKING CHANGES subheadings in the CHANGELOG slice. Returns an empty
+ * string when the changelog wasn't fetchable (so the section is omitted
+ * entirely); returns an explicit "none detected" paragraph when the
+ * changelog exists but contains no breaking-change entries.
+ */
+function buildBreakingChangesSection(
+  pkg: string,
+  pinned: string,
+  latest: string,
+  changelogSlice: ChangelogSlice | null,
+  breakingChanges: BreakingChange[],
+): string {
+  if (!changelogSlice) {
+    return "";
+  }
+  if (breakingChanges.length === 0) {
+    return [
+      "<h3>Breaking changes in this upgrade</h3>",
+      `<p>No breaking changes detected in <code>${escapeHtml(pkg)}</code> between <code>${escapeHtml(pinned)}</code> and <code>${escapeHtml(latest)}</code>.</p>`,
+    ].join("\n");
+  }
+  const bullets = breakingChanges
+    .map(
+      (bc) =>
+        `  <li><b>${escapeHtml(bc.version)}:</b> ${renderInline(bc.text)}</li>`,
+    )
+    .join("\n");
+  return [
+    "<h3>Breaking changes in this upgrade</h3>",
+    "<ul>",
+    bullets,
+    "</ul>",
   ].join("\n");
+}
+
+function renderInline(text: string): string {
+  // Inline markdown that survives raw in a CHANGELOG bullet: `code` and
+  // [label](url) links. Escape first so URL chars are safe before we
+  // re-inject HTML tags.
+  let html = escapeHtml(text);
+  html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+  html = html.replace(
+    /\[([^\]]+)\]\(([^)]+)\)/g,
+    (_match, label, url) => `<a href="${url}">${label}</a>`,
+  );
+  return html;
 }
 
 function escapeHtml(s: string): string {

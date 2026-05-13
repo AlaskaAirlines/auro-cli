@@ -345,6 +345,20 @@ const updateGitHubProject = async (
   }
 };
 
+const ADO_ORG_URL = "https://dev.azure.com/itsals";
+const ADO_PROJECT_NAME = "E_Retain_Content";
+const ADO_AREA_PATH = "E_Retain_Content\\Auro Design System";
+
+function getWorkItemTrackingApi() {
+  const adoToken = process.env.ADO_TOKEN;
+  if (!adoToken) {
+    throw new Error("ADO_TOKEN environment variable is required");
+  }
+  const authHandler = azdev.getPersonalAccessTokenHandler(adoToken);
+  const connection = new azdev.WebApi(ADO_ORG_URL, authHandler);
+  return connection.getWorkItemTrackingApi();
+}
+
 export interface CreateADOWorkItemInput {
   title: string;
   descriptionHtml: string;
@@ -363,20 +377,7 @@ export interface CreateADOWorkItemInput {
 export const createADOWorkItem = async (
   input: CreateADOWorkItemInput,
 ): Promise<WorkItem> => {
-  const adoToken = process.env.ADO_TOKEN;
-  if (!adoToken) {
-    throw new Error("ADO_TOKEN environment variable is required");
-  }
-
-  // ADO organization and project details
-  const orgUrl = "https://dev.azure.com/itsals";
-  const projectName = "E_Retain_Content";
-  const areaPath = "E_Retain_Content\\Auro Design System";
-
-  // Create connection to Azure DevOps
-  const authHandler = azdev.getPersonalAccessTokenHandler(adoToken);
-  const connection = new azdev.WebApi(orgUrl, authHandler);
-  const workItemTrackingApi = await connection.getWorkItemTrackingApi();
+  const workItemTrackingApi = await getWorkItemTrackingApi();
 
   try {
     // Prepare work item data - omitting iteration path to use project default
@@ -394,7 +395,7 @@ export const createADOWorkItem = async (
       {
         op: "add",
         path: "/fields/System.AreaPath",
-        value: areaPath,
+        value: ADO_AREA_PATH,
       },
     ];
 
@@ -417,11 +418,53 @@ export const createADOWorkItem = async (
     return await workItemTrackingApi.createWorkItem(
       null,
       workItemData,
-      projectName,
+      ADO_PROJECT_NAME,
       "User Story",
     );
   } catch (error) {
     throw new Error(`Failed to create ADO work item: ${error}`);
+  }
+};
+
+export interface CloseADOWorkItemInput {
+  id: number;
+  /** Plain-text comment appended to System.History for audit context. */
+  comment?: string;
+  /** ADO state to transition to. Defaults to "Removed" (soft-delete). */
+  state?: string;
+}
+
+/**
+ * Soft-deletes (state = "Removed") an existing ADO work item and optionally
+ * appends a history comment explaining why. Requires the same PAT scope as
+ * `createADOWorkItem` (Work Items: Read, write, & manage).
+ */
+export const closeADOWorkItem = async (
+  input: CloseADOWorkItemInput,
+): Promise<WorkItem> => {
+  const workItemTrackingApi = await getWorkItemTrackingApi();
+  const state = input.state ?? "Removed";
+
+  const patch: Array<{ op: string; path: string; value: string }> = [
+    { op: "add", path: "/fields/System.State", value: state },
+  ];
+  if (input.comment) {
+    patch.push({
+      op: "add",
+      path: "/fields/System.History",
+      value: input.comment,
+    });
+  }
+
+  try {
+    return await workItemTrackingApi.updateWorkItem(
+      null,
+      patch,
+      input.id,
+      ADO_PROJECT_NAME,
+    );
+  } catch (error) {
+    throw new Error(`Failed to close ADO work item #${input.id}: ${error}`);
   }
 };
 
