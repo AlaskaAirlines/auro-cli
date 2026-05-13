@@ -34,7 +34,8 @@ async function checkGhToken() {
       };
     }
     const body = await res.json();
-    const scopes = res.headers.get("x-oauth-scopes") ?? "(scopes header missing)";
+    const scopes =
+      res.headers.get("x-oauth-scopes") ?? "(scopes header missing)";
     return {
       ok: true,
       message: `valid as ${body.login} — scopes: ${scopes}`,
@@ -53,7 +54,7 @@ async function checkAdoToken() {
   const url =
     `https://dev.azure.com/${ADO_ORG}` +
     `/${encodeURIComponent(ADO_PROJECT)}` +
-    `/_apis/wit/workitemtypes?api-version=7.1`;
+    "/_apis/wit/workitemtypes?api-version=7.1";
   try {
     const res = await fetch(url, { headers: { Authorization: auth } });
     if (!res.ok) {
@@ -95,7 +96,9 @@ async function checkAdoToken() {
   console.log("");
   if (gh.ok && ado.ok) {
     console.log("All tokens valid. Safe to run dry-run scenarios.");
-    console.log("When ready for a real ticket, use: --apply --limit 1 --repo <one-safe-repo>");
+    console.log(
+      "When ready for a real ticket, use: --apply --limit 1 --repo <one-safe-repo>",
+    );
   } else {
     console.log("One or more tokens failed. Check .env values and PAT scopes.");
     process.exit(1);

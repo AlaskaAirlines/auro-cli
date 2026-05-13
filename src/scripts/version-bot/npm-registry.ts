@@ -53,3 +53,20 @@ export function majorsBehind(pinned: string, latest: string | null): number {
   }
   return Math.max(0, l.major - p.major);
 }
+
+/**
+ * Compares two semver strings. Returns -1 / 0 / 1 in the standard sort order,
+ * or null when either side is unparseable.
+ */
+export function compareSemver(
+  a: string | null | undefined,
+  b: string | null | undefined,
+): number | null {
+  const pa = parseSemver(a);
+  const pb = parseSemver(b);
+  if (!pa || !pb) return null;
+  if (pa.major !== pb.major) return pa.major < pb.major ? -1 : 1;
+  if (pa.minor !== pb.minor) return pa.minor < pb.minor ? -1 : 1;
+  if (pa.patch !== pb.patch) return pa.patch < pb.patch ? -1 : 1;
+  return 0;
+}

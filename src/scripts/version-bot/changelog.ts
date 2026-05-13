@@ -3,7 +3,33 @@ import { parseSemver } from "./npm-registry.ts";
 import type { SemverParts } from "./types.ts";
 
 const REPO_OWNER = "AlaskaAirlines";
-const sliceCache = new Map<string, string | null>();
+const sliceCache = new Map<string, ChangelogSlice | null>();
+
+export type ChangelogSectionType =
+  | "features"
+  | "bugFixes"
+  | "breakingChanges"
+  | "other";
+
+export interface ChangelogSection {
+  type: ChangelogSectionType;
+  /** Original heading text from the CHANGELOG (e.g. "Bug Fixes"). */
+  title: string;
+  /** Plain-text bullets with semantic-release PR/commit suffixes stripped. */
+  bullets: string[];
+}
+
+export interface ChangelogVersionSlice {
+  version: string;
+  dateStr: string | null;
+  sections: ChangelogSection[];
+}
+
+export interface ChangelogSlice {
+  versions: ChangelogVersionSlice[];
+  /** HTML rendering of the same slice, for direct inclusion in the ticket body. */
+  html: string;
+}
 
 interface ParsedSection {
   version: string;
@@ -13,20 +39,22 @@ interface ParsedSection {
 
 /**
  * Fetches CHANGELOG.md from AlaskaAirlines/<short-pkg-name>, slices the
- * sections that fall in (pinned, latest], and renders them as HTML for
- * inclusion in an ADO work item description.
+ * sections that fall in (pinned, latest], and returns both a structured
+ * representation (per-version sub-sections by type: features / bug fixes /
+ * breaking changes / other) and a rendered HTML string suitable for direct
+ * inclusion in a work item description.
  *
  * Returns null on any failure — missing GH_TOKEN, 404, unparseable structure,
  * empty slice, etc. Callers should fall back to a plain CHANGELOG link.
  *
  * Results are cached in-process by (pkg, pinned, latest) so the same package
- * isn't refetched for every consumer repo in one run.
+ * isn't refetched (or re-parsed) for every consumer repo in one run.
  */
-export async function fetchChangelogSlice(
+export async function fetchChangelogStructured(
   pkg: string,
   pinned: string,
   latest: string,
-): Promise<string | null> {
+): Promise<ChangelogSlice | null> {
   const cacheKey = `${pkg}|${pinned}|${latest}`;
   if (sliceCache.has(cacheKey)) {
     return sliceCache.get(cacheKey) ?? null;
@@ -36,11 +64,24 @@ export async function fetchChangelogSlice(
   return result;
 }
 
-async function fetchAndSlice(
+/**
+ * Back-compat wrapper for callers that only need the rendered HTML.
+ * Prefer `fetchChangelogStructured` for new code.
+ */
+export async function fetchChangelogSlice(
   pkg: string,
   pinned: string,
   latest: string,
 ): Promise<string | null> {
+  const slice = await fetchChangelogStructured(pkg, pinned, latest);
+  return slice ? slice.html : null;
+}
+
+async function fetchAndSlice(
+  pkg: string,
+  pinned: string,
+  latest: string,
+): Promise<ChangelogSlice | null> {
   const ghToken = process.env.GH_TOKEN;
   if (!ghToken) {
     return null;
@@ -77,7 +118,9 @@ async function fetchAndSlice(
     return null;
   }
 
-  return sliced.map(renderSection).join("\n");
+  const versions = sliced.map(toStructuredVersion);
+  const html = versions.map(renderVersion).join("\n");
+  return { versions, html };
 }
 
 function parseSections(raw: string): ParsedSection[] {
@@ -135,53 +178,79 @@ function compareSemver(a: SemverParts, b: SemverParts): number {
   return a.patch - b.patch;
 }
 
-function renderSection(section: ParsedSection): string {
-  const heading = section.dateStr
-    ? `<h4>[${escapeHtml(section.version)}] — ${escapeHtml(section.dateStr)}</h4>`
-    : `<h4>[${escapeHtml(section.version)}]</h4>`;
-  const parts: string[] = [heading];
+function classifySection(title: string): ChangelogSectionType {
+  const normalized = title.trim().toLowerCase();
+  if (normalized.includes("breaking")) return "breakingChanges";
+  if (normalized.startsWith("feature")) return "features";
+  if (normalized.includes("bug fix") || normalized.startsWith("fix")) {
+    return "bugFixes";
+  }
+  return "other";
+}
 
-  let bullets: string[] = [];
-  const flushList = () => {
-    if (bullets.length > 0) {
-      parts.push(`<ul>${bullets.join("")}</ul>`);
-      bullets = [];
+function toStructuredVersion(section: ParsedSection): ChangelogVersionSlice {
+  const sections: ChangelogSection[] = [];
+  let current: ChangelogSection | null = null;
+
+  const flush = () => {
+    if (current) {
+      sections.push(current);
+      current = null;
     }
   };
 
   for (const line of section.body.split("\n")) {
     const trimmed = line.trim();
-    if (!trimmed) {
-      flushList();
-      continue;
-    }
+    if (!trimmed) continue;
 
     const subHeadingMatch = trimmed.match(/^###\s+(.+)$/);
     if (subHeadingMatch) {
-      flushList();
-      parts.push(`<h5>${escapeHtml(subHeadingMatch[1])}</h5>`);
+      flush();
+      const title = subHeadingMatch[1].trim();
+      current = { type: classifySection(title), title, bullets: [] };
       continue;
     }
 
     const bulletMatch = trimmed.match(/^[*-]\s+(.+)$/);
-    if (bulletMatch) {
-      bullets.push(`<li>${renderInline(bulletMatch[1])}</li>`);
+    if (bulletMatch && current) {
+      current.bullets.push(stripBulletSuffix(bulletMatch[1]));
     }
   }
 
-  flushList();
+  flush();
+  return { version: section.version, dateStr: section.dateStr, sections };
+}
+
+/**
+ * Strips trailing semantic-release commit/PR references like
+ * `text ([#123](url))` or `text ([abc1234](url))`.
+ */
+function stripBulletSuffix(text: string): string {
+  return text.replace(/\s*\(\[[^\]]+\]\([^)]+\)\)/g, "").trim();
+}
+
+function renderVersion(version: ChangelogVersionSlice): string {
+  const heading = version.dateStr
+    ? `<h4>[${escapeHtml(version.version)}] — ${escapeHtml(version.dateStr)}</h4>`
+    : `<h4>[${escapeHtml(version.version)}]</h4>`;
+  const parts: string[] = [heading];
+  for (const sec of version.sections) {
+    parts.push(`<h5>${escapeHtml(sec.title)}</h5>`);
+    if (sec.bullets.length > 0) {
+      const bullets = sec.bullets
+        .map((b) => `<li>${renderInline(b)}</li>`)
+        .join("");
+      parts.push(`<ul>${bullets}</ul>`);
+    }
+  }
   return parts.join("\n");
 }
 
 function renderInline(text: string): string {
-  // Strip semantic-release commit/PR link suffixes at the end of bullets:
-  // `text ([#123](url))`, `text ([abc1234](url))`.
-  const stripped = text.replace(/\s*\(\[[^\]]+\]\([^)]+\)\)/g, "").trim();
-  // Escape first so URL chars (`&`, `"`, etc.) are safe in href attributes.
-  let html = escapeHtml(stripped);
-  // `code` -> <code>code</code>
+  // Already had its semantic-release suffix stripped during parse; just
+  // handle inline markdown for `code` and [label](url) links.
+  let html = escapeHtml(text);
   html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
-  // [label](url) -> <a href="url">label</a>
   html = html.replace(
     /\[([^\]]+)\]\(([^)]+)\)/g,
     (_match, label, url) => `<a href="${url}">${label}</a>`,
@@ -196,4 +265,28 @@ function escapeHtml(s: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+/**
+ * Convenience: flattens all breaking-change bullets across the slice,
+ * tagged with the version they came from. Used by the template to render
+ * a top-level "Breaking changes" section and by AC to emit one bullet
+ * per breaking change.
+ */
+export interface BreakingChange {
+  version: string;
+  text: string;
+}
+
+export function extractBreakingChanges(slice: ChangelogSlice): BreakingChange[] {
+  const out: BreakingChange[] = [];
+  for (const v of slice.versions) {
+    for (const sec of v.sections) {
+      if (sec.type !== "breakingChanges") continue;
+      for (const bullet of sec.bullets) {
+        out.push({ version: v.version, text: bullet });
+      }
+    }
+  }
+  return out;
 }

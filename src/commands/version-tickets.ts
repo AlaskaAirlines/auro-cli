@@ -1,5 +1,6 @@
 import chalk from "chalk";
 import { program } from "commander";
+import { runCleanup } from "#scripts/version-bot/cleanup.ts";
 import { runCreateTickets } from "#scripts/version-bot/create-tickets.ts";
 
 interface VersionTicketsOptions {
@@ -9,6 +10,7 @@ interface VersionTicketsOptions {
   repo?: string;
   candidates?: string;
   previewDir?: string;
+  tags: boolean;
 }
 
 export const versionTicketsCommand = program
@@ -36,6 +38,7 @@ export const versionTicketsCommand = program
     "--preview-dir <dir>",
     "During dry-run, write one styled HTML preview file per candidate to this directory",
   )
+  .option("--no-tags", "Skip setting System.Tags on created work items")
   .action(async (options: VersionTicketsOptions) => {
     try {
       const minMajors = Number.parseInt(options.minMajors, 10);
@@ -57,6 +60,7 @@ export const versionTicketsCommand = program
         repo: options.repo,
         candidatesPath: options.candidates,
         previewDir: options.previewDir,
+        noTags: !options.tags,
       });
 
       console.log("");
@@ -68,6 +72,16 @@ export const versionTicketsCommand = program
       if (options.apply) {
         console.log(
           `  Applied: ${chalk.green(summary.applied)}  failed: ${chalk.red(summary.failed)}`,
+        );
+        console.log(
+          `  Dedupe:  ${chalk.yellow(summary.dedupeSkipped)} skipped, ${chalk.magenta(summary.dedupeReplaced)} replaced`,
+        );
+        console.log(`  run-id:  ${chalk.dim(summary.runId)}`);
+        console.log(
+          chalk.dim(
+            "\n  To roll back this run: auro version-tickets cleanup --run-id " +
+              summary.runId,
+          ),
         );
       } else {
         console.log(`  Dry-run printed: ${chalk.cyan(summary.dryRun)}`);
@@ -81,6 +95,64 @@ export const versionTicketsCommand = program
       console.error(
         chalk.red(
           `version-tickets failed: ${error instanceof Error ? error.message : error}`,
+        ),
+      );
+      process.exit(1);
+    }
+  });
+
+interface CleanupCliOptions {
+  apply: boolean;
+  runId?: string;
+  last?: boolean;
+  list?: boolean;
+}
+
+versionTicketsCommand
+  .command("cleanup")
+  .description(
+    "Close (state=Removed) work items created by a prior `version-tickets --apply` run. Dry-run by default.",
+  )
+  .option("--run-id <id>", "Target a specific run id from the audit log")
+  .option("--last", "Target the most recent run id", false)
+  .option("--list", "List available run ids and exit (no writes)", false)
+  .option(
+    "--apply",
+    "Actually close tickets in ADO (otherwise dry-run)",
+    false,
+  )
+  .action(async (options: CleanupCliOptions) => {
+    try {
+      const summary = await runCleanup({
+        apply: options.apply,
+        runId: options.runId,
+        last: options.last,
+        list: options.list,
+      });
+      if (options.list) return;
+
+      console.log("");
+      console.log(
+        chalk.bold(options.apply ? "Cleanup complete." : "Dry run complete."),
+      );
+      console.log(`  Eligible: ${summary.candidates}`);
+      if (options.apply) {
+        console.log(
+          `  Closed:   ${chalk.green(summary.closed)}  failed: ${chalk.red(summary.failed)}`,
+        );
+        console.log(`  run-id:   ${chalk.dim(summary.cleanupRunId)}`);
+      } else {
+        console.log(`  Dry-run printed: ${chalk.cyan(summary.skipped)}`);
+        console.log(
+          chalk.dim(
+            "\n  Re-run with --apply to actually close tickets in ADO.",
+          ),
+        );
+      }
+    } catch (error) {
+      console.error(
+        chalk.red(
+          `cleanup failed: ${error instanceof Error ? error.message : error}`,
         ),
       );
       process.exit(1);
