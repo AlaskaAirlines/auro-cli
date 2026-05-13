@@ -1,0 +1,11 @@
+[
+  {
+    "repo": "fixture-legacy-namespace",
+    "package": "@alaskaairux/auro-button",
+    "pinned": "4.0.0",
+    "latest": "12.3.2",
+    "majorsBehind": 8,
+    "repoUrl": "https://github.com/Alaska-ECommerce/fixture-legacy-namespace",
+    "targetPackage": "@aurodesignsystem/auro-button"
+  }
+]

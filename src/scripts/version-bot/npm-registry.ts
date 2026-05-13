@@ -1,3 +1,4 @@
+import { aliasFor } from "./aliases.ts";
 import type { SemverParts } from "./types.ts";
 
 const NPM_REGISTRY = "https://registry.npmjs.org";
@@ -52,6 +53,47 @@ export function majorsBehind(pinned: string, latest: string | null): number {
     return 0;
   }
   return Math.max(0, l.major - p.major);
+}
+
+export interface ResolvedLatest {
+  /** The npm package name the returned version actually came from. Equals
+   *  the input package unless an alias produced a higher version. */
+  resolvedPackage: string;
+  /** Highest version seen across the input package and its alias (if any),
+   *  or null when both lookups failed. */
+  version: string | null;
+}
+
+/**
+ * Like `npmLatest`, but also consults `aliases.ts`. For an
+ * `@alaskaairux/*` package with a known `@aurodesignsystem/*` successor,
+ * looks up both and returns the higher version. Used by `scan.ts` so a
+ * consumer pinned on a legacy-scope package is still cross-checked against
+ * its new-scope successor.
+ */
+export async function resolveLatestAcrossAliases(
+  pkgName: string,
+): Promise<ResolvedLatest> {
+  const alias = aliasFor(pkgName);
+  if (!alias) {
+    return { resolvedPackage: pkgName, version: await npmLatest(pkgName) };
+  }
+  const [direct, aliased] = await Promise.all([
+    npmLatest(pkgName),
+    npmLatest(alias),
+  ]);
+  if (direct === null && aliased === null) {
+    return { resolvedPackage: pkgName, version: null };
+  }
+  if (direct === null) return { resolvedPackage: alias, version: aliased };
+  if (aliased === null) return { resolvedPackage: pkgName, version: direct };
+  const cmp = compareSemver(direct, aliased);
+  // If either side is unparseable, prefer the aliased (newer scope) version
+  // since that's where active development lives.
+  if (cmp === null) return { resolvedPackage: alias, version: aliased };
+  return cmp < 0
+    ? { resolvedPackage: alias, version: aliased }
+    : { resolvedPackage: pkgName, version: direct };
 }
 
 /**

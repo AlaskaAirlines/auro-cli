@@ -8,7 +8,11 @@ import {
   writeScanCache,
   writeUpgradeCandidates,
 } from "./cache.ts";
-import { majorsBehind, npmLatest } from "./npm-registry.ts";
+import {
+  majorsBehind,
+  type ResolvedLatest,
+  resolveLatestAcrossAliases,
+} from "./npm-registry.ts";
 import type {
   PackageScan,
   RepoEntry,
@@ -276,8 +280,10 @@ async function buildUpgradeCandidates(
     `Resolving latest npm versions for ${distinctPackages.size} Auro packages...`,
   ).start();
   const names = [...distinctPackages];
-  const results = await Promise.all(names.map((name) => npmLatest(name)));
-  const latestByPackage = new Map<string, string | null>(
+  const results = await Promise.all(
+    names.map((name) => resolveLatestAcrossAliases(name)),
+  );
+  const latestByPackage = new Map<string, ResolvedLatest>(
     names.map((name, i) => [name, results[i]]),
   );
   latestSpinner.succeed(
@@ -290,18 +296,22 @@ async function buildUpgradeCandidates(
     for (const pkgScan of Object.values(repoEntry.packages)) {
       for (const [name, pinned] of Object.entries(pkgScan.auroDeps)) {
         if (archivedPackages.has(name)) continue;
-        const latest = latestByPackage.get(name) ?? null;
-        if (!latest) continue;
-        const mb = majorsBehind(pinned, latest);
+        const resolved = latestByPackage.get(name);
+        if (!resolved?.version) continue;
+        const mb = majorsBehind(pinned, resolved.version);
         if (mb < 1) continue;
-        candidates.push({
+        const candidate: UpgradeCandidate = {
           repo: repoEntry.name,
           package: name,
           pinned,
-          latest,
+          latest: resolved.version,
           majorsBehind: mb,
           repoUrl: `https://github.com/${org}/${repoEntry.name}`,
-        });
+        };
+        if (resolved.resolvedPackage !== name) {
+          candidate.targetPackage = resolved.resolvedPackage;
+        }
+        candidates.push(candidate);
       }
     }
   }
