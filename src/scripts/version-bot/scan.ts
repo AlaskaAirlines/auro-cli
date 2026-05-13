@@ -261,22 +261,25 @@ async function buildUpgradeCandidates(
   archivedPackages: Set<string>,
   org: string,
 ): Promise<UpgradeCandidate[]> {
-  const latestSpinner = ora(
-    "Resolving latest npm versions for Auro packages...",
-  ).start();
-  const latestByPackage = new Map<string, string | null>();
-
+  const distinctPackages = new Set<string>();
   for (const repoEntry of Object.values(cache.repos)) {
     if (repoEntry.error || repoEntry.archived) continue;
     for (const pkgScan of Object.values(repoEntry.packages)) {
       for (const name of Object.keys(pkgScan.auroDeps)) {
         if (archivedPackages.has(name)) continue;
-        if (!latestByPackage.has(name)) {
-          latestByPackage.set(name, await npmLatest(name));
-        }
+        distinctPackages.add(name);
       }
     }
   }
+
+  const latestSpinner = ora(
+    `Resolving latest npm versions for ${distinctPackages.size} Auro packages...`,
+  ).start();
+  const names = [...distinctPackages];
+  const results = await Promise.all(names.map((name) => npmLatest(name)));
+  const latestByPackage = new Map<string, string | null>(
+    names.map((name, i) => [name, results[i]]),
+  );
   latestSpinner.succeed(
     `Resolved ${latestByPackage.size} package versions on npm.`,
   );

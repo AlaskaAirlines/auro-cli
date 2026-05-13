@@ -116,22 +116,24 @@ async function processCandidate(
 
   // Dry-run: print preview + return. WIQL/ADO writes only happen in --apply.
   if (!options.apply) {
-    const descriptionHtml = buildStoryBody({
-      candidate,
-      changelogSlice,
-      changelogUrl,
-      breakingChanges,
-    });
+    const { descriptionHtml, usedChangelogSlice } = buildBodyWithinLimit(
+      {
+        candidate,
+        changelogSlice,
+        changelogUrl,
+        breakingChanges,
+      },
+      title,
+    );
     const acceptanceCriteriaHtml = buildAcceptanceCriteria(
       candidate,
       breakingChanges,
     );
-    warnIfBodyTooLong(title, descriptionHtml);
     console.log("");
     console.log(chalk.bold.cyan(`[DRY RUN] ${title}`));
     console.log(`  ${chalk.dim("tags:")}      ${tags.join(", ")}`);
     console.log(
-      `  ${chalk.dim("changelog:")} ${changelogSlice ? chalk.green("inlined") : chalk.yellow("link only")}`,
+      `  ${chalk.dim("changelog:")} ${usedChangelogSlice ? chalk.green("inlined") : chalk.yellow("link only")}`,
     );
     console.log(
       `  ${chalk.dim("breaking:")} ${breakingChanges.length} change${breakingChanges.length === 1 ? "" : "s"} detected`,
@@ -147,7 +149,7 @@ async function processCandidate(
         bodyHtml: descriptionHtml,
         acceptanceCriteriaHtml,
         tags,
-        changelogInlined: changelogSlice !== null,
+        changelogInlined: usedChangelogSlice,
       });
       console.log(`  ${chalk.dim("preview:")}   ${filePath}`);
     }
@@ -169,18 +171,20 @@ async function processCandidate(
 
   const supersedes =
     dedupe.action === "replace" ? dedupe.existing.id : undefined;
-  const descriptionHtml = buildStoryBody({
-    candidate,
-    changelogSlice,
-    changelogUrl,
-    breakingChanges,
-    supersedes,
-  });
+  const { descriptionHtml } = buildBodyWithinLimit(
+    {
+      candidate,
+      changelogSlice,
+      changelogUrl,
+      breakingChanges,
+      supersedes,
+    },
+    title,
+  );
   const acceptanceCriteriaHtml = buildAcceptanceCriteria(
     candidate,
     breakingChanges,
   );
-  warnIfBodyTooLong(title, descriptionHtml);
 
   const spinner = ora(`Creating: ${title}`).start();
   try {
@@ -252,6 +256,12 @@ async function processCandidate(
     spinner.fail(
       `${title} - ${error instanceof Error ? error.message : error}`,
     );
+    console.log(chalk.dim(`  retry candidate: ${JSON.stringify([candidate])}`));
+    console.log(
+      chalk.dim(
+        "  (save that JSON line to a file, then re-run with --candidates <file>)",
+      ),
+    );
     summary.failed++;
   }
 }
@@ -317,16 +327,27 @@ function buildChangelogUrl(pkg: string): string {
 }
 
 // ADO accepts up to ~1 MB for System.Description, but rendering performance
-// suffers well before that. Flag anything noticeably large so the user can
-// decide whether to truncate the changelog slice manually.
-const BODY_LENGTH_WARN_THRESHOLD = 50_000;
+// suffers well before that. When the inlined CHANGELOG slice pushes a body
+// over MAX_BODY_LENGTH, we rebuild without the slice — the template falls
+// back to a link-only migration section. Breaking-change extraction is
+// unaffected (we already pulled it out of the slice into `breakingChanges`
+// before this guard runs), so the AC bullets remain CHANGELOG-aware.
+const MAX_BODY_LENGTH = 50_000;
 
-function warnIfBodyTooLong(title: string, descriptionHtml: string): void {
-  if (descriptionHtml.length > BODY_LENGTH_WARN_THRESHOLD) {
-    console.log(
-      chalk.yellow(
-        `  ⚠  ${title}: description body is ${descriptionHtml.length} chars (> ${BODY_LENGTH_WARN_THRESHOLD}). ADO will accept it, but rendering may be slow. Consider hand-trimming the candidates JSON or breaking the upgrade into smaller jumps.`,
-      ),
-    );
+function buildBodyWithinLimit(
+  input: Parameters<typeof buildStoryBody>[0],
+  title: string,
+): { descriptionHtml: string; usedChangelogSlice: boolean } {
+  const initial = buildStoryBody(input);
+  const hadSlice = input.changelogSlice !== null;
+  if (initial.length <= MAX_BODY_LENGTH || !hadSlice) {
+    return { descriptionHtml: initial, usedChangelogSlice: hadSlice };
   }
+  const fallback = buildStoryBody({ ...input, changelogSlice: null });
+  console.log(
+    chalk.yellow(
+      `  ⚠  ${title}: body was ${initial.length} chars with the inlined CHANGELOG (> ${MAX_BODY_LENGTH}). Dropped the slice; body is now ${fallback.length} chars with link-only migration section. Breaking-change AC bullets are preserved.`,
+    ),
+  );
+  return { descriptionHtml: fallback, usedChangelogSlice: false };
 }
