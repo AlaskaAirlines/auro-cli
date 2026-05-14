@@ -55,24 +55,24 @@ const FLAG_REFERENCE = [
 
 const SCENARIOS = [
   {
-    id: "00-scan-info",
-    label: "0. About `auro version-scan` (informational)",
-    danger: false,
-    description: "What the scan does, without actually running it.",
-    walkthrough:
-      "This scenario describes `auro version-scan` rather than executing it. The real scan crawls every non-archived repo in Alaska-ECommerce (~2,500 of them), fetches each one's package.json over the GitHub API, and looks up the latest version of every Auro package on npm. That takes 3–5 minutes — too long for a live demo, and the cache makes subsequent runs incremental anyway. The candidates list scenario 2 will summarize comes from a real scan run on 2026-05-11 that found 436 upgrade candidates. In production, this command runs quarterly via a GitHub Actions cron.",
-    command: ["node", "demo/scan-info.mjs"],
-    displayCommand: "auro version-scan",
-  },
-  {
-    id: "01-tokens",
-    label: "1. Validate setup",
+    id: "00-tokens",
+    label: "0. Validate setup",
     danger: false,
     description: "Verify both PATs are valid before anything else runs.",
     walkthrough:
       "Every later scenario calls GitHub or Azure DevOps using these two Personal Access Tokens. If either fails here, downstream scenarios will hang or 401. You should see two green PASS lines; a red FAIL means the corresponding env var is missing, expired, or has the wrong scope.",
     command: ["node", "scripts/check-tokens.js"],
     displayCommand: "npm run check-tokens",
+  },
+  {
+    id: "01-scan-info",
+    label: "1. About `auro version-scan` (informational)",
+    danger: false,
+    description: "What the scan does, without actually running it.",
+    walkthrough:
+      "This scenario describes `auro version-scan` rather than executing it. The real scan crawls every non-archived repo in Alaska-ECommerce (~2,500 of them), fetches each one's package.json over the GitHub API, and looks up the latest version of every Auro package on npm. That takes 3–5 minutes — too long for a live demo, and the cache makes subsequent runs incremental anyway. The candidates list scenario 2 will summarize comes from a real scan run on 2026-05-11 that found 436 upgrade candidates. In production, this command runs quarterly via a GitHub Actions cron.",
+    command: ["node", "demo/scan-info.mjs"],
+    displayCommand: "auro version-scan",
   },
   {
     id: "02-overview",
@@ -90,7 +90,7 @@ const SCENARIOS = [
     description:
       "Render one ticket end-to-end and write a styled HTML preview.",
     walkthrough:
-      "This is the heart of the demo. The bot fetches the package's CHANGELOG from GitHub, slices it to the versions between pinned and latest, parses out the breaking-change entries, and renders them into both a body section and per-bullet acceptance criteria. Open the preview link to see the rendered ticket exactly as it would appear in ADO — every part of that content is derived per-candidate, not boilerplate.",
+      "This is the heart of the demo. The bot fetches auro-button's CHANGELOG from GitHub, slices it to the versions between pinned (11.5.1) and latest (12.3.2), parses out the breaking-change entries, and renders them into a body section enumerating each one. The acceptance criteria collapses to a single summary bullet that points back to that section by count (e.g. \"Verify each of the N breaking changes…\") — earlier designs emitted one AC bullet per breaking change, which buried the build/lint/test checkpoints under noise on long-jump upgrades. Open the preview link to see two more derived sections: \"Where this package is used in your codebase\" (file links from GitHub Code Search scoped to LoungeMembership-Web) and per-breaking-change \"→ find <identifier> in this repo\" search-URL links inside the body bullets. Every part is derived per-candidate, not boilerplate.",
     command: [
       "node",
       "./dist/auro-cli.js",
@@ -104,7 +104,7 @@ const SCENARIOS = [
     ],
     displayCommand:
       "auro version-tickets --candidates ./test-fixtures/version-bot/scenario-1-clean-upgrade.json --preview-dir ./test-fixtures/version-bot/preview-output --min-majors 1",
-    previewGlob: "fixture-clean-upgrade__*.html",
+    previewGlob: "LoungeMembership-Web__*.html",
   },
   {
     id: "04-dry-batch",
@@ -127,12 +127,35 @@ const SCENARIOS = [
       "auro version-tickets --candidates ./test-fixtures/version-bot/scenario-3-mixed-thresholds.json --min-majors 2",
   },
   {
-    id: "05-apply-single",
-    label: "5. APPLY: 1 ticket to ADO",
+    id: "05-dry-namespace",
+    label: "5. Dry-run: cross-namespace rename",
+    danger: false,
+    description:
+      "@alaskaairux/auro-icon → @aurodesignsystem/auro-icon. Shows the rename callout.",
+    walkthrough:
+      "Most Auro packages were republished from `@alaskaairux` to `@aurodesignsystem`, so a consumer pinned on the legacy scope (e.g. `@alaskaairux/auro-icon@^1.0.1`) looks 'up to date' at the last legacy version even though active development is now at `@aurodesignsystem/auro-icon@9.x`. The bot's alias map resolves both scopes in parallel via npm and picks the higher version; when the upgrade crosses scopes, the candidate carries a `targetPackage` field. The rendered preview shows two things you don't see in scenario 3: a yellow \"⚠ Namespace rename\" callout at the top of the Context section, and a rewritten first AC bullet — \"Replace `@alaskaairux/auro-icon` with `@aurodesignsystem/auro-icon` in package.json…\" — making the rename the explicit first step. The usage inventory section searches both scopes and merges results, so a consumer mid-migration that still has legacy imports will see them flagged here.",
+    command: [
+      "node",
+      "./dist/auro-cli.js",
+      "version-tickets",
+      "--candidates",
+      "./test-fixtures/version-bot/scenario-4-cross-namespace.json",
+      "--preview-dir",
+      "./test-fixtures/version-bot/preview-output",
+      "--min-majors",
+      "1",
+    ],
+    displayCommand:
+      "auro version-tickets --candidates ./test-fixtures/version-bot/scenario-4-cross-namespace.json --preview-dir ./test-fixtures/version-bot/preview-output --min-majors 1",
+    previewGlob: "dated-flight-ui__*.html",
+  },
+  {
+    id: "06-apply-single",
+    label: "6. APPLY: 1 ticket to ADO",
     danger: true,
     description: "First real write. One ticket, bounded by safety flags.",
     walkthrough:
-      "Three flags work together to constrain blast radius. `--repo Web-AccountOverview` limits which consumer repo is in scope, `--limit 1` caps total tickets created regardless of how many candidates qualify, and `--min-majors 2` filters out the smallest upgrades. (Web-AccountOverview has 13 candidates ≥ 2 majors behind in the cached scan output, so the filter does real work here, not just notional work — and `--limit 1` is what keeps us from creating all 13 at once.) The run-id printed at the top is your rollback handle — copy it if you want to roll this run back later in scenario 8.",
+      "Three flags work together to constrain blast radius. `--repo Web-AccountOverview` limits which consumer repo is in scope, `--limit 1` caps total tickets created regardless of how many candidates qualify, and `--min-majors 2` filters out the smallest upgrades. (Web-AccountOverview has 13 candidates ≥ 2 majors behind in the cached scan output, so the filter does real work here, not just notional work — and `--limit 1` is what keeps us from creating all 13 at once.) The run-id printed at the top is your rollback handle — copy it if you want to roll this run back later in scenario 9.",
     command: [
       "node",
       "./dist/auro-cli.js",
@@ -150,12 +173,12 @@ const SCENARIOS = [
       "auro version-tickets --apply --no-tags --limit 1 --repo Web-AccountOverview --min-majors 2",
   },
   {
-    id: "06-apply-batch",
-    label: "6. APPLY: small batch (3 tickets)",
+    id: "07-apply-batch",
+    label: "7. APPLY: small batch (3 tickets)",
     danger: true,
-    description: "Same as scenario 5 but creates up to 3 tickets in one run.",
+    description: "Same as scenario 6 but creates up to 3 tickets in one run.",
     walkthrough:
-      "Identical to scenario 5 except `--limit 3` lets multiple tickets through. All tickets created here share a single run-id in the audit log, so the cleanup in scenario 8 will treat them as a unit. In production the quarterly cron omits `--limit` entirely and creates as many tickets as candidates qualify — dedupe (scenario 7) is what prevents that from spamming.",
+      "Identical to scenario 6 except `--limit 3` lets multiple tickets through. All tickets created here share a single run-id in the audit log, so the cleanup in scenario 9 will treat them as a unit. In production the quarterly cron omits `--limit` entirely and creates as many tickets as candidates qualify — dedupe (scenario 8) is what prevents that from spamming.",
     command: [
       "node",
       "./dist/auro-cli.js",
@@ -173,13 +196,13 @@ const SCENARIOS = [
       "auro version-tickets --apply --no-tags --limit 3 --repo Web-AccountOverview --min-majors 2",
   },
   {
-    id: "07-rerun-dedupe",
-    label: "7. APPLY again → dedupe path",
+    id: "08-rerun-dedupe",
+    label: "8. APPLY again → dedupe path",
     danger: true,
     description:
-      "Re-run scenario 5. The dedupe gate prevents duplicate tickets.",
+      "Re-run scenario 6. The dedupe gate prevents duplicate tickets.",
     walkthrough:
-      "Identical command to scenario 5, run a second time. You actually already saw dedupe happen during scenario 6 — when its `--limit 3` returned candidates #1, #2, and #3, candidate #1 was the same one scenario 5 ticketed, so scenario 6's summary showed `Dedupe: 1 skipped, Applied: 2`. This scenario isolates that behavior: every candidate `--limit 1` returns is one we've already ticketed, so this run should produce zero new tickets and one skip. The dedupe gate works by querying ADO for any open User Story under the Auro area path whose title contains both this candidate's package name and consumer repo; if `latest` hasn't moved, it's a true dupe (skip); if `latest` advanced since the original ticket was created, the old ticket is closed and a new one is created with a 'Supersedes #N' link.",
+      "Identical command to scenario 6, run a second time. You actually already saw dedupe happen during scenario 7 — when its `--limit 3` returned candidates #1, #2, and #3, candidate #1 was the same one scenario 6 ticketed, so scenario 7's summary showed `Dedupe: 1 skipped, Applied: 2`. This scenario isolates that behavior: every candidate `--limit 1` returns is one we've already ticketed, so this run should produce zero new tickets and one skip. The dedupe gate works by querying ADO for any open User Story under the Auro area path whose title contains both this candidate's package name and consumer repo; if `latest` hasn't moved, it's a true dupe (skip); if `latest` advanced since the original ticket was created, the old ticket is closed and a new one is created with a 'Supersedes #N' link.",
     command: [
       "node",
       "./dist/auro-cli.js",
@@ -197,8 +220,8 @@ const SCENARIOS = [
       "auro version-tickets --apply --no-tags --limit 1 --repo Web-AccountOverview --min-majors 2",
   },
   {
-    id: "08-cleanup-last",
-    label: "8. CLEANUP: roll back last run",
+    id: "09-cleanup-last",
+    label: "9. CLEANUP: roll back last run",
     danger: true,
     description:
       "Set every ticket from the most recent --apply run to Removed.",
@@ -215,8 +238,8 @@ const SCENARIOS = [
     displayCommand: "auro version-tickets cleanup --last --apply",
   },
   {
-    id: "09-list-runs",
-    label: "9. List run IDs",
+    id: "10-list-runs",
+    label: "10. List run IDs",
     danger: false,
     description: "Read-only inventory of every historical run.",
     walkthrough:
