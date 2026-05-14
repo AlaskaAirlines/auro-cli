@@ -1,10 +1,10 @@
 [
   {
-    "repo": "fixture-clean-upgrade",
+    "repo": "LoungeMembership-Web",
     "package": "@aurodesignsystem/auro-button",
-    "pinned": "10.0.0",
-    "latest": "11.5.1",
+    "pinned": "11.5.1",
+    "latest": "12.3.2",
     "majorsBehind": 1,
-    "repoUrl": "https://github.com/Alaska-ECommerce/fixture-clean-upgrade"
+    "repoUrl": "https://github.com/Alaska-ECommerce/LoungeMembership-Web"
   }
 ]
