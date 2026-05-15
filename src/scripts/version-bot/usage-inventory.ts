@@ -75,8 +75,8 @@ export async function findUsageInRepo(input: {
       // it adds no information for the reviewer.
       const query =
         `"${pkg}" repo:${org}/${repo}` +
-        ` -path:package-lock.json -path:yarn.lock -path:pnpm-lock.yaml` +
-        ` -path:dist -path:build -filename:package.json`;
+        " -path:package-lock.json -path:yarn.lock -path:pnpm-lock.yaml" +
+        " -path:dist -path:build -filename:package.json";
       if (!primaryQuery) primaryQuery = query;
       const result = await octokit.rest.search.code({
         q: query,

@@ -23,7 +23,7 @@ export interface RepoEntry {
 }
 
 export interface ScanCache {
-  version: 1;
+  version: 2;
   lastFullScan: string | null;
   repos: Record<string, RepoEntry>;
 }
@@ -43,4 +43,14 @@ export interface UpgradeCandidate {
    * as part of the change; the migration guide calls this out explicitly.
    */
   targetPackage?: string;
+  /**
+   * Every package.json path inside the repo that pins this package. The
+   * scan always populates at least one entry; the field is optional only
+   * to keep pre-v2 candidates JSON files loadable. Multiple entries surface
+   * BFF+Component / monorepo cases where the same package is declared in
+   * `client/package.json` and `component/package.json` etc. — engineers
+   * need to know to update them all. The pinned/majorsBehind fields use
+   * the lowest version found across these manifests (worst-case-behind).
+   */
+  manifestPaths?: string[];
 }

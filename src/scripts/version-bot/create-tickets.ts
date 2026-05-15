@@ -21,8 +21,8 @@ import {
   buildStoryBody,
   buildStoryTitle,
 } from "./template.ts";
-import { findUsageInRepo } from "./usage-inventory.ts";
 import type { UpgradeCandidate } from "./types.ts";
+import { findUsageInRepo } from "./usage-inventory.ts";
 
 export interface CreateTicketsOptions {
   minMajors: number;

@@ -55,7 +55,9 @@ describe("buildStoryTitle", () => {
 describe("buildAcceptanceCriteria — same-namespace path", () => {
   it("starts with the generic verification bullets", () => {
     const ac = buildAcceptanceCriteria(makeCandidate());
-    expect(ac).toMatch(/<li>Update <code>@aurodesignsystem\/auro-button<\/code> to <code>11\.5\.1<\/code>/);
+    expect(ac).toMatch(
+      /<li>Update <code>@aurodesignsystem\/auro-button<\/code> to <code>11\.5\.1<\/code>/,
+    );
     expect(ac).toMatch(/npm ci/);
     expect(ac).toMatch(/Build \/ TypeScript compile passes/);
     expect(ac).toMatch(/Lint passes/);
@@ -106,7 +108,9 @@ describe("buildAcceptanceCriteria — cross-namespace path", () => {
     expect(ac).toMatch(
       /Replace <code>@alaskaairux\/auro-button<\/code> with <code>@aurodesignsystem\/auro-button@12\.3\.2<\/code>/,
     );
-    expect(ac).toMatch(/Update all import paths from <code>@alaskaairux\/auro-button<\/code> to <code>@aurodesignsystem\/auro-button<\/code>/);
+    expect(ac).toMatch(
+      /Update all import paths from <code>@alaskaairux\/auro-button<\/code> to <code>@aurodesignsystem\/auro-button<\/code>/,
+    );
     // Same-namespace wording must NOT appear.
     expect(ac).not.toMatch(/Update <code>@alaskaairux\/auro-button<\/code> to/);
   });
@@ -138,7 +142,9 @@ describe("buildStoryBody — Context section", () => {
       breakingChanges: [],
     });
     expect(body).toMatch(/<h3>Context<\/h3>/);
-    expect(body).toMatch(/<code>@aurodesignsystem\/auro-button@10\.0\.0<\/code>/);
+    expect(body).toMatch(
+      /<code>@aurodesignsystem\/auro-button@10\.0\.0<\/code>/,
+    );
     expect(body).toMatch(
       /href="https:\/\/github\.com\/Alaska-ECommerce\/fixture-repo"/,
     );
@@ -190,7 +196,9 @@ describe("buildStoryBody — migration section", () => {
       changelogUrl: "https://example/CHANGELOG.md",
       breakingChanges: [],
     });
-    expect(body).toMatch(/See the <a href="https:\/\/example\/CHANGELOG\.md">CHANGELOG/);
+    expect(body).toMatch(
+      /See the <a href="https:\/\/example\/CHANGELOG\.md">CHANGELOG/,
+    );
     // Should NOT have the "Changes in <pkg> between" header used for inlined slices.
     expect(body).not.toMatch(/Changes in <b>/);
   });
@@ -216,9 +224,18 @@ describe("buildStoryBody — Where this package is used", () => {
     return {
       totalCount: 3,
       sampleFiles: [
-        { path: "src/Foo.svelte", htmlUrl: "https://github.com/x/y/blob/abc/src/Foo.svelte" },
-        { path: "src/Bar.svelte", htmlUrl: "https://github.com/x/y/blob/abc/src/Bar.svelte" },
-        { path: "src/Baz.svelte", htmlUrl: "https://github.com/x/y/blob/abc/src/Baz.svelte" },
+        {
+          path: "src/Foo.svelte",
+          htmlUrl: "https://github.com/x/y/blob/abc/src/Foo.svelte",
+        },
+        {
+          path: "src/Bar.svelte",
+          htmlUrl: "https://github.com/x/y/blob/abc/src/Bar.svelte",
+        },
+        {
+          path: "src/Baz.svelte",
+          htmlUrl: "https://github.com/x/y/blob/abc/src/Baz.svelte",
+        },
       ],
       searchUrl: "https://github.com/search?q=fake",
       ...overrides,
@@ -247,7 +264,10 @@ describe("buildStoryBody — Where this package is used", () => {
       usage: makeUsage({
         totalCount: 1,
         sampleFiles: [
-          { path: "src/Foo.svelte", htmlUrl: "https://github.com/x/y/blob/abc/src/Foo.svelte" },
+          {
+            path: "src/Foo.svelte",
+            htmlUrl: "https://github.com/x/y/blob/abc/src/Foo.svelte",
+          },
         ],
       }),
     });
@@ -352,17 +372,19 @@ describe("buildStoryBody — Breaking changes section", () => {
     });
     // Single-identifier bullet links to a search containing the identifier
     // AND the package short name.
+    expect(body).toMatch(/find <code>slim<\/code> in this repo[^<]*<\/a>/);
     expect(body).toMatch(
-      /find <code>slim<\/code> in this repo[^<]*<\/a>/,
+      /q=repo%3AAlaska-ECommerce%2Ffixture-repo[^"]*%22auro-button%22[^"]*%22slim%22/,
     );
-    expect(body).toMatch(/q=repo%3AAlaska-ECommerce%2Ffixture-repo[^"]*%22auro-button%22[^"]*%22slim%22/);
 
     // Multi-identifier bullet: each identifier appears in the link label and
     // in the URL as an OR clause.
     expect(body).toMatch(
       /find <code>iconOnly<\/code>, <code>rounded<\/code>, <code>tertiary<\/code> in this repo/,
     );
-    expect(body).toMatch(/%22iconOnly%22%20OR%20%22rounded%22%20OR%20%22tertiary%22/);
+    expect(body).toMatch(
+      /%22iconOnly%22%20OR%20%22rounded%22%20OR%20%22tertiary%22/,
+    );
 
     // The no-identifier bullet should be untouched — no `find in this repo` suffix.
     const noIdMatch = body.match(/<li><b>10\.0\.0:<\/b>[^<]*<\/li>/);
@@ -411,5 +433,106 @@ describe("buildStoryBody — Breaking changes section", () => {
     expect(body).toMatch(
       /<b>11\.4\.0:<\/b> rename <code>theme<\/code> to <code>appearance<\/code>/,
     );
+  });
+});
+
+describe("manifestPaths in body and AC", () => {
+  it("Context section omits the manifest callout for the trivial single-root case", () => {
+    const body = buildStoryBody({
+      candidate: makeCandidate({ manifestPaths: ["package.json"] }),
+      changelogSlice: null,
+      changelogUrl: "https://example/CHANGELOG.md",
+      breakingChanges: [],
+    });
+    expect(body).not.toMatch(/Manifest location/);
+    expect(body).not.toMatch(/Multiple manifests/);
+  });
+
+  it("Context section omits the manifest callout when manifestPaths is absent", () => {
+    // Pre-v2 candidates JSON files lack the field entirely. The renderer
+    // should be defensive — no callout, no crash.
+    const body = buildStoryBody({
+      candidate: makeCandidate({ manifestPaths: undefined }),
+      changelogSlice: null,
+      changelogUrl: "https://example/CHANGELOG.md",
+      breakingChanges: [],
+    });
+    expect(body).not.toMatch(/Manifest location/);
+    expect(body).not.toMatch(/Multiple manifests/);
+  });
+
+  it("Context section calls out a single non-root manifest", () => {
+    const body = buildStoryBody({
+      candidate: makeCandidate({ manifestPaths: ["component/package.json"] }),
+      changelogSlice: null,
+      changelogUrl: "https://example/CHANGELOG.md",
+      breakingChanges: [],
+    });
+    expect(body).toMatch(/📍 Manifest location/);
+    expect(body).toMatch(/<code>component\/package\.json<\/code>/);
+    expect(body).toMatch(/not the repo's root/);
+    // Multi-manifest wording must NOT appear in the single-path case.
+    expect(body).not.toMatch(/Multiple manifests/);
+  });
+
+  it("Context section calls out multiple manifests with all paths listed", () => {
+    const body = buildStoryBody({
+      candidate: makeCandidate({
+        manifestPaths: ["client/package.json", "component/package.json"],
+      }),
+      changelogSlice: null,
+      changelogUrl: "https://example/CHANGELOG.md",
+      breakingChanges: [],
+    });
+    expect(body).toMatch(/⚠ Multiple manifests/);
+    expect(body).toMatch(/<b>2<\/b>/);
+    expect(body).toMatch(/<code>client\/package\.json<\/code>/);
+    expect(body).toMatch(/<code>component\/package\.json<\/code>/);
+  });
+
+  it("AC first bullet uses generic wording for the trivial single-root case", () => {
+    const ac = buildAcceptanceCriteria(
+      makeCandidate({ manifestPaths: ["package.json"] }),
+    );
+    expect(ac).toMatch(
+      /Update <code>@aurodesignsystem\/auro-button<\/code> to <code>11\.5\.1<\/code> in the consumer's <code>package\.json<\/code> \(and the matching lockfile\)/,
+    );
+    expect(ac).not.toMatch(/each of the/);
+  });
+
+  it("AC first bullet names a single non-root manifest explicitly", () => {
+    const ac = buildAcceptanceCriteria(
+      makeCandidate({ manifestPaths: ["component/package.json"] }),
+    );
+    expect(ac).toMatch(
+      /Update <code>@aurodesignsystem\/auro-button<\/code> to <code>11\.5\.1<\/code> in <code>component\/package\.json<\/code> \(and the matching lockfile\)/,
+    );
+  });
+
+  it("AC first bullet enumerates all manifests in the multi-manifest case", () => {
+    const ac = buildAcceptanceCriteria(
+      makeCandidate({
+        manifestPaths: ["client/package.json", "component/package.json"],
+      }),
+    );
+    expect(ac).toMatch(
+      /Update <code>@aurodesignsystem\/auro-button<\/code> to <code>11\.5\.1<\/code> in each of the 2 manifests where it appears \(<code>client\/package\.json<\/code>, <code>component\/package\.json<\/code>\) \(and the matching lockfiles\)/,
+    );
+  });
+
+  it("AC first bullet preserves cross-namespace rewrite wording with multi-manifest", () => {
+    const ac = buildAcceptanceCriteria(
+      makeCandidate({
+        package: "@alaskaairux/auro-button",
+        targetPackage: "@aurodesignsystem/auro-button",
+        manifestPaths: ["client/package.json", "component/package.json"],
+      }),
+    );
+    // Cross-namespace ("Replace X with Y") must still happen, AND the
+    // manifests must be enumerated.
+    expect(ac).toMatch(
+      /Replace <code>@alaskaairux\/auro-button<\/code> with <code>@aurodesignsystem\/auro-button@11\.5\.1<\/code> in each of the 2 manifests where it appears/,
+    );
+    expect(ac).toMatch(/lockfiles/);
   });
 });

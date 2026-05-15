@@ -25,9 +25,10 @@ function genericAcceptanceBullets(c: UpgradeCandidate): string[] {
   const pkg = escapeHtml(c.package);
   const latest = escapeHtml(c.latest);
   const target = c.targetPackage ? escapeHtml(c.targetPackage) : null;
+  const manifestPhrase = describeManifestsInline(c.manifestPaths);
   const firstBullet = target
-    ? `Replace <code>${pkg}</code> with <code>${target}@${latest}</code> in the consumer's <code>package.json</code> (and lockfile). Update all import paths from <code>${pkg}</code> to <code>${target}</code>.`
-    : `Update <code>${pkg}</code> to <code>${latest}</code> in the consumer's <code>package.json</code> (and lockfile).`;
+    ? `Replace <code>${pkg}</code> with <code>${target}@${latest}</code> in ${manifestPhrase} (and the matching lockfile${c.manifestPaths && c.manifestPaths.length > 1 ? "s" : ""}). Update all import paths from <code>${pkg}</code> to <code>${target}</code>.`
+    : `Update <code>${pkg}</code> to <code>${latest}</code> in ${manifestPhrase} (and the matching lockfile${c.manifestPaths && c.manifestPaths.length > 1 ? "s" : ""}).`;
   const smokeRef = target ?? pkg;
   return [
     firstBullet,
@@ -37,6 +38,28 @@ function genericAcceptanceBullets(c: UpgradeCandidate): string[] {
     "Existing test suite passes.",
     `Manual smoke check: every UI surface using <code>${smokeRef}</code> renders without new console errors and matches the prior visual baseline.`,
   ];
+}
+
+/**
+ * Returns a short HTML phrase describing where a dependency lives in the
+ * repo, for inline use inside the first AC bullet. Defaults to "the
+ * consumer's <code>package.json</code>" when manifest paths are unknown or
+ * trivial (single root). When the dep lives in a subdirectory manifest, or
+ * spans multiple manifests, names them explicitly so the engineer's update
+ * checklist is unambiguous.
+ */
+function describeManifestsInline(paths: string[] | undefined): string {
+  if (!paths || paths.length === 0) {
+    return "the consumer's <code>package.json</code>";
+  }
+  if (paths.length === 1 && paths[0] === "package.json") {
+    return "the consumer's <code>package.json</code>";
+  }
+  if (paths.length === 1) {
+    return `<code>${escapeHtml(paths[0])}</code>`;
+  }
+  const items = paths.map((p) => `<code>${escapeHtml(p)}</code>`).join(", ");
+  return `each of the ${paths.length} manifests where it appears (${items})`;
 }
 
 /**
@@ -94,6 +117,7 @@ export function buildStoryBody({
     targetPackage
       ? `<p><b>⚠ Namespace rename:</b> active development of this library moved to <code>${escapeHtml(targetPackage)}</code>. Upgrading requires renaming the dependency in <code>package.json</code> from <code>${escapeHtml(pkg)}</code> to <code>${escapeHtml(targetPackage)}</code> AND updating any matching import paths in source files. The version number bridges both scopes — <code>${escapeHtml(latest)}</code> is the latest on the new scope.</p>`
       : "",
+    buildManifestPathsCallout(candidate.manifestPaths, pinned),
     supersedes !== undefined
       ? `<p><i>This ticket supersedes work item #${supersedes}, which was closed because a newer version of <code>${escapeHtml(pkg)}</code> has shipped since that ticket was created.</i></p>`
       : "",
@@ -134,6 +158,35 @@ export function buildStoryBody({
   ]
     .filter((s) => s !== "")
     .join("\n");
+}
+
+/**
+ * Renders an inline callout naming the package.json files where this
+ * dependency lives. Skipped entirely for the trivial single-root case
+ * (one `package.json` at the repo root, which is the assumption a reader
+ * already makes). For non-root single manifests OR multi-manifest cases,
+ * surfaces the paths explicitly so the engineer knows exactly which files
+ * to update — the original scan bug was missing exactly this signal.
+ *
+ * The `pinned` parameter is mostly future-proofing — once we surface
+ * per-manifest pins (lockfile parsing, Step 3 in the recommendation),
+ * this callout will list each manifest's actual pin rather than the
+ * worst-case-behind value that drives the title. For now it's recorded
+ * here to flag that the displayed `pinned` is the lowest across manifests.
+ */
+function buildManifestPathsCallout(
+  paths: string[] | undefined,
+  _pinned: string,
+): string {
+  if (!paths || paths.length === 0) return "";
+  if (paths.length === 1 && paths[0] === "package.json") return "";
+
+  if (paths.length === 1) {
+    return `<p><b>📍 Manifest location:</b> this dependency is declared in <code>${escapeHtml(paths[0])}</code>, not the repo's root <code>package.json</code>. Make sure your upgrade edits the right file.</p>`;
+  }
+
+  const items = paths.map((p) => `<code>${escapeHtml(p)}</code>`).join(", ");
+  return `<p><b>⚠ Multiple manifests:</b> this dependency is declared in <b>${paths.length}</b> <code>package.json</code> files — all must be updated to upgrade the repo consistently: ${items}.</p>`;
 }
 
 /**
@@ -259,9 +312,10 @@ function buildBreakingChangeSearchLink(
     return null;
   }
 
-  const shortName = (
-    candidate.targetPackage ?? candidate.package
-  ).replace(/^@[^/]+\//, "");
+  const shortName = (candidate.targetPackage ?? candidate.package).replace(
+    /^@[^/]+\//,
+    "",
+  );
   const idsQuoted = identifiers.map((i) => `"${i}"`).join(" OR ");
   const idsClause = identifiers.length > 1 ? `(${idsQuoted})` : idsQuoted;
   const q = `repo:${org}/${repoName} "${shortName}" ${idsClause}`;
