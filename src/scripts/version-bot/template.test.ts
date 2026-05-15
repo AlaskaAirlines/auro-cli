@@ -188,25 +188,51 @@ describe("buildStoryBody — Context section", () => {
   });
 });
 
-describe("buildStoryBody — migration section", () => {
-  it("falls back to link-only when changelogSlice is null", () => {
+describe("buildStoryBody — What's new section (replaces inline CHANGELOG dump)", () => {
+  it("falls back to a link-only paragraph when changelogSlice is null", () => {
     const body = buildStoryBody({
       candidate: makeCandidate(),
       changelogSlice: null,
       changelogUrl: "https://example/CHANGELOG.md",
       breakingChanges: [],
     });
+    expect(body).toMatch(/<h3>What's new<\/h3>/);
     expect(body).toMatch(
       /See the <a href="https:\/\/example\/CHANGELOG\.md">CHANGELOG/,
     );
-    // Should NOT have the "Changes in <pkg> between" header used for inlined slices.
-    expect(body).not.toMatch(/Changes in <b>/);
+    // Old "Migration guide" header should no longer appear.
+    expect(body).not.toMatch(/Migration guide/);
   });
 
-  it("inlines the slice HTML when changelogSlice is provided", () => {
+  it("renders Features + Bug fixes counts when a structured slice is provided", () => {
     const slice: ChangelogSlice = {
-      versions: [],
-      html: "<h5>11.5.1</h5><ul><li>Fix a bug</li></ul>",
+      versions: [
+        {
+          version: "11.5.1",
+          dateStr: null,
+          sections: [
+            {
+              type: "features",
+              title: "Features",
+              bullets: ["a", "b", "c"],
+            },
+            { type: "bugFixes", title: "Bug Fixes", bullets: ["x", "y"] },
+          ],
+        },
+        {
+          version: "11.4.0",
+          dateStr: null,
+          sections: [
+            { type: "features", title: "Features", bullets: ["d"] },
+            {
+              type: "breakingChanges",
+              title: "BREAKING CHANGES",
+              bullets: ["whatever"],
+            },
+          ],
+        },
+      ],
+      html: "<h5>old inline html — should NOT appear</h5>",
     };
     const body = buildStoryBody({
       candidate: makeCandidate(),
@@ -214,8 +240,119 @@ describe("buildStoryBody — migration section", () => {
       changelogUrl: "https://example/CHANGELOG.md",
       breakingChanges: [],
     });
-    expect(body).toContain("<h5>11.5.1</h5><ul><li>Fix a bug</li></ul>");
-    expect(body).toMatch(/Changes in <b>@aurodesignsystem\/auro-button<\/b>/);
+    expect(body).toMatch(/Features: <b>4<\/b>/);
+    expect(body).toMatch(/Bug fixes: <b>2<\/b>/);
+    expect(body).toMatch(
+      /<a href="https:\/\/example\/CHANGELOG\.md">full CHANGELOG/,
+    );
+  });
+
+  it("does NOT inline the raw slice HTML in the body anymore", () => {
+    // The old behavior dumped slice.html into the body. Bodies for long-jump
+    // upgrades cleared the 50KB ADO render budget that way. Confirm the
+    // section never embeds the slice's pre-rendered HTML.
+    const slice: ChangelogSlice = {
+      versions: [
+        {
+          version: "11.5.1",
+          dateStr: null,
+          sections: [{ type: "features", title: "Features", bullets: ["a"] }],
+        },
+      ],
+      html: "<h5>SENTINEL_INLINE_DUMP</h5>",
+    };
+    const body = buildStoryBody({
+      candidate: makeCandidate(),
+      changelogSlice: slice,
+      changelogUrl: "https://example/CHANGELOG.md",
+      breakingChanges: [],
+    });
+    expect(body).not.toContain("SENTINEL_INLINE_DUMP");
+  });
+
+  it("emits zero counts when the slice has no features or bug fixes sections", () => {
+    const slice: ChangelogSlice = {
+      versions: [
+        {
+          version: "11.0.0",
+          dateStr: null,
+          sections: [
+            {
+              type: "breakingChanges",
+              title: "BREAKING CHANGES",
+              bullets: ["x"],
+            },
+          ],
+        },
+      ],
+      html: "<p>release notes</p>",
+    };
+    const body = buildStoryBody({
+      candidate: makeCandidate(),
+      changelogSlice: slice,
+      changelogUrl: "https://example/CHANGELOG.md",
+      breakingChanges: [],
+    });
+    expect(body).toMatch(/Features: <b>0<\/b>/);
+    expect(body).toMatch(/Bug fixes: <b>0<\/b>/);
+  });
+});
+
+describe("buildStoryBody — incident callout from policy notes", () => {
+  it("renders a warning callout with the notes text when candidate.notes is set", () => {
+    const body = buildStoryBody({
+      candidate: makeCandidate({
+        notes: "Skip 13.0 — regression in focus-trap, see #1234.",
+      }),
+      changelogSlice: null,
+      changelogUrl: "https://example/CHANGELOG.md",
+      breakingChanges: [],
+    });
+    expect(body).toMatch(/⚠ Incident notice/);
+    expect(body).toMatch(/Skip 13\.0 — regression in focus-trap, see #1234\./);
+  });
+
+  it("HTML-escapes the notes text", () => {
+    const body = buildStoryBody({
+      candidate: makeCandidate({
+        notes: "Avoid 12.x — see <script>alert(1)</script> & friends.",
+      }),
+      changelogSlice: null,
+      changelogUrl: "https://example/CHANGELOG.md",
+      breakingChanges: [],
+    });
+    expect(body).toMatch(
+      /&lt;script&gt;alert\(1\)&lt;\/script&gt; &amp; friends/,
+    );
+    expect(body).not.toContain("<script>alert(1)</script>");
+  });
+
+  it("omits the callout entirely when notes is absent", () => {
+    const body = buildStoryBody({
+      candidate: makeCandidate({ notes: undefined }),
+      changelogSlice: null,
+      changelogUrl: "https://example/CHANGELOG.md",
+      breakingChanges: [],
+    });
+    expect(body).not.toMatch(/Incident notice/);
+  });
+
+  it("places the incident callout above the breaking-changes section", () => {
+    const slice: ChangelogSlice = {
+      versions: [],
+      html: "<p>release notes</p>",
+    };
+    const body = buildStoryBody({
+      candidate: makeCandidate({ notes: "Skip 13.0 — regression." }),
+      changelogSlice: slice,
+      changelogUrl: "https://example/CHANGELOG.md",
+      breakingChanges: [{ version: "13.0.0", text: "remove `slim` prop" }],
+    });
+    const incidentIdx = body.indexOf("Incident notice");
+    const breakingIdx = body.indexOf("Breaking changes in this upgrade");
+    expect(incidentIdx).toBeGreaterThan(-1);
+    expect(breakingIdx).toBeGreaterThan(-1);
+    expect(incidentIdx).toBeLessThan(breakingIdx);
   });
 });
 

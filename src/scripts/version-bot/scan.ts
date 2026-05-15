@@ -8,6 +8,7 @@ import {
   writeScanCache,
   writeUpgradeCandidates,
 } from "./cache.ts";
+import { type ComplianceStatus, evaluatePackage } from "./evaluate.ts";
 import { discoverAuroManifests } from "./manifest-discovery.ts";
 import {
   compareSemver,
@@ -15,6 +16,7 @@ import {
   type ResolvedLatest,
   resolveLatestAcrossAliases,
 } from "./npm-registry.ts";
+import { findPackagePolicy } from "./policy-catalog.ts";
 import type {
   PackageScan,
   RepoEntry,
@@ -357,8 +359,36 @@ export function collapseCandidatesByPackage(
         if (archivedPackages.has(name)) continue;
         const resolved = latestByPackage.get(name);
         if (!resolved?.version) continue;
-        const mb = majorsBehind(pinned, resolved.version);
-        if (mb < 1) continue;
+
+        // The catalog's targetVersion is the incident knob: when an engineer
+        // pins it (off a regressed release), the bot files tickets against
+        // that pin instead of npm latest. With no catalog override, the
+        // effective target is whatever npm currently calls latest.
+        const policy = findPackagePolicy(name);
+        const effectiveLatest = policy?.targetVersion ?? resolved.version;
+        const mb = majorsBehind(pinned, effectiveLatest);
+
+        const evalResult = evaluatePackage(
+          { packageName: name, detected: true, declaredVersion: pinned },
+          policy,
+        );
+        let status: ComplianceStatus = evalResult.status;
+        let statusReason = evalResult.reason;
+        // Uncataloged packages default to npm-latest-driven Behind/Current
+        // rather than evaluatePackage's literal 'Unknown'. Without this, the
+        // first deploy after wiring evaluatePackage in would flood
+        // Unknown-tagged tickets for every uncataloged package the bot
+        // currently ships tickets for.
+        if (!policy) {
+          if (mb >= 1) {
+            status = "Behind";
+            statusReason = `Version ${pinned} is behind npm latest (${effectiveLatest}).`;
+          } else {
+            status = "Current";
+            statusReason = `Version ${pinned} matches the latest published major.`;
+          }
+        }
+        if (status === "Current") continue;
 
         const key = `${repoEntry.name}|${name}`;
         const existing = byKey.get(key);
@@ -368,19 +398,26 @@ export function collapseCandidatesByPackage(
           if ((compareSemver(pinned, existing.pinned) ?? 0) < 0) {
             existing.pinned = pinned;
             existing.majorsBehind = mb;
+            existing.status = status;
+            existing.statusReason = statusReason;
           }
         } else {
           const candidate: UpgradeCandidate = {
             repo: repoEntry.name,
             package: name,
             pinned,
-            latest: resolved.version,
+            latest: effectiveLatest,
             majorsBehind: mb,
             repoUrl: `https://github.com/${org}/${repoEntry.name}`,
             manifestPaths: [pkgScan.path],
+            status,
+            statusReason,
           };
           if (resolved.resolvedPackage !== name) {
             candidate.targetPackage = resolved.resolvedPackage;
+          }
+          if (policy?.notes) {
+            candidate.notes = policy.notes;
           }
           byKey.set(key, candidate);
         }

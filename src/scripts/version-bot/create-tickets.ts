@@ -21,7 +21,7 @@ import {
   buildStoryBody,
   buildStoryTitle,
 } from "./template.ts";
-import type { UpgradeCandidate } from "./types.ts";
+import type { ComplianceStatus, UpgradeCandidate } from "./types.ts";
 import { findUsageInRepo } from "./usage-inventory.ts";
 
 export interface CreateTicketsOptions {
@@ -45,6 +45,14 @@ export interface CreateTicketsSummary {
   dedupeSkipped: number;
   /** Closed-and-recreated because an open bot ticket was behind the new `latest`. */
   dedupeReplaced: number;
+  /**
+   * Candidates dropped pre-loop because GitHub Code Search found zero
+   * references to the package in the repo — the dep is declared but dead.
+   * `null` usage results (missing GH_TOKEN, search failed) are NOT counted
+   * here; they pass through to the ticket-creation path so transient
+   * failures don't silently suppress tickets.
+   */
+  notUsedSkipped: number;
 }
 
 export async function runCreateTickets(
@@ -58,19 +66,25 @@ export async function runCreateTickets(
     if (options.repo && c.repo !== options.repo) return false;
     return true;
   });
+
+  // Not-used filter runs BEFORE `--limit` so the cap reflects post-filter
+  // candidates. Skipped candidates won't burn slots, and the filter populates
+  // the findUsageInRepo cache so processCandidate's later call is free.
+  const { kept, notUsedSkipped } = await applyNotUsedFilter(filtered);
   const selected =
-    options.limit !== undefined ? filtered.slice(0, options.limit) : filtered;
+    options.limit !== undefined ? kept.slice(0, options.limit) : kept;
 
   const runId = newRunId();
   const summary: CreateTicketsSummary = {
     runId,
     totalCandidates: all.length,
-    afterFilter: filtered.length,
+    afterFilter: kept.length,
     applied: 0,
     dryRun: 0,
     failed: 0,
     dedupeSkipped: 0,
     dedupeReplaced: 0,
+    notUsedSkipped,
   };
 
   if (options.apply) {
@@ -98,9 +112,7 @@ async function processCandidate(
 ): Promise<void> {
   const title = buildStoryTitle(candidate);
   const changelogUrl = buildChangelogUrl(candidate.package);
-  const tags = options.noTags
-    ? []
-    : ["auro", "version-upgrade", `majors-behind-${candidate.majorsBehind}`];
+  const tags = options.noTags ? [] : buildTags(candidate);
 
   const fetchSpinner = ora(
     `Fetching changelog for ${candidate.package}...`,
@@ -332,6 +344,55 @@ async function resolveDedupeAction(
 function buildChangelogUrl(pkg: string): string {
   const shortName = pkg.replace(/^@[^/]+\//, "");
   return `https://github.com/AlaskaAirlines/${shortName}/blob/main/CHANGELOG.md`;
+}
+
+/**
+ * Base tags plus a `compliance-<status>` tag for any non-`Behind` status.
+ * `Behind` is the bot's default — tagging it would mean every ticket is
+ * tagged, which adds no signal. `Unsupported` / `Review needed` / etc.
+ * carry real information that the ADO query can filter on.
+ */
+function buildTags(candidate: UpgradeCandidate): string[] {
+  const tags = [
+    "auro",
+    "version-upgrade",
+    `majors-behind-${candidate.majorsBehind}`,
+  ];
+  if (candidate.status && candidate.status !== "Behind") {
+    tags.push(`compliance-${complianceTagSlug(candidate.status)}`);
+  }
+  return tags;
+}
+
+function complianceTagSlug(status: ComplianceStatus): string {
+  return status.toLowerCase().replace(/ /g, "-");
+}
+
+/**
+ * Drops candidates whose package has zero GitHub Code Search hits in the
+ * consumer repo. The dep is declared in package.json but never imported —
+ * filing a ticket would point the engineer at dead code. `null` results
+ * (missing GH_TOKEN, search failed) pass through so transient failures
+ * don't silently suppress tickets.
+ *
+ * Side effect: warms findUsageInRepo's per-process cache. The same
+ * (org, repo, packages-key) lookup inside processCandidate is then a
+ * cache hit, so no API calls are duplicated.
+ */
+async function applyNotUsedFilter(
+  candidates: UpgradeCandidate[],
+): Promise<{ kept: UpgradeCandidate[]; notUsedSkipped: number }> {
+  const kept: UpgradeCandidate[] = [];
+  let notUsedSkipped = 0;
+  for (const candidate of candidates) {
+    const usage = await fetchUsageInventory(candidate);
+    if (usage && usage.totalCount === 0) {
+      notUsedSkipped++;
+      continue;
+    }
+    kept.push(candidate);
+  }
+  return { kept, notUsedSkipped };
 }
 
 /**

@@ -69,6 +69,9 @@ export const versionTicketsCommand = program
       );
       console.log(`  Total candidates in JSON: ${summary.totalCandidates}`);
       console.log(`  After filters:            ${summary.afterFilter}`);
+      console.log(
+        `  Skipped (no usage):       ${chalk.dim(summary.notUsedSkipped)}`,
+      );
       if (options.apply) {
         console.log(
           `  Applied: ${chalk.green(summary.applied)}  failed: ${chalk.red(summary.failed)}`,
