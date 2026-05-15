@@ -1,0 +1,240 @@
+import { describe, expect, it } from "vitest";
+import type { ResolvedLatest } from "./npm-registry.ts";
+import { collapseCandidatesByPackage } from "./scan.ts";
+import type { PackageScan, RepoEntry, ScanCache } from "./types.ts";
+
+function makeScan(path: string, auroDeps: Record<string, string>): PackageScan {
+  return { path, auroDeps, totalDeps: Object.keys(auroDeps).length };
+}
+
+function makeRepo(
+  name: string,
+  packages: Record<string, PackageScan>,
+): RepoEntry {
+  return {
+    name,
+    defaultBranch: "main",
+    pushedAt: "2026-05-15T00:00:00Z",
+    archived: false,
+    language: "TypeScript",
+    scannedAt: "2026-05-15T00:00:00Z",
+    isMonorepo: Object.keys(packages).length > 1,
+    packages,
+    error: null,
+  };
+}
+
+function makeCache(repos: RepoEntry[]): ScanCache {
+  return {
+    version: 2,
+    lastFullScan: "2026-05-15T00:00:00Z",
+    repos: Object.fromEntries(repos.map((r) => [r.name, r])),
+  };
+}
+
+function resolved(version: string, pkg?: string): ResolvedLatest {
+  return { resolvedPackage: pkg ?? "", version };
+}
+
+describe("collapseCandidatesByPackage", () => {
+  const org = "Alaska-ECommerce";
+
+  it("emits one candidate per (repo, package) for single-manifest repos", () => {
+    const cache = makeCache([
+      makeRepo("solo-repo", {
+        "package.json": makeScan("package.json", {
+          "@aurodesignsystem/auro-button": "^7.0.0",
+        }),
+      }),
+    ]);
+    const latest = new Map([
+      [
+        "@aurodesignsystem/auro-button",
+        resolved("12.3.2", "@aurodesignsystem/auro-button"),
+      ],
+    ]);
+
+    const result = collapseCandidatesByPackage(cache, new Set(), latest, org);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].repo).toBe("solo-repo");
+    expect(result[0].package).toBe("@aurodesignsystem/auro-button");
+    expect(result[0].pinned).toBe("^7.0.0");
+    expect(result[0].manifestPaths).toEqual(["package.json"]);
+    expect(result[0].repoUrl).toBe(
+      "https://github.com/Alaska-ECommerce/solo-repo",
+    );
+  });
+
+  it("collapses multiple manifests of the same package into one candidate", () => {
+    // BFF+Component shape: same package in client/ and component/ at the
+    // same pin. Should produce ONE candidate with both paths.
+    const cache = makeCache([
+      makeRepo("bff-style", {
+        "client/package.json": makeScan("client/package.json", {
+          "@aurodesignsystem/auro-button": "^7.0.0",
+        }),
+        "component/package.json": makeScan("component/package.json", {
+          "@aurodesignsystem/auro-button": "^7.0.0",
+        }),
+      }),
+    ]);
+    const latest = new Map([
+      ["@aurodesignsystem/auro-button", resolved("12.0.0")],
+    ]);
+
+    const result = collapseCandidatesByPackage(cache, new Set(), latest, org);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].manifestPaths?.sort()).toEqual([
+      "client/package.json",
+      "component/package.json",
+    ]);
+    expect(result[0].pinned).toBe("^7.0.0");
+    expect(result[0].majorsBehind).toBe(5);
+  });
+
+  it("uses the lowest pin (worst-case-behind) when manifests disagree", () => {
+    // Same package pinned at different versions across manifests. The
+    // ticket urgency should reflect the most out-of-date copy.
+    const cache = makeCache([
+      makeRepo("split-pin", {
+        "client/package.json": makeScan("client/package.json", {
+          "@aurodesignsystem/auro-button": "^11.5.0",
+        }),
+        "component/package.json": makeScan("component/package.json", {
+          "@aurodesignsystem/auro-button": "^7.2.0",
+        }),
+      }),
+    ]);
+    const latest = new Map([
+      ["@aurodesignsystem/auro-button", resolved("12.3.2")],
+    ]);
+
+    const result = collapseCandidatesByPackage(cache, new Set(), latest, org);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].pinned).toBe("^7.2.0"); // lowest pin
+    expect(result[0].majorsBehind).toBe(5); // 12 - 7
+    expect(result[0].manifestPaths?.sort()).toEqual([
+      "client/package.json",
+      "component/package.json",
+    ]);
+  });
+
+  it("emits separate candidates for different packages in the same repo", () => {
+    const cache = makeCache([
+      makeRepo("multi-pkg", {
+        "package.json": makeScan("package.json", {
+          "@aurodesignsystem/auro-button": "^7.0.0",
+          "@aurodesignsystem/auro-icon": "^5.0.0",
+        }),
+      }),
+    ]);
+    const latest = new Map([
+      ["@aurodesignsystem/auro-button", resolved("12.0.0")],
+      ["@aurodesignsystem/auro-icon", resolved("9.0.0")],
+    ]);
+
+    const result = collapseCandidatesByPackage(cache, new Set(), latest, org);
+
+    expect(result).toHaveLength(2);
+    expect(result.map((c) => c.package).sort()).toEqual([
+      "@aurodesignsystem/auro-button",
+      "@aurodesignsystem/auro-icon",
+    ]);
+  });
+
+  it("skips packages in the archived set", () => {
+    const cache = makeCache([
+      makeRepo("with-archived", {
+        "package.json": makeScan("package.json", {
+          "@aurodesignsystem/auro-deprecated": "^1.0.0",
+          "@aurodesignsystem/auro-button": "^7.0.0",
+        }),
+      }),
+    ]);
+    const latest = new Map([
+      ["@aurodesignsystem/auro-button", resolved("12.0.0")],
+    ]);
+    const archived = new Set(["@aurodesignsystem/auro-deprecated"]);
+
+    const result = collapseCandidatesByPackage(cache, archived, latest, org);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].package).toBe("@aurodesignsystem/auro-button");
+  });
+
+  it("skips repos in error or archived state", () => {
+    const errored = makeRepo("errored", {
+      "package.json": makeScan("package.json", {
+        "@aurodesignsystem/auro-button": "^7.0.0",
+      }),
+    });
+    errored.error = "no-manifests-fetched";
+    const archived = makeRepo("archived-repo", {
+      "package.json": makeScan("package.json", {
+        "@aurodesignsystem/auro-button": "^7.0.0",
+      }),
+    });
+    archived.archived = true;
+    const ok = makeRepo("ok-repo", {
+      "package.json": makeScan("package.json", {
+        "@aurodesignsystem/auro-button": "^7.0.0",
+      }),
+    });
+    const cache = makeCache([errored, archived, ok]);
+    const latest = new Map([
+      ["@aurodesignsystem/auro-button", resolved("12.0.0")],
+    ]);
+
+    const result = collapseCandidatesByPackage(cache, new Set(), latest, org);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].repo).toBe("ok-repo");
+  });
+
+  it("skips packages with no npm resolution or with majorsBehind < 1", () => {
+    const cache = makeCache([
+      makeRepo("partial-coverage", {
+        "package.json": makeScan("package.json", {
+          "@aurodesignsystem/auro-unresolved": "^1.0.0",
+          "@aurodesignsystem/auro-current": "^12.0.0",
+          "@aurodesignsystem/auro-behind": "^7.0.0",
+        }),
+      }),
+    ]);
+    const latest = new Map([
+      // unresolved: no entry → skipped
+      ["@aurodesignsystem/auro-current", resolved("12.3.2")], // same major
+      ["@aurodesignsystem/auro-behind", resolved("12.0.0")],
+    ]);
+
+    const result = collapseCandidatesByPackage(cache, new Set(), latest, org);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].package).toBe("@aurodesignsystem/auro-behind");
+  });
+
+  it("sets targetPackage when the npm resolver returned a cross-scope alias", () => {
+    const cache = makeCache([
+      makeRepo("legacy-scope", {
+        "package.json": makeScan("package.json", {
+          "@alaskaairux/auro-button": "^4.0.0",
+        }),
+      }),
+    ]);
+    const latest = new Map([
+      [
+        "@alaskaairux/auro-button",
+        resolved("12.3.2", "@aurodesignsystem/auro-button"),
+      ],
+    ]);
+
+    const result = collapseCandidatesByPackage(cache, new Set(), latest, org);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].package).toBe("@alaskaairux/auro-button");
+    expect(result[0].targetPackage).toBe("@aurodesignsystem/auro-button");
+  });
+});

@@ -8,7 +8,9 @@ import {
   writeScanCache,
   writeUpgradeCandidates,
 } from "./cache.ts";
+import { discoverAuroManifests } from "./manifest-discovery.ts";
 import {
+  compareSemver,
   majorsBehind,
   type ResolvedLatest,
   resolveLatestAcrossAliases,
@@ -60,12 +62,28 @@ export async function runScan(options: ScanOptions): Promise<ScanSummary> {
     `Found ${repos.length} non-archived, non-fork repos in ${options.org}.`,
   );
 
+  const discoverySpinner = ora(
+    `Discovering Auro package.json manifests in ${options.org}...`,
+  ).start();
+  const discovery = await discoverAuroManifests(octokit, options.org);
+  discoverySpinner.succeed(
+    `Discovered ${discovery.totalMatches} Auro references across ${discovery.byRepo.size} repos.`,
+  );
+
+  // Map listed repos by name so we can filter discovery hits to non-archived
+  // non-fork repos only. Anything in discovery but not in this map is implicitly
+  // skipped (archived, fork, or otherwise excluded by listEcommerceRepos).
+  const reposByName = new Map(repos.map((r) => [r.name, r]));
+
   let scanned = 0;
   let skipped = 0;
   let errored = 0;
 
-  for (const repo of repos) {
-    const cached = cache.repos[repo.name];
+  for (const [repoName, manifestPaths] of discovery.byRepo) {
+    const repo = reposByName.get(repoName);
+    if (!repo) continue; // archived / fork / outside scope
+
+    const cached = cache.repos[repoName];
     if (
       !options.force &&
       cached?.scannedAt &&
@@ -75,22 +93,30 @@ export async function runScan(options: ScanOptions): Promise<ScanSummary> {
       continue;
     }
 
-    const repoSpinner = ora(`Scanning ${repo.name}...`).start();
-    const entry = await scanRepo(octokit, options.org, repo);
-    cache.repos[repo.name] = entry;
+    const repoSpinner = ora(
+      `Scanning ${repoName} (${manifestPaths.size} manifest${manifestPaths.size === 1 ? "" : "s"})...`,
+    ).start();
+    const entry = await scanRepo(octokit, options.org, repo, manifestPaths);
+    cache.repos[repoName] = entry;
 
     if (entry.error) {
-      if (entry.error === "no-package-json") {
-        repoSpinner.info(`${repo.name}: no package.json (skipped)`);
-      } else {
-        repoSpinner.warn(`${repo.name}: ${entry.error}`);
-        errored++;
-      }
+      repoSpinner.warn(`${repoName}: ${entry.error}`);
+      errored++;
     } else {
       const auroDepCount = countAuroDeps(entry);
-      repoSpinner.succeed(`${repo.name}: ${auroDepCount} Auro deps`);
+      repoSpinner.succeed(
+        `${repoName}: ${auroDepCount} Auro deps across ${Object.keys(entry.packages).length} manifest${Object.keys(entry.packages).length === 1 ? "" : "s"}`,
+      );
     }
     scanned++;
+  }
+
+  // Drop cache entries for repos no longer in discovery. Keeps the cache from
+  // accumulating ghosts when a repo drops Auro deps entirely or gets archived.
+  for (const cachedName of Object.keys(cache.repos)) {
+    if (!discovery.byRepo.has(cachedName)) {
+      delete cache.repos[cachedName];
+    }
   }
 
   writeScanCache(cache, options.outputDir);
@@ -170,6 +196,7 @@ async function scanRepo(
   octokit: Octokit,
   org: string,
   repo: RepoSummary,
+  manifestPaths: Set<string>,
 ): Promise<RepoEntry> {
   const entry: RepoEntry = {
     name: repo.name,
@@ -178,24 +205,30 @@ async function scanRepo(
     archived: false,
     language: repo.language,
     scannedAt: new Date().toISOString(),
-    isMonorepo: false,
+    isMonorepo: manifestPaths.size > 1,
     packages: {},
     error: null,
   };
 
-  const root = await fetchPackageJson(
-    octokit,
-    org,
-    repo.name,
-    "package.json",
-    repo.default_branch,
-  );
-  if (!root) {
-    entry.error = "no-package-json";
-    return entry;
+  for (const path of manifestPaths) {
+    const manifest = await fetchPackageJson(
+      octokit,
+      org,
+      repo.name,
+      path,
+      repo.default_branch,
+    );
+    if (!manifest) continue;
+    entry.packages[path] = buildPackageScan(manifest, path);
   }
 
-  entry.packages["."] = buildPackageScan(root, "package.json");
+  // Code Search said this repo had Auro hits, but every fetch missed (renamed
+  // file? deleted between index and fetch?). Record a soft error so the run
+  // summary surfaces it without crashing the scan.
+  if (Object.keys(entry.packages).length === 0) {
+    entry.error = "no-manifests-fetched";
+  }
+
   return entry;
 }
 
@@ -290,7 +323,33 @@ async function buildUpgradeCandidates(
     `Resolved ${latestByPackage.size} package versions on npm.`,
   );
 
-  const candidates: UpgradeCandidate[] = [];
+  return collapseCandidatesByPackage(
+    cache,
+    archivedPackages,
+    latestByPackage,
+    org,
+  );
+}
+
+/**
+ * Pure helper extracted for testability. Iterates every (repo, manifest,
+ * package) tuple in the cache and groups them into one candidate per
+ * (repo, package). When the same package appears in multiple manifests
+ * within one repo (BFF+Component, monorepos), the lowest pin wins —
+ * worst-case-behind drives the ticket urgency — and every manifest path
+ * is recorded so the engineer knows to update them all.
+ *
+ * Without this, multi-manifest repos would generate duplicate ADO tickets
+ * that the WIQL dedupe collapses anyway, producing noisy dry-run output
+ * and wasted ticket-creation attempts under `--apply`.
+ */
+export function collapseCandidatesByPackage(
+  cache: ScanCache,
+  archivedPackages: Set<string>,
+  latestByPackage: Map<string, ResolvedLatest>,
+  org: string,
+): UpgradeCandidate[] {
+  const byKey = new Map<string, UpgradeCandidate>();
   for (const repoEntry of Object.values(cache.repos)) {
     if (repoEntry.error || repoEntry.archived) continue;
     for (const pkgScan of Object.values(repoEntry.packages)) {
@@ -300,21 +359,34 @@ async function buildUpgradeCandidates(
         if (!resolved?.version) continue;
         const mb = majorsBehind(pinned, resolved.version);
         if (mb < 1) continue;
-        const candidate: UpgradeCandidate = {
-          repo: repoEntry.name,
-          package: name,
-          pinned,
-          latest: resolved.version,
-          majorsBehind: mb,
-          repoUrl: `https://github.com/${org}/${repoEntry.name}`,
-        };
-        if (resolved.resolvedPackage !== name) {
-          candidate.targetPackage = resolved.resolvedPackage;
+
+        const key = `${repoEntry.name}|${name}`;
+        const existing = byKey.get(key);
+        if (existing) {
+          if (!existing.manifestPaths) existing.manifestPaths = [];
+          existing.manifestPaths.push(pkgScan.path);
+          if ((compareSemver(pinned, existing.pinned) ?? 0) < 0) {
+            existing.pinned = pinned;
+            existing.majorsBehind = mb;
+          }
+        } else {
+          const candidate: UpgradeCandidate = {
+            repo: repoEntry.name,
+            package: name,
+            pinned,
+            latest: resolved.version,
+            majorsBehind: mb,
+            repoUrl: `https://github.com/${org}/${repoEntry.name}`,
+            manifestPaths: [pkgScan.path],
+          };
+          if (resolved.resolvedPackage !== name) {
+            candidate.targetPackage = resolved.resolvedPackage;
+          }
+          byKey.set(key, candidate);
         }
-        candidates.push(candidate);
       }
     }
   }
 
-  return candidates;
+  return [...byKey.values()];
 }

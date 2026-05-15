@@ -127,7 +127,9 @@ describe("resolveLatestAcrossAliases", () => {
       "fetch",
       vi.fn(async (url: string) => {
         const decoded = decodeURIComponent(url);
-        const match = decoded.match(/registry\.npmjs\.org\/([^/]+(?:\/[^/]+)?)/);
+        const match = decoded.match(
+          /registry\.npmjs\.org\/([^/]+(?:\/[^/]+)?)/,
+        );
         if (!match) return { ok: false, json: async () => ({}) };
         const pkg = match[1];
         const version = versionsByPkg[pkg];
@@ -159,9 +161,7 @@ describe("resolveLatestAcrossAliases", () => {
       "@alaskaairux/auro-button": "4.5.1",
       "@aurodesignsystem/auro-button": "12.3.2",
     });
-    const result = await resolveLatestAcrossAliases(
-      "@alaskaairux/auro-button",
-    );
+    const result = await resolveLatestAcrossAliases("@alaskaairux/auro-button");
     expect(result).toEqual({
       resolvedPackage: "@aurodesignsystem/auro-button",
       version: "12.3.2",
@@ -173,9 +173,7 @@ describe("resolveLatestAcrossAliases", () => {
       "@alaskaairux/auro-button": "4.5.1",
       "@aurodesignsystem/auro-button": null,
     });
-    const result = await resolveLatestAcrossAliases(
-      "@alaskaairux/auro-button",
-    );
+    const result = await resolveLatestAcrossAliases("@alaskaairux/auro-button");
     expect(result).toEqual({
       resolvedPackage: "@alaskaairux/auro-button",
       version: "4.5.1",
@@ -187,9 +185,7 @@ describe("resolveLatestAcrossAliases", () => {
       "@alaskaairux/auro-button": null,
       "@aurodesignsystem/auro-button": "12.3.2",
     });
-    const result = await resolveLatestAcrossAliases(
-      "@alaskaairux/auro-button",
-    );
+    const result = await resolveLatestAcrossAliases("@alaskaairux/auro-button");
     expect(result).toEqual({
       resolvedPackage: "@aurodesignsystem/auro-button",
       version: "12.3.2",
@@ -198,9 +194,7 @@ describe("resolveLatestAcrossAliases", () => {
 
   it("returns null when both lookups fail", async () => {
     mockFetch({});
-    const result = await resolveLatestAcrossAliases(
-      "@alaskaairux/auro-button",
-    );
+    const result = await resolveLatestAcrossAliases("@alaskaairux/auro-button");
     expect(result).toEqual({
       resolvedPackage: "@alaskaairux/auro-button",
       version: null,

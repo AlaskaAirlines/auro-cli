@@ -41,17 +41,20 @@ function ensureDir(dir: string): void {
 export function readScanCache(dir?: string): ScanCache {
   const file = scanCachePath(dir);
   if (!fs.existsSync(file)) {
-    return { version: 1, lastFullScan: null, repos: {} };
+    return { version: 2, lastFullScan: null, repos: {} };
   }
   try {
     const parsed = JSON.parse(fs.readFileSync(file, "utf8")) as ScanCache;
-    if (parsed?.version === 1 && parsed.repos) {
+    // v1 caches stored only the repo's root package.json. v2 indexes every
+    // matching manifest path (including BFF/Component subdirectories). Older
+    // caches are discarded rather than migrated — the next scan rebuilds them.
+    if (parsed?.version === 2 && parsed.repos) {
       return parsed;
     }
   } catch {
     // Fall through to a fresh cache on malformed JSON.
   }
-  return { version: 1, lastFullScan: null, repos: {} };
+  return { version: 2, lastFullScan: null, repos: {} };
 }
 
 export function writeScanCache(cache: ScanCache, dir?: string): void {
