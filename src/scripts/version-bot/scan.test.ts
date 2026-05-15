@@ -238,3 +238,96 @@ describe("collapseCandidatesByPackage", () => {
     expect(result[0].targetPackage).toBe("@aurodesignsystem/auro-button");
   });
 });
+
+describe("collapseCandidatesByPackage — compliance status wiring", () => {
+  const org = "Alaska-ECommerce";
+
+  it("attaches status='Behind' with a npm-latest reason for uncataloged-and-behind packages", () => {
+    // @aurodesignsystem/auro-button is intentionally NOT seeded — its
+    // candidates should still ship as Behind, not Unknown.
+    const cache = makeCache([
+      makeRepo("uncatalogued", {
+        "package.json": makeScan("package.json", {
+          "@aurodesignsystem/auro-button": "^7.0.0",
+        }),
+      }),
+    ]);
+    const latest = new Map([
+      ["@aurodesignsystem/auro-button", resolved("12.3.2")],
+    ]);
+
+    const result = collapseCandidatesByPackage(cache, new Set(), latest, org);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].status).toBe("Behind");
+    expect(result[0].statusReason).toMatch(/behind npm latest \(12\.3\.2\)/);
+    expect(result[0].notes).toBeUndefined();
+  });
+
+  it("attaches status='Unsupported' for cataloged formkit-successor packages", () => {
+    // @aurodesignsystem/auro-checkbox carries replacedBy in the seed list
+    // → Unsupported regardless of pin or majorsBehind.
+    const cache = makeCache([
+      makeRepo("formkit-consumer", {
+        "package.json": makeScan("package.json", {
+          "@aurodesignsystem/auro-checkbox": "^3.0.0",
+        }),
+      }),
+    ]);
+    const latest = new Map([
+      ["@aurodesignsystem/auro-checkbox", resolved("4.0.0")],
+    ]);
+
+    const result = collapseCandidatesByPackage(cache, new Set(), latest, org);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].status).toBe("Unsupported");
+    expect(result[0].statusReason).toMatch(
+      /Migrate to @aurodesignsystem\/auro-formkit/,
+    );
+  });
+
+  it("attaches status='Unsupported' for legacy @alaskaairux/* retirements", () => {
+    const cache = makeCache([
+      makeRepo("legacy", {
+        "package.json": makeScan("package.json", {
+          "@alaskaairux/auro-button": "^4.0.0",
+        }),
+      }),
+    ]);
+    const latest = new Map([
+      [
+        "@alaskaairux/auro-button",
+        resolved("12.0.0", "@aurodesignsystem/auro-button"),
+      ],
+    ]);
+
+    const result = collapseCandidatesByPackage(cache, new Set(), latest, org);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].status).toBe("Unsupported");
+    expect(result[0].statusReason).toMatch(
+      /Migrate to @aurodesignsystem\/auro-button/,
+    );
+    // Cross-scope alias still resolves to the new namespace as the upgrade target.
+    expect(result[0].targetPackage).toBe("@aurodesignsystem/auro-button");
+  });
+
+  it("does NOT emit candidates for uncataloged packages already at the latest major", () => {
+    // mb < 1 with no policy → status='Current' → skipped.
+    const cache = makeCache([
+      makeRepo("current", {
+        "package.json": makeScan("package.json", {
+          "@aurodesignsystem/auro-icon": "^9.1.0",
+        }),
+      }),
+    ]);
+    const latest = new Map([
+      ["@aurodesignsystem/auro-icon", resolved("9.3.0")],
+    ]);
+
+    const result = collapseCandidatesByPackage(cache, new Set(), latest, org);
+
+    expect(result).toHaveLength(0);
+  });
+});

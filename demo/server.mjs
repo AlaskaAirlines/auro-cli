@@ -150,6 +150,29 @@ const SCENARIOS = [
     previewGlob: "dated-flight-ui__*.html",
   },
   {
+    id: "05b-dry-incident-notes",
+    label: "5b. Dry-run: incident callout (catalog notes)",
+    danger: false,
+    description:
+      "Surfaces a design-system-authored regression notice above breaking changes.",
+    walkthrough:
+      'Real situation that hit us recently: Auro shipped 12.4 with a regression in the disabled-state focus trap. Hundreds of consumer repos would have been told by the bot to upgrade — to the bad version. Today, the only intervention is hand-editing every candidate row before each scan. The compliance catalog gives engineers a one-line knob instead: an entry in `policy-catalog.ts` with `targetVersion: "12.3.2"` + `notes: "Skip 12.4 — regression in..."` pins the bot to the last-known-good major AND surfaces the explanation in every ticket. This fixture has the notes field pre-set so you can see the resulting ticket without editing the catalog. In the preview, look for the orange Incident notice callout above the Breaking changes section — that\'s the new advisory surface. Remove `notes` from the fixture JSON and rerun to see it disappear; the rest of the ticket is unchanged.',
+    command: [
+      "node",
+      "./dist/auro-cli.js",
+      "version-tickets",
+      "--candidates",
+      "./test-fixtures/version-bot/scenario-5-incident-notes.json",
+      "--preview-dir",
+      "./test-fixtures/version-bot/preview-output",
+      "--min-majors",
+      "1",
+    ],
+    displayCommand:
+      "auro version-tickets --candidates ./test-fixtures/version-bot/scenario-5-incident-notes.json --preview-dir ./test-fixtures/version-bot/preview-output --min-majors 1",
+    previewGlob: "LoungeMembership-Web__*.html",
+  },
+  {
     id: "06-apply-single",
     label: "6. APPLY: 1 ticket to ADO",
     danger: true,

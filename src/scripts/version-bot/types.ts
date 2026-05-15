@@ -1,3 +1,7 @@
+import type { ComplianceStatus } from "./evaluate.ts";
+
+export type { ComplianceStatus };
+
 export interface SemverParts {
   major: number;
   minor: number;
@@ -53,4 +57,18 @@ export interface UpgradeCandidate {
    * the lowest version found across these manifests (worst-case-behind).
    */
   manifestPaths?: string[];
+  /**
+   * Compliance status from `evaluatePackage`. Optional so pre-compliance
+   * candidates JSON files still load; renderers treat absent as `Behind`
+   * (the bot's pre-catalog default).
+   */
+  status?: ComplianceStatus;
+  /** Human-readable explanation paired with `status`. */
+  statusReason?: string;
+  /**
+   * Policy `notes` snapshotted at scan time. When set, the ticket body
+   * renders an incident callout above the breaking-changes section. Plain
+   * text; HTML-escaped at render time.
+   */
+  notes?: string;
 }
