@@ -1,0 +1,1177 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Auro Version Bot — Dashboard</title>
+    <style>
+      :root {
+        --bg: #0f1115;
+        --panel: #1a1d23;
+        --panel-2: #232730;
+        --fg: #e7e9ee;
+        --muted: #8a8f99;
+        --accent: #4ea1ff;
+        --accent-soft: #1f3a5c;
+        --danger: #ff7a59;
+        --danger-soft: #3d1f17;
+        --warn: #f5b85e;
+        --warn-soft: #3a2c11;
+        --ok: #4cd99a;
+        --ok-soft: #143a2a;
+        --border: #2c313a;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; }
+      body {
+        background: var(--bg);
+        color: var(--fg);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-size: 14px;
+        line-height: 1.45;
+        min-height: 100vh;
+      }
+      a { color: var(--accent); text-decoration: none; }
+      a:hover { text-decoration: underline; }
+      code, .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; }
+
+      header.top {
+        padding: 20px 32px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 24px;
+      }
+      header.top h1 { margin: 0; font-size: 20px; }
+      header.top .subtitle { color: var(--muted); font-size: 12px; }
+      header.top nav a { font-size: 13px; margin-left: 16px; }
+
+      main {
+        max-width: 1280px;
+        margin: 0 auto;
+        padding: 24px 32px 80px;
+      }
+      section {
+        margin-bottom: 32px;
+      }
+      section > h2 {
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+        margin: 0 0 12px;
+        font-weight: 600;
+      }
+
+      /* KPI cards */
+      .kpis {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 16px;
+      }
+      .kpi {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 18px 20px;
+      }
+      .kpi .label {
+        color: var(--muted);
+        font-size: 12px;
+        margin-bottom: 8px;
+      }
+      .kpi .value {
+        font-size: 32px;
+        font-weight: 600;
+        line-height: 1.1;
+      }
+      .kpi .hint {
+        color: var(--muted);
+        font-size: 11px;
+        margin-top: 6px;
+      }
+      .kpi.compliance .value { color: var(--ok); }
+      .kpi.candidates .value { color: var(--warn); }
+
+      /* Status breakdown — horizontal stacked bar */
+      .stack {
+        display: flex;
+        height: 32px;
+        border-radius: 6px;
+        overflow: hidden;
+        border: 1px solid var(--border);
+        background: var(--panel-2);
+      }
+      .stack > div {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        color: rgba(0, 0, 0, 0.72);
+        font-weight: 600;
+        min-width: 0;
+        white-space: nowrap;
+      }
+      .stack > .current { background: var(--ok); }
+      .stack > .behind { background: var(--warn); }
+      .stack > .unsupported { background: var(--danger); }
+      .legend {
+        display: flex;
+        gap: 24px;
+        margin-top: 12px;
+        font-size: 13px;
+        flex-wrap: wrap;
+      }
+      .legend .item { display: flex; align-items: center; gap: 8px; }
+      .legend .swatch {
+        width: 12px;
+        height: 12px;
+        border-radius: 3px;
+      }
+
+      /* Two-column section */
+      .two-col {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 24px;
+      }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 20px;
+      }
+      .card h3 {
+        margin: 0 0 4px;
+        font-size: 15px;
+      }
+      .card .subtitle {
+        color: var(--muted);
+        font-size: 12px;
+        margin-bottom: 16px;
+      }
+
+      /* Top-N bar lists */
+      .bar-list { list-style: none; padding: 0; margin: 0; }
+      .bar-list li {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        align-items: center;
+        gap: 12px;
+        padding: 8px 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .bar-list li:last-child { border-bottom: 0; }
+      .bar-list .row-inner {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+      }
+      .bar-list .name {
+        font-size: 13px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .bar-list .bar {
+        height: 6px;
+        background: var(--accent-soft);
+        border-radius: 3px;
+        margin-top: 6px;
+        position: relative;
+        overflow: hidden;
+      }
+      .bar-list .bar > span {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        background: var(--accent);
+        border-radius: 3px;
+      }
+      .bar-list .count {
+        font-variant-numeric: tabular-nums;
+        font-weight: 600;
+        font-size: 13px;
+        color: var(--accent);
+        min-width: 40px;
+        text-align: right;
+      }
+
+      /* Deprecation surface card */
+      .dep-group {
+        padding: 14px 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .dep-group:last-child { border-bottom: 0; }
+      .dep-group .successor {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--danger);
+      }
+      .dep-group .stats {
+        display: flex;
+        gap: 16px;
+        margin: 6px 0 8px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .dep-group .stats b {
+        color: var(--fg);
+        font-weight: 600;
+      }
+      .dep-group .pkgs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .dep-group .pkg {
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        font-size: 11px;
+        background: var(--danger-soft);
+        color: var(--danger);
+        padding: 2px 8px;
+        border-radius: 999px;
+      }
+
+      .intro {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 18px 20px;
+        margin-bottom: 24px;
+        color: var(--fg);
+        line-height: 1.55;
+      }
+      .intro code {
+        background: rgba(255,255,255,0.06);
+        padding: 1px 6px;
+        border-radius: 4px;
+        font-size: 12px;
+      }
+      /* Per-repo compliance table */
+      .repo-table {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 0;
+      }
+      .repo-controls {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        padding: 14px 20px;
+        border-bottom: 1px solid var(--border);
+      }
+      .repo-controls input {
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        color: var(--fg);
+        border-radius: 4px;
+        padding: 6px 10px;
+        font: inherit;
+        font-size: 13px;
+        width: 280px;
+      }
+      .repo-controls input::placeholder { color: var(--muted); }
+      .repo-controls .visible-count {
+        color: var(--muted);
+        font-size: 12px;
+        margin-left: auto;
+      }
+      .repo-thead, .repo-row {
+        display: grid;
+        grid-template-columns: 1.7fr 0.7fr 1.2fr 0.7fr 24px;
+        align-items: center;
+        gap: 16px;
+        padding: 10px 20px;
+        font-size: 13px;
+      }
+      .repo-thead {
+        color: var(--muted);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        font-weight: 600;
+        border-bottom: 1px solid var(--border);
+        background: rgba(0,0,0,0.15);
+      }
+      .repo-thead .sortable {
+        cursor: pointer;
+        user-select: none;
+      }
+      .repo-thead .sortable:hover { color: var(--fg); }
+      .repo-thead .sortable.active { color: var(--accent); }
+      .repo-thead .sortable .arrow {
+        margin-left: 4px;
+        font-size: 10px;
+        opacity: 0.7;
+      }
+      .repo-row {
+        border-bottom: 1px solid var(--border);
+        cursor: pointer;
+        transition: background 0.1s;
+      }
+      .repo-row:hover { background: rgba(78, 161, 255, 0.05); }
+      .repo-row.expanded { background: rgba(78, 161, 255, 0.08); }
+      .repo-row:last-of-type { border-bottom: 0; }
+      .repo-row .name a {
+        color: var(--fg);
+        font-weight: 500;
+      }
+      .repo-row .name a:hover { color: var(--accent); }
+      .repo-row .counts {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        font-variant-numeric: tabular-nums;
+        font-size: 12px;
+      }
+      .repo-row .chip {
+        padding: 1px 7px;
+        border-radius: 999px;
+        font-weight: 600;
+        min-width: 24px;
+        text-align: center;
+      }
+      .repo-row .chip.current { background: var(--ok-soft); color: var(--ok); }
+      .repo-row .chip.behind { background: var(--warn-soft); color: var(--warn); }
+      .repo-row .chip.unsupported { background: var(--danger-soft); color: var(--danger); }
+      .repo-row .chip.zero { opacity: 0.35; }
+      .repo-row .stack-row {
+        height: 8px;
+        border-radius: 4px;
+        overflow: hidden;
+        background: var(--panel-2);
+        display: flex;
+        border: 1px solid var(--border);
+      }
+      .repo-row .stack-row > div { min-width: 0; }
+      .repo-row .stack-row > .current { background: var(--ok); }
+      .repo-row .stack-row > .behind { background: var(--warn); }
+      .repo-row .stack-row > .unsupported { background: var(--danger); }
+      .repo-row .pct {
+        font-variant-numeric: tabular-nums;
+        font-weight: 600;
+        text-align: right;
+      }
+      .repo-row .pct.high { color: var(--ok); }
+      .repo-row .pct.mid { color: var(--warn); }
+      .repo-row .pct.low { color: var(--danger); }
+      .repo-row .caret {
+        color: var(--muted);
+        text-align: center;
+        font-size: 10px;
+        transition: transform 0.15s;
+      }
+      .repo-row.expanded .caret { transform: rotate(90deg); color: var(--accent); }
+
+      .repo-issues {
+        padding: 12px 20px 16px 36px;
+        background: rgba(0,0,0,0.18);
+        border-bottom: 1px solid var(--border);
+      }
+      .repo-issues .empty {
+        background: transparent;
+        border: 0;
+        padding: 8px 0;
+        text-align: left;
+        font-size: 12px;
+      }
+      .issue {
+        display: grid;
+        grid-template-columns: 110px 1fr auto;
+        gap: 16px;
+        align-items: baseline;
+        padding: 6px 0;
+        border-bottom: 1px dashed var(--border);
+        font-size: 12px;
+      }
+      .issue:last-child { border-bottom: 0; }
+      .issue .status-badge {
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        font-weight: 700;
+        padding: 2px 8px;
+        border-radius: 4px;
+        text-align: center;
+      }
+      .issue .status-badge.behind { background: var(--warn-soft); color: var(--warn); }
+      .issue .status-badge.unsupported { background: var(--danger-soft); color: var(--danger); }
+      .issue .pkg-name code {
+        background: rgba(255,255,255,0.05);
+        padding: 1px 6px;
+        border-radius: 3px;
+        font-size: 11px;
+      }
+      .issue .pkg-arrow {
+        color: var(--muted);
+        margin: 0 6px;
+      }
+      .issue .successor {
+        display: block;
+        color: var(--muted);
+        font-size: 11px;
+        margin-top: 2px;
+      }
+      .issue .versions {
+        font-variant-numeric: tabular-nums;
+        color: var(--muted);
+        font-size: 11px;
+        white-space: nowrap;
+      }
+      .issue .versions code {
+        background: rgba(255,255,255,0.05);
+        padding: 1px 6px;
+        border-radius: 3px;
+        color: var(--fg);
+      }
+
+      footer.meta {
+        margin-top: 48px;
+        padding-top: 20px;
+        border-top: 1px solid var(--border);
+        font-size: 12px;
+        color: var(--muted);
+        display: flex;
+        gap: 24px;
+        flex-wrap: wrap;
+      }
+      footer.meta .key { color: var(--fg); margin-right: 4px; }
+
+      .empty {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 40px;
+        text-align: center;
+        color: var(--muted);
+      }
+      .empty h2 { color: var(--fg); }
+      .empty code {
+        display: inline-block;
+        background: #0a0c10;
+        padding: 4px 10px;
+        border-radius: 4px;
+        margin: 12px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="top">
+      <div>
+        <h1>Auro Version Bot — Dashboard</h1>
+        <div class="subtitle" id="scan-meta">Loading…</div>
+      </div>
+      <nav>
+        <a href="/">← Demo scenarios</a>
+      </nav>
+    </header>
+    <main id="content"></main>
+
+    <script>
+      const fmt = (n) => new Intl.NumberFormat().format(n);
+
+      /**
+       * Tiny DOM-builder. Avoids innerHTML entirely so user-controlled
+       * strings (package names, repo names, etc — sourced from npm/GitHub)
+       * can never become parsed HTML. Children that are strings become
+       * text nodes; arrays of children flatten one level.
+       */
+      function el(tag, props, ...children) {
+        const node = document.createElement(tag);
+        if (props) {
+          for (const [k, v] of Object.entries(props)) {
+            if (v == null || v === false) continue;
+            if (k === "class") node.className = v;
+            else if (k === "style" && typeof v === "object") {
+              Object.assign(node.style, v);
+            } else if (k.startsWith("on") && typeof v === "function") {
+              node.addEventListener(k.slice(2).toLowerCase(), v);
+            } else {
+              node.setAttribute(k, v);
+            }
+          }
+        }
+        for (const c of children.flat()) {
+          if (c == null || c === false) continue;
+          if (typeof c === "string" || typeof c === "number") {
+            node.appendChild(document.createTextNode(String(c)));
+          } else {
+            node.appendChild(c);
+          }
+        }
+        return node;
+      }
+
+      function replaceChildren(parent, ...nodes) {
+        while (parent.firstChild) parent.removeChild(parent.firstChild);
+        for (const n of nodes) parent.appendChild(n);
+      }
+
+      function renderError(message) {
+        document.getElementById("scan-meta").textContent = "No data available";
+        replaceChildren(
+          document.getElementById("content"),
+          el(
+            "div",
+            { class: "empty" },
+            el("h2", null, "No scan data yet"),
+            el("p", null, message),
+            el("code", null, "node ./dist/auro-cli.js version-scan"),
+            el("p", null, "Then reload this page."),
+          ),
+        );
+      }
+
+      function renderMeta(meta) {
+        const el2 = document.getElementById("scan-meta");
+        if (!meta.scannedAt) {
+          el2.textContent = "No scan data yet";
+          return;
+        }
+        const when = new Date(meta.scannedAt);
+        el2.textContent =
+          `Last scan: ${when.toLocaleString()}  ·  run id ${meta.scanRunId ?? "(unknown)"}`;
+      }
+
+      function renderIntro() {
+        return el(
+          "div",
+          { class: "intro" },
+          el(
+            "p",
+            { style: { margin: "0 0 8px" } },
+            "This is the compliance picture of every consumer repo in ",
+            el("code", null, "Alaska-ECommerce"),
+            " that uses an Auro design-system component. Each ",
+            el("b", null, "finding"),
+            " is one repo+package pair — they roll up here so you can see, at a glance, how many repos are current, how many are behind, and which packages still have the most outstanding migration work.",
+          ),
+          el(
+            "p",
+            { style: { margin: 0 } },
+            el(
+              "b",
+              null,
+              "Candidates needing tickets",
+            ),
+            " is the action subset: every Behind + Unsupported finding becomes a ticket the bot would file. The bot runs quarterly in production.",
+          ),
+        );
+      }
+
+      function renderKpis(kpis) {
+        return el(
+          "section",
+          null,
+          el(
+            "div",
+            { class: "kpis" },
+            el(
+              "div",
+              { class: "kpi" },
+              el("div", { class: "label" }, "Consumer repos scanned"),
+              el("div", { class: "value" }, fmt(kpis.reposScanned)),
+              el(
+                "div",
+                { class: "hint" },
+                "Non-archived repos in Alaska-ECommerce that declare an Auro package",
+              ),
+            ),
+            el(
+              "div",
+              { class: "kpi" },
+              el("div", { class: "label" }, "Total findings"),
+              el("div", { class: "value" }, fmt(kpis.totalFindings)),
+              el(
+                "div",
+                { class: "hint" },
+                "Every repo+package pair the bot sees (incl. compliant)",
+              ),
+            ),
+            el(
+              "div",
+              { class: "kpi candidates" },
+              el("div", { class: "label" }, "Candidates needing tickets"),
+              el(
+                "div",
+                { class: "value" },
+                fmt(kpis.candidatesNeedingTickets),
+              ),
+              el(
+                "div",
+                { class: "hint" },
+                "Behind + Unsupported — the bot would file these",
+              ),
+            ),
+            el(
+              "div",
+              { class: "kpi compliance" },
+              el("div", { class: "label" }, "Compliance"),
+              el("div", { class: "value" }, `${kpis.compliancePct}%`),
+              el(
+                "div",
+                { class: "hint" },
+                "Share of findings already on the recommended version",
+              ),
+            ),
+          ),
+        );
+      }
+
+      function renderStatusBar(s) {
+        const total = s.Current + s.Behind + s.Unsupported;
+        if (!total) return el("section", null);
+        const segments = [
+          { cls: "current", count: s.Current, label: "Current" },
+          { cls: "behind", count: s.Behind, label: "Behind" },
+          { cls: "unsupported", count: s.Unsupported, label: "Unsupported" },
+        ].filter((seg) => seg.count > 0);
+        const stack = el(
+          "div",
+          { class: "stack" },
+          segments.map((seg) =>
+            el(
+              "div",
+              {
+                class: seg.cls,
+                style: { flex: String(seg.count), minWidth: "0" },
+                title: `${seg.label}: ${fmt(seg.count)}`,
+              },
+              seg.count > total * 0.06 ? fmt(seg.count) : "",
+            ),
+          ),
+        );
+        const legendItem = (cssVar, text) =>
+          el(
+            "div",
+            { class: "item" },
+            el("span", {
+              class: "swatch",
+              style: { background: `var(--${cssVar})` },
+            }),
+            text,
+          );
+        return el(
+          "section",
+          null,
+          el("h2", null, "Compliance breakdown"),
+          stack,
+          el(
+            "div",
+            { class: "legend" },
+            legendItem(
+              "ok",
+              `Current — already on the recommended version (${fmt(s.Current)})`,
+            ),
+            legendItem(
+              "warn",
+              `Behind — older but supported (${fmt(s.Behind)})`,
+            ),
+            legendItem(
+              "danger",
+              `Unsupported — deprecated, migration required (${fmt(s.Unsupported)})`,
+            ),
+          ),
+        );
+      }
+
+      function barListRow(name, count, maxValue) {
+        const pct = Math.max(2, Math.round((count / maxValue) * 100));
+        return el(
+          "li",
+          null,
+          el(
+            "div",
+            { class: "row-inner" },
+            el(
+              "div",
+              { class: "name", title: name },
+              el("code", null, name),
+            ),
+            el(
+              "div",
+              { class: "bar" },
+              el("span", { style: { width: `${pct}%` } }),
+            ),
+          ),
+          el("div", { class: "count" }, fmt(count)),
+        );
+      }
+
+      function renderTopRepos(topRepos) {
+        const max = topRepos[0]?.count ?? 1;
+        const list = topRepos.length
+          ? el(
+              "ul",
+              { class: "bar-list" },
+              topRepos.map((r) => barListRow(r.repo, r.count, max)),
+            )
+          : el(
+              "div",
+              { class: "subtitle", style: { margin: "8px 0" } },
+              "No data yet.",
+            );
+        return el(
+          "div",
+          { class: "card" },
+          el("h3", null, "Most-behind consumer repos"),
+          el(
+            "div",
+            { class: "subtitle" },
+            "Top 10 repos by number of packages needing a ticket",
+          ),
+          list,
+        );
+      }
+
+      function renderTopPackages(topPackages) {
+        const max = topPackages[0]?.count ?? 1;
+        const list = topPackages.length
+          ? el(
+              "ul",
+              { class: "bar-list" },
+              topPackages.map((p) => barListRow(p.package, p.count, max)),
+            )
+          : el(
+              "div",
+              { class: "subtitle", style: { margin: "8px 0" } },
+              "No data yet.",
+            );
+        return el(
+          "div",
+          { class: "card" },
+          el("h3", null, "Most-impactful upgrades"),
+          el(
+            "div",
+            { class: "subtitle" },
+            "Top 10 packages by how many consumer repos still need to upgrade",
+          ),
+          list,
+        );
+      }
+
+      function renderClusters(topRepos, topPackages) {
+        return el(
+          "section",
+          null,
+          el("h2", null, "Where the work clusters"),
+          el(
+            "div",
+            { class: "two-col" },
+            renderTopRepos(topRepos),
+            renderTopPackages(topPackages),
+          ),
+        );
+      }
+
+      function renderDeprecation(groups) {
+        if (!groups.length) {
+          return el(
+            "section",
+            null,
+            el("h2", null, "Deprecation surface"),
+            el(
+              "div",
+              { class: "card" },
+              el(
+                "div",
+                { class: "subtitle" },
+                "No deprecated packages in active consumer use.",
+              ),
+            ),
+          );
+        }
+        const groupNodes = groups.map((g) => {
+          const pkgChips = g.packages.map((p) =>
+            el("span", { class: "pkg" }, p),
+          );
+          return el(
+            "div",
+            { class: "dep-group" },
+            el(
+              "div",
+              { class: "successor" },
+              "↳ migrate to ",
+              el("code", null, g.successor),
+            ),
+            el(
+              "div",
+              { class: "stats" },
+              el("div", null, el("b", null, fmt(g.ticketCount)), " tickets"),
+              el(
+                "div",
+                null,
+                el("b", null, fmt(g.repoCount)),
+                " consumer repos affected",
+              ),
+              el(
+                "div",
+                null,
+                el("b", null, fmt(g.packageCount)),
+                " deprecated packages",
+              ),
+            ),
+            el("div", { class: "pkgs" }, pkgChips),
+          );
+        });
+        return el(
+          "section",
+          null,
+          el("h2", null, "Deprecation surface"),
+          el(
+            "div",
+            { class: "card" },
+            el(
+              "div",
+              { class: "subtitle" },
+              "Where consumers still use a deprecated Auro package and need to migrate to its successor",
+            ),
+            groupNodes,
+          ),
+        );
+      }
+
+      // Per-repo compliance table — sortable columns + filter + expandable rows.
+      // State lives in module scope so column sorts / filters can re-render
+      // without re-fetching data.
+      const repoTableState = {
+        all: [],
+        filter: "",
+        sortKey: "compliancePct",
+        sortDir: "asc",
+        expanded: new Set(),
+      };
+
+      const sortFns = {
+        compliancePct: (a, b) => a.compliancePct - b.compliancePct,
+        repo: (a, b) => a.repo.localeCompare(b.repo),
+        total: (a, b) => a.total - b.total,
+        unsupported: (a, b) => a.unsupported - b.unsupported,
+        behind: (a, b) => a.behind - b.behind,
+      };
+
+      function complianceColor(pct) {
+        if (pct >= 80) return "high";
+        if (pct >= 40) return "mid";
+        return "low";
+      }
+
+      function renderIssue(issue) {
+        const cls = issue.status === "Unsupported" ? "unsupported" : "behind";
+        const pkgCell = el(
+          "div",
+          { class: "pkg-name" },
+          el("code", null, issue.package),
+          issue.successorPackage
+            ? el(
+                "span",
+                { class: "successor" },
+                "↳ migrate to ",
+                el("code", null, issue.successorPackage),
+              )
+            : null,
+        );
+        const versionsCell = el(
+          "div",
+          { class: "versions" },
+          el("code", null, issue.pinned),
+          " ",
+          el("span", { class: "pkg-arrow" }, "→"),
+          " ",
+          el("code", null, issue.recommended),
+        );
+        return el(
+          "div",
+          { class: "issue" },
+          el("div", { class: `status-badge ${cls}` }, issue.status),
+          pkgCell,
+          versionsCell,
+        );
+      }
+
+      function renderRepoRow(r, index) {
+        const row = el(
+          "div",
+          {
+            class: "repo-row",
+            "data-repo": r.repo,
+            role: "button",
+            tabindex: "0",
+          },
+          el(
+            "div",
+            { class: "name" },
+            el(
+              "a",
+              {
+                href: r.repoUrl,
+                target: "_blank",
+                rel: "noopener noreferrer",
+                onClick: (e) => e.stopPropagation(),
+              },
+              r.repo,
+            ),
+          ),
+          el(
+            "div",
+            { class: "counts" },
+            el(
+              "span",
+              {
+                class: `chip current${r.current === 0 ? " zero" : ""}`,
+                title: `${r.current} Current`,
+              },
+              fmt(r.current),
+            ),
+            el(
+              "span",
+              {
+                class: `chip behind${r.behind === 0 ? " zero" : ""}`,
+                title: `${r.behind} Behind`,
+              },
+              fmt(r.behind),
+            ),
+            el(
+              "span",
+              {
+                class: `chip unsupported${r.unsupported === 0 ? " zero" : ""}`,
+                title: `${r.unsupported} Unsupported`,
+              },
+              fmt(r.unsupported),
+            ),
+          ),
+          (() => {
+            const stack = el("div", { class: "stack-row" });
+            const total = r.total || 1;
+            for (const [cls, count] of [
+              ["current", r.current],
+              ["behind", r.behind],
+              ["unsupported", r.unsupported],
+            ]) {
+              if (count > 0) {
+                stack.appendChild(
+                  el("div", {
+                    class: cls,
+                    style: { flex: String(count) },
+                    title: `${cls}: ${fmt(count)}`,
+                  }),
+                );
+              }
+            }
+            return stack;
+          })(),
+          el(
+            "div",
+            { class: `pct ${complianceColor(r.compliancePct)}` },
+            `${r.compliancePct}%`,
+          ),
+          el("div", { class: "caret" }, "▶"),
+        );
+        if (repoTableState.expanded.has(r.repo)) {
+          row.classList.add("expanded");
+        }
+
+        const toggle = () => {
+          if (repoTableState.expanded.has(r.repo)) {
+            repoTableState.expanded.delete(r.repo);
+          } else {
+            repoTableState.expanded.add(r.repo);
+          }
+          rerenderRepoTable();
+        };
+        row.addEventListener("click", toggle);
+        row.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            toggle();
+          }
+        });
+
+        return row;
+      }
+
+      function renderRepoDrilldown(r) {
+        if (r.issues.length === 0) {
+          return el(
+            "div",
+            { class: "repo-issues" },
+            el(
+              "div",
+              { class: "empty" },
+              "✓ Every Auro package this repo declares is on the recommended version.",
+            ),
+          );
+        }
+        return el(
+          "div",
+          { class: "repo-issues" },
+          r.issues.map((i) => renderIssue(i)),
+        );
+      }
+
+      function makeSortableHeader(label, key) {
+        const isActive = repoTableState.sortKey === key;
+        const arrow = isActive
+          ? repoTableState.sortDir === "asc"
+            ? "▲"
+            : "▼"
+          : "";
+        const header = el(
+          "div",
+          {
+            class: `sortable${isActive ? " active" : ""}`,
+            onClick: () => {
+              if (repoTableState.sortKey === key) {
+                repoTableState.sortDir =
+                  repoTableState.sortDir === "asc" ? "desc" : "asc";
+              } else {
+                repoTableState.sortKey = key;
+                // Compliance % defaults asc (worst first); other numeric
+                // columns default desc (most-bad first); name asc.
+                repoTableState.sortDir = key === "repo" ? "asc" : key === "compliancePct" ? "asc" : "desc";
+              }
+              rerenderRepoTable();
+            },
+          },
+          label,
+          el("span", { class: "arrow" }, arrow),
+        );
+        return header;
+      }
+
+      function applyRepoFilter() {
+        const q = repoTableState.filter.trim().toLowerCase();
+        let rows = repoTableState.all;
+        if (q) {
+          rows = rows.filter((r) => r.repo.toLowerCase().includes(q));
+        }
+        const cmp = sortFns[repoTableState.sortKey] ?? sortFns.compliancePct;
+        rows = rows.slice().sort((a, b) => {
+          const v = cmp(a, b);
+          return repoTableState.sortDir === "asc" ? v : -v;
+        });
+        return rows;
+      }
+
+      function rerenderRepoTable() {
+        const root = document.getElementById("repo-table-body");
+        if (!root) return;
+        const filtered = applyRepoFilter();
+        const countEl = document.getElementById("repo-visible-count");
+        if (countEl) {
+          countEl.textContent =
+            filtered.length === repoTableState.all.length
+              ? `Showing all ${fmt(filtered.length)} repos`
+              : `Showing ${fmt(filtered.length)} of ${fmt(repoTableState.all.length)} repos`;
+        }
+        const headerNode = document.getElementById("repo-table-head");
+        if (headerNode) {
+          replaceChildren(
+            headerNode,
+            makeSortableHeader("Repository", "repo"),
+            el("div", null, "Status counts"),
+            el("div", null, "Distribution"),
+            makeSortableHeader("Compliance", "compliancePct"),
+            el("div", null, ""),
+          );
+        }
+        const rows = [];
+        for (const r of filtered) {
+          rows.push(renderRepoRow(r));
+          if (repoTableState.expanded.has(r.repo)) {
+            rows.push(renderRepoDrilldown(r));
+          }
+        }
+        replaceChildren(root, ...rows);
+      }
+
+      function renderRepoTable(repoBreakdown) {
+        repoTableState.all = repoBreakdown;
+        const filterInput = el("input", {
+          type: "search",
+          placeholder: "Filter repos by name…",
+          oninput: (e) => {
+            repoTableState.filter = e.target.value;
+            rerenderRepoTable();
+          },
+        });
+        return el(
+          "section",
+          null,
+          el("h2", null, "Compliance by repo"),
+          el(
+            "div",
+            { class: "repo-table" },
+            el(
+              "div",
+              { class: "repo-controls" },
+              filterInput,
+              el(
+                "span",
+                { id: "repo-visible-count", class: "visible-count" },
+                `Showing all ${fmt(repoBreakdown.length)} repos`,
+              ),
+            ),
+            el("div", { id: "repo-table-head", class: "repo-thead" }),
+            el("div", { id: "repo-table-body" }),
+          ),
+        );
+      }
+
+      function renderFooter(meta) {
+        return el(
+          "footer",
+          { class: "meta" },
+          el(
+            "div",
+            null,
+            el("span", { class: "key" }, "scanRunId:"),
+            " ",
+            el("code", null, meta.scanRunId ?? "—"),
+          ),
+          el(
+            "div",
+            null,
+            el("span", { class: "key" }, "Raw data:"),
+            " ",
+            el("code", null, ".cache/version-bot/auro-compliance-findings.json"),
+            " (this dashboard) · ",
+            el("code", null, ".cache/version-bot/auro-upgrade-candidates.json"),
+            " (action list for tickets)",
+          ),
+        );
+      }
+
+      async function load() {
+        try {
+          const r = await fetch("/api/findings");
+          const data = await r.json();
+          if (!r.ok) {
+            renderError(data.error ?? "Could not load findings.");
+            return;
+          }
+          renderMeta(data.meta);
+          replaceChildren(
+            document.getElementById("content"),
+            renderIntro(),
+            renderKpis(data.kpis),
+            renderStatusBar(data.statusBreakdown),
+            renderClusters(data.topRepos, data.topPackages),
+            renderDeprecation(data.deprecationSurface),
+            renderRepoTable(data.repoBreakdown ?? []),
+            renderFooter(data.meta),
+          );
+          // Initial paint of the table head + body (sortable headers, rows).
+          // renderRepoTable inserts empty placeholders; rerender fills them.
+          rerenderRepoTable();
+        } catch (err) {
+          renderError(err.message ?? String(err));
+        }
+      }
+
+      load();
+    </script>
+  </body>
+</html>
