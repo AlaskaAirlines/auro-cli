@@ -50,6 +50,45 @@ describe("buildStoryTitle", () => {
       "Upgrade @aurodesignsystem/auro-button in Web-AccountOverview (10.0.0 -> 11.5.1, 1 major behind)",
     );
   });
+
+  it("uses the deprecation-replacement format when status=Unsupported and targetPackage is set", () => {
+    // "(deprecated)" sits flush against the OLD package so it can only
+    // modify that one — putting it at the end of the title would read as
+    // if the successor were unsupported.
+    const title = buildStoryTitle(
+      makeCandidate({
+        package: "@aurodesignsystem/auro-checkbox",
+        targetPackage: "@aurodesignsystem/auro-formkit",
+        repo: "LoungeMembership-Web",
+        pinned: "3.0.0",
+        latest: "4.0.0",
+        majorsBehind: 0,
+        status: "Unsupported",
+        statusReason:
+          "This package is deprecated. Migrate to @aurodesignsystem/auro-formkit.",
+      }),
+    );
+    expect(title).toBe(
+      "Replace @aurodesignsystem/auro-checkbox@3.0.0 (deprecated) with @aurodesignsystem/auro-formkit@4.0.0 in LoungeMembership-Web",
+    );
+  });
+
+  it("falls back to the upgrade format when status=Unsupported but targetPackage is missing", () => {
+    // Edge case: catalog has replacedBy but the successor's npm latest
+    // couldn't resolve at scan time — scan.ts would normally drop the
+    // candidate, but if one gets through, we still want a coherent title.
+    const title = buildStoryTitle(
+      makeCandidate({
+        package: "@alaskaairux/old-thing",
+        repo: "demo-repo",
+        pinned: "1.0.0",
+        latest: "2.0.0",
+        majorsBehind: 1,
+        status: "Unsupported",
+      }),
+    );
+    expect(title).toMatch(/^Upgrade @alaskaairux\/old-thing in demo-repo/);
+  });
 });
 
 describe("buildAcceptanceCriteria — same-namespace path", () => {
@@ -130,6 +169,87 @@ describe("buildAcceptanceCriteria — cross-namespace path", () => {
     expect(smokeLine).toBeDefined();
     expect(smokeLine).toMatch(/@aurodesignsystem\/auro-button/);
     expect(smokeLine).not.toMatch(/@alaskaairux\/auro-button/);
+  });
+});
+
+describe("deprecation rewrites (status=Unsupported with successor target)", () => {
+  function makeDeprecationCandidate(
+    overrides: Partial<UpgradeCandidate> = {},
+  ): UpgradeCandidate {
+    return makeCandidate({
+      package: "@aurodesignsystem/auro-checkbox",
+      targetPackage: "@aurodesignsystem/auro-formkit",
+      pinned: "3.0.0",
+      latest: "4.0.0",
+      majorsBehind: 0,
+      status: "Unsupported",
+      statusReason:
+        "This package is deprecated. Migrate to @aurodesignsystem/auro-formkit.",
+      ...overrides,
+    });
+  }
+
+  it("AC first bullet calls the migration out as a real rewrite, not a drop-in swap", () => {
+    const ac = buildAcceptanceCriteria(makeDeprecationCandidate());
+    expect(ac).toMatch(
+      /Migrate from <code>@aurodesignsystem\/auro-checkbox<\/code> to <code>@aurodesignsystem\/auro-formkit@4\.0\.0<\/code>/,
+    );
+    expect(ac).toMatch(/This is a code migration, not a drop-in replacement/);
+    // Scope-rename wording must NOT appear — different short-names.
+    expect(ac).not.toMatch(/Update all import paths from/);
+  });
+
+  it("AC keeps the existing scope-rename wording when the package short-name is identical", () => {
+    // @alaskaairux/auro-button → @aurodesignsystem/auro-button is a scope
+    // swap on the SAME component, not a rewrite. AC reflects that.
+    const ac = buildAcceptanceCriteria(
+      makeCandidate({
+        package: "@alaskaairux/auro-button",
+        targetPackage: "@aurodesignsystem/auro-button",
+        pinned: "4.0.0",
+        latest: "12.3.2",
+        status: "Unsupported",
+        statusReason:
+          "This package is deprecated. Migrate to @aurodesignsystem/auro-button.",
+      }),
+    );
+    expect(ac).toMatch(/Replace <code>@alaskaairux\/auro-button<\/code> with/);
+    expect(ac).toMatch(/Update all import paths from/);
+    expect(ac).not.toMatch(/code migration, not a drop-in/);
+  });
+
+  it("body Context section frames the deprecation as a code migration, not a version bump", () => {
+    const body = buildStoryBody({
+      candidate: makeDeprecationCandidate(),
+      changelogSlice: null,
+      changelogUrl: "https://example/CHANGELOG.md",
+      breakingChanges: [],
+    });
+    expect(body).toMatch(/deprecated and replaced/);
+    expect(body).toMatch(/Package deprecated — code migration required/);
+    expect(body).toMatch(
+      /<code>@aurodesignsystem\/auro-formkit<\/code> is a different package/,
+    );
+    // The "majors behind" framing doesn't apply here and must not appear.
+    expect(body).not.toMatch(/major version[s]? behind/);
+  });
+
+  it("body Context section keeps the namespace-rename wording for scope-only deprecations", () => {
+    const body = buildStoryBody({
+      candidate: makeCandidate({
+        package: "@alaskaairux/auro-button",
+        targetPackage: "@aurodesignsystem/auro-button",
+        pinned: "4.0.0",
+        latest: "12.3.2",
+        majorsBehind: 8,
+        status: "Unsupported",
+      }),
+      changelogSlice: null,
+      changelogUrl: "https://example/CHANGELOG.md",
+      breakingChanges: [],
+    });
+    expect(body).toMatch(/⚠ Namespace rename/);
+    expect(body).not.toMatch(/code migration required/);
   });
 });
 

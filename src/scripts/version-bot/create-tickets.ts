@@ -353,11 +353,14 @@ function buildChangelogUrl(pkg: string): string {
  * carry real information that the ADO query can filter on.
  */
 function buildTags(candidate: UpgradeCandidate): string[] {
-  const tags = [
-    "auro",
-    "version-upgrade",
-    `majors-behind-${candidate.majorsBehind}`,
-  ];
+  const tags = ["auro", "version-upgrade"];
+  // `majors-behind-N` is meaningful for upgrades within the same package.
+  // For deprecation tickets (Unsupported), the old and new packages are
+  // different versions of different things — the number is misleading.
+  // The `compliance-unsupported` tag carries the real signal there.
+  if (candidate.status !== "Unsupported") {
+    tags.push(`majors-behind-${candidate.majorsBehind}`);
+  }
   if (candidate.status && candidate.status !== "Behind") {
     tags.push(`compliance-${complianceTagSlug(candidate.status)}`);
   }

@@ -26,9 +26,23 @@ function genericAcceptanceBullets(c: UpgradeCandidate): string[] {
   const latest = escapeHtml(c.latest);
   const target = c.targetPackage ? escapeHtml(c.targetPackage) : null;
   const manifestPhrase = describeManifestsInline(c.manifestPaths);
-  const firstBullet = target
-    ? `Replace <code>${pkg}</code> with <code>${target}@${latest}</code> in ${manifestPhrase} (and the matching lockfile${c.manifestPaths && c.manifestPaths.length > 1 ? "s" : ""}). Update all import paths from <code>${pkg}</code> to <code>${target}</code>.`
-    : `Update <code>${pkg}</code> to <code>${latest}</code> in ${manifestPhrase} (and the matching lockfile${c.manifestPaths && c.manifestPaths.length > 1 ? "s" : ""}).`;
+  const lockfileWord = `lockfile${c.manifestPaths && c.manifestPaths.length > 1 ? "s" : ""}`;
+  // A migration is a real rewrite when the package short-name changes too
+  // (e.g. auro-checkbox → auro-formkit). When only the scope changes
+  // (@alaskaairux/auro-button → @aurodesignsystem/auro-button), the
+  // component is the same and a rename + lockfile update is enough.
+  const isRealMigration =
+    c.status === "Unsupported" &&
+    target &&
+    !isScopeRename(c.package, c.targetPackage);
+  let firstBullet: string;
+  if (isRealMigration && target) {
+    firstBullet = `Migrate from <code>${pkg}</code> to <code>${target}@${latest}</code> in ${manifestPhrase} (and the matching ${lockfileWord}). <b>This is a code migration, not a drop-in replacement</b> — the successor exposes different exports and APIs. Review its documentation, update imports and usage, and retest every surface that used <code>${pkg}</code>.`;
+  } else if (target) {
+    firstBullet = `Replace <code>${pkg}</code> with <code>${target}@${latest}</code> in ${manifestPhrase} (and the matching ${lockfileWord}). Update all import paths from <code>${pkg}</code> to <code>${target}</code>.`;
+  } else {
+    firstBullet = `Update <code>${pkg}</code> to <code>${latest}</code> in ${manifestPhrase} (and the matching ${lockfileWord}).`;
+  }
   const smokeRef = target ?? pkg;
   return [
     firstBullet,
@@ -38,6 +52,15 @@ function genericAcceptanceBullets(c: UpgradeCandidate): string[] {
     "Existing test suite passes.",
     `Manual smoke check: every UI surface using <code>${smokeRef}</code> renders without new console errors and matches the prior visual baseline.`,
   ];
+}
+
+function isScopeRename(
+  fromPackage: string,
+  toPackage: string | undefined,
+): boolean {
+  if (!toPackage) return false;
+  const shortName = (p: string) => p.replace(/^@[^/]+\//, "");
+  return shortName(fromPackage) === shortName(toPackage);
 }
 
 /**
@@ -88,6 +111,14 @@ export function buildAcceptanceCriteria(
 }
 
 export function buildStoryTitle(c: UpgradeCandidate): string {
+  // Deprecation/replacement tickets get a distinct title: the action is a
+  // migration to a different package, not a version bump. "(deprecated)" sits
+  // flush against the old package@version so it can only modify that one —
+  // putting the qualifier at the end of the title (or near the successor)
+  // would read as if the new package were unsupported.
+  if (c.status === "Unsupported" && c.targetPackage) {
+    return `Replace ${c.package}@${c.pinned} (deprecated) with ${c.targetPackage}@${c.latest} in ${c.repo}`;
+  }
   const plural = c.majorsBehind > 1 ? "s" : "";
   return `Upgrade ${c.package} in ${c.repo} (${c.pinned} -> ${c.latest}, ${c.majorsBehind} major${plural} behind)`;
 }
@@ -111,12 +142,22 @@ export function buildStoryBody({
   const plural = majorsBehind > 1 ? "s" : "";
 
   const targetPackage = candidate.targetPackage;
+  const isRealMigration =
+    candidate.status === "Unsupported" &&
+    !!targetPackage &&
+    !isScopeRename(pkg, targetPackage);
+  const headlineSentence = isRealMigration
+    ? `<p>The repo <a href="${repoUrl}"><b>${escapeHtml(repo)}</b></a> is using <code>${escapeHtml(pkg)}@${escapeHtml(pinned)}</code>, which has been <b>deprecated and replaced</b> by <code>${escapeHtml(targetPackage as string)}@${escapeHtml(latest)}</code>. Migrating off the deprecated package keeps the repo on a supported track for a11y, security patches, and design-system parity.</p>`
+    : `<p>The repo <a href="${repoUrl}"><b>${escapeHtml(repo)}</b></a> is using <code>${escapeHtml(pkg)}@${escapeHtml(pinned)}</code> but the latest published version is <code>${escapeHtml(latest)}</code> — that's <b>${majorsBehind} major version${plural} behind</b>. Staying current keeps a11y, security patches, and design-system parity in step with the rest of the Auro fleet.</p>`;
+  const transitionCallout = !targetPackage
+    ? ""
+    : isRealMigration
+      ? `<p><b>⚠ Package deprecated — code migration required:</b> <code>${escapeHtml(pkg)}</code> is no longer maintained. The successor <code>${escapeHtml(targetPackage)}</code> is a different package with a different API surface, not a renamed version of the same component. Migration involves removing <code>${escapeHtml(pkg)}</code>, adding <code>${escapeHtml(targetPackage)}</code>, and rewriting source code that referenced the old package. Plan for review time proportional to a real refactor, not a version bump.</p>`
+      : `<p><b>⚠ Namespace rename:</b> active development of this library moved to <code>${escapeHtml(targetPackage)}</code>. Upgrading requires renaming the dependency in <code>package.json</code> from <code>${escapeHtml(pkg)}</code> to <code>${escapeHtml(targetPackage)}</code> AND updating any matching import paths in source files. The version number bridges both scopes — <code>${escapeHtml(latest)}</code> is the latest on the new scope.</p>`;
   const contextSection = [
     "<h3>Context</h3>",
-    `<p>The repo <a href="${repoUrl}"><b>${escapeHtml(repo)}</b></a> is using <code>${escapeHtml(pkg)}@${escapeHtml(pinned)}</code> but the latest published version is <code>${escapeHtml(latest)}</code> — that's <b>${majorsBehind} major version${plural} behind</b>. Staying current keeps a11y, security patches, and design-system parity in step with the rest of the Auro fleet.</p>`,
-    targetPackage
-      ? `<p><b>⚠ Namespace rename:</b> active development of this library moved to <code>${escapeHtml(targetPackage)}</code>. Upgrading requires renaming the dependency in <code>package.json</code> from <code>${escapeHtml(pkg)}</code> to <code>${escapeHtml(targetPackage)}</code> AND updating any matching import paths in source files. The version number bridges both scopes — <code>${escapeHtml(latest)}</code> is the latest on the new scope.</p>`
-      : "",
+    headlineSentence,
+    transitionCallout,
     buildManifestPathsCallout(candidate.manifestPaths, pinned),
     supersedes !== undefined
       ? `<p><i>This ticket supersedes work item #${supersedes}, which was closed because a newer version of <code>${escapeHtml(pkg)}</code> has shipped since that ticket was created.</i></p>`
