@@ -747,6 +747,56 @@ describe("manifestPaths in body and AC", () => {
     expect(body).toMatch(/<code>component\/package\.json<\/code>/);
   });
 
+  it("Context section renders manifests as a <ul> when there are more than 5", () => {
+    // Borealis's worst-case packages live in 17–45 manifests. A
+    // comma-separated paragraph at that size is unreadable; a bulleted
+    // list is the engineer's update checklist.
+    const paths = Array.from(
+      { length: 8 },
+      (_, i) => `components/widget-${i}/package.json`,
+    );
+    const body = buildStoryBody({
+      candidate: makeCandidate({ manifestPaths: paths }),
+      changelogSlice: null,
+      changelogUrl: "https://example/CHANGELOG.md",
+      breakingChanges: [],
+    });
+    expect(body).toMatch(/⚠ Multiple manifests/);
+    expect(body).toMatch(/<b>8<\/b>/);
+    // The bulleted block should be present.
+    expect(body).toMatch(/<ul>\s*\n\s*<li><code>components\/widget-0/);
+    // Each manifest gets its own <li> rather than a comma-joined run-on.
+    for (let i = 0; i < 8; i++) {
+      expect(body).toMatch(
+        new RegExp(
+          `<li><code>components/widget-${i}/package\\.json</code></li>`,
+        ),
+      );
+    }
+  });
+
+  it("Context section stays inline (comma list) at 5 manifests — under the threshold", () => {
+    const paths = Array.from(
+      { length: 5 },
+      (_, i) => `components/widget-${i}/package.json`,
+    );
+    const body = buildStoryBody({
+      candidate: makeCandidate({ manifestPaths: paths }),
+      changelogSlice: null,
+      changelogUrl: "https://example/CHANGELOG.md",
+      breakingChanges: [],
+    });
+    expect(body).toMatch(/⚠ Multiple manifests/);
+    // No <ul> for 5 manifests — paragraph reads fine at that size.
+    expect(body).not.toMatch(/<ul>\s*\n\s*<li><code>components\/widget-/);
+    // Paths are still all present, just inline.
+    for (let i = 0; i < 5; i++) {
+      expect(body).toMatch(
+        new RegExp(`<code>components/widget-${i}/package\\.json</code>`),
+      );
+    }
+  });
+
   it("AC first bullet uses generic wording for the trivial single-root case", () => {
     const ac = buildAcceptanceCriteria(
       makeCandidate({ manifestPaths: ["package.json"] }),
@@ -775,6 +825,27 @@ describe("manifestPaths in body and AC", () => {
     expect(ac).toMatch(
       /Update <code>@aurodesignsystem\/auro-button<\/code> to <code>11\.5\.1<\/code> in each of the 2 manifests where it appears \(<code>client\/package\.json<\/code>, <code>component\/package\.json<\/code>\) \(and the matching lockfiles\)/,
     );
+  });
+
+  it("AC first bullet cross-references the body callout above the threshold instead of inlining 30+ paths", () => {
+    // Duplicating a 45-path comma-separated list in both Context AND AC
+    // pushes the meaningful checklist (npm ci, build, lint, test, smoke)
+    // off the screen. Above the threshold, AC points at the Context list
+    // instead.
+    const paths = Array.from(
+      { length: 12 },
+      (_, i) => `components/widget-${i}/package.json`,
+    );
+    const ac = buildAcceptanceCriteria(makeCandidate({ manifestPaths: paths }));
+    expect(ac).toMatch(
+      /in each of the 12 manifests listed in the "Multiple manifests" callout in this ticket's description/,
+    );
+    // None of the actual paths should appear inline in the AC bullet.
+    for (let i = 0; i < 12; i++) {
+      const acFirstBulletEnd = ac.indexOf("npm ci");
+      const firstBullet = ac.slice(0, acFirstBulletEnd);
+      expect(firstBullet).not.toContain(`widget-${i}/package.json`);
+    }
   });
 
   it("AC first bullet preserves cross-namespace rewrite wording with multi-manifest", () => {
