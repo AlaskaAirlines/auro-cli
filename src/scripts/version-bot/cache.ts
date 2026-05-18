@@ -1,9 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { ScanCache, UpgradeCandidate } from "./types.ts";
+import type {
+  ComplianceFinding,
+  ScanCache,
+  UpgradeCandidate,
+} from "./types.ts";
 
 const SCAN_CACHE_FILE = "auro-deps-by-ecommerce-repo.json";
 const UPGRADE_CANDIDATES_FILE = "auro-upgrade-candidates.json";
+const COMPLIANCE_FINDINGS_FILE = "auro-compliance-findings.json";
 
 /**
  * Default output dir for the version-bot — project-local under the cwd.
@@ -30,6 +35,10 @@ export function scanCachePath(dir?: string): string {
 
 export function upgradeCandidatesPath(dir?: string): string {
   return path.join(resolveOutputDir(dir), UPGRADE_CANDIDATES_FILE);
+}
+
+export function complianceFindingsPath(dir?: string): string {
+  return path.join(resolveOutputDir(dir), COMPLIANCE_FINDINGS_FILE);
 }
 
 function ensureDir(dir: string): void {
@@ -82,6 +91,27 @@ export function readUpgradeCandidates(dir?: string): UpgradeCandidate[] {
     );
   }
   return JSON.parse(fs.readFileSync(file, "utf8")) as UpgradeCandidate[];
+}
+
+export function writeComplianceFindings(
+  findings: ComplianceFinding[],
+  dir?: string,
+): void {
+  ensureDir(resolveOutputDir(dir));
+  fs.writeFileSync(
+    complianceFindingsPath(dir),
+    JSON.stringify(findings, null, 2),
+  );
+}
+
+export function readComplianceFindings(dir?: string): ComplianceFinding[] {
+  const file = complianceFindingsPath(dir);
+  if (!fs.existsSync(file)) {
+    throw new Error(
+      `Compliance findings file not found at ${file}. Run \`auro version-scan\` first.`,
+    );
+  }
+  return JSON.parse(fs.readFileSync(file, "utf8")) as ComplianceFinding[];
 }
 
 /**

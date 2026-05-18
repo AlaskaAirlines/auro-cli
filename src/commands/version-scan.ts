@@ -43,8 +43,12 @@ export const versionScanCommand = program
       console.log(
         `  Upgrade candidates (>= 1 major behind): ${chalk.cyan(summary.candidatesFound)}`,
       );
+      console.log(
+        `  Compliance findings (all rows, incl. Current): ${chalk.cyan(summary.findingsCount)}`,
+      );
       console.log(`  Cache:      ${summary.cachePath}`);
       console.log(`  Candidates: ${summary.candidatesPath}`);
+      console.log(`  Findings:   ${summary.findingsPath}`);
     } catch (error) {
       console.error(
         chalk.red(

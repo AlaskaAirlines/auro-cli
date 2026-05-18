@@ -72,3 +72,52 @@ export interface UpgradeCandidate {
    */
   notes?: string;
 }
+
+/**
+ * One row per (repository, package) tuple, emitted alongside the
+ * upgrade-candidates JSON during each scan. Findings are the
+ * backward-looking superset: they include `Current` and (eventually)
+ * `Not used` rows that candidates drop, because the rest of the org —
+ * dashboards, Backstage panels, the LLM synthesizer, multi-team routing —
+ * needs the complete picture, not just the action list.
+ *
+ * Schema is aligned with auro-scan's compliance model so the two tools
+ * can converge on a shared catalog/SQLite store later without a second
+ * refactor. Bot-specific fields (manifestPaths, majorsBehind,
+ * successorPackage, notes) are additive — auro-scan can ignore them.
+ *
+ * scanRunId + scannedAt are denormalized per row so the file is forward
+ * compatible with the SQLite migration in the recommendation doc (where
+ * rows live in a single table joined to a scan_runs table).
+ */
+export interface ComplianceFinding {
+  scanRunId: string;
+  scannedAt: string;
+  repository: string;
+  packageName: string;
+  /** Pinned version from package.json (e.g. "^4.0.0"). Worst-case-behind
+   *  across manifests when the package appears in more than one. */
+  declaredVersion: string;
+  /** Resolved version from a lockfile. Null until lockfile parsing lands
+   *  (Step 3 in the compliance recommendation). */
+  resolvedVersion: string | null;
+  /** Policy.targetVersion when the catalog pins a specific target;
+   *  otherwise null (the bot is using npm latest as the implicit target). */
+  targetVersion: string | null;
+  /** Policy.minimumVersion when the catalog sets a floor for support. */
+  minimumVersion: string | null;
+  status: ComplianceStatus;
+  statusReason: string;
+  /** Convenience field: 0 when status is Current or for deprecation-style
+   *  Unsupported (where comparing the deprecated package's pin against
+   *  the successor's version isn't meaningful). */
+  majorsBehind: number;
+  /** Catalog's replacedBy or the npm resolver's cross-scope alias —
+   *  whichever points consumers at the successor package. */
+  successorPackage: string | null;
+  /** Catalog.notes snapshotted at scan time. Incident context that surfaces
+   *  in the ticket body callout. */
+  notes: string | null;
+  /** Every package.json path inside the repo that pins this package. */
+  manifestPaths: string[];
+}
