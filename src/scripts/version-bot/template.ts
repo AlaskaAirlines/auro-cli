@@ -64,12 +64,22 @@ function isScopeRename(
 }
 
 /**
+ * Threshold above which inline comma-separated paths become unreadable.
+ * 5 chosen empirically: Borealis's worst-case packages live in 17–45
+ * manifests, and a 5-item run-on sentence still scans OK; 6+ becomes
+ * a wall of text and pushes the AC's action verbs out of view.
+ */
+const INLINE_MANIFEST_LIMIT = 5;
+
+/**
  * Returns a short HTML phrase describing where a dependency lives in the
  * repo, for inline use inside the first AC bullet. Defaults to "the
  * consumer's <code>package.json</code>" when manifest paths are unknown or
  * trivial (single root). When the dep lives in a subdirectory manifest, or
- * spans multiple manifests, names them explicitly so the engineer's update
- * checklist is unambiguous.
+ * spans a small number of manifests, names them inline. Above
+ * INLINE_MANIFEST_LIMIT, points the engineer at the body's "Multiple
+ * manifests" callout instead of duplicating a 30+ path list inline — the
+ * AC bullet's job is the action, not a second copy of the list.
  */
 function describeManifestsInline(paths: string[] | undefined): string {
   if (!paths || paths.length === 0) {
@@ -80,6 +90,9 @@ function describeManifestsInline(paths: string[] | undefined): string {
   }
   if (paths.length === 1) {
     return `<code>${escapeHtml(paths[0])}</code>`;
+  }
+  if (paths.length > INLINE_MANIFEST_LIMIT) {
+    return `each of the ${paths.length} manifests listed in the "Multiple manifests" callout in this ticket's description`;
   }
   const items = paths.map((p) => `<code>${escapeHtml(p)}</code>`).join(", ");
   return `each of the ${paths.length} manifests where it appears (${items})`;
@@ -224,6 +237,22 @@ function buildManifestPathsCallout(
 
   if (paths.length === 1) {
     return `<p><b>📍 Manifest location:</b> this dependency is declared in <code>${escapeHtml(paths[0])}</code>, not the repo's root <code>package.json</code>. Make sure your upgrade edits the right file.</p>`;
+  }
+
+  // Above the threshold, render as a bulleted block — a 30+ path
+  // comma-separated paragraph is a wall of text. The list itself is the
+  // engineer's update checklist; treating it like one makes it scannable
+  // and copy-paste-friendly. Below the threshold, inline reads naturally.
+  if (paths.length > INLINE_MANIFEST_LIMIT) {
+    const items = paths
+      .map((p) => `  <li><code>${escapeHtml(p)}</code></li>`)
+      .join("\n");
+    return [
+      `<p><b>⚠ Multiple manifests:</b> this dependency is declared in <b>${paths.length}</b> <code>package.json</code> files — all must be updated to upgrade the repo consistently:</p>`,
+      "<ul>",
+      items,
+      "</ul>",
+    ].join("\n");
   }
 
   const items = paths.map((p) => `<code>${escapeHtml(p)}</code>`).join(", ");
