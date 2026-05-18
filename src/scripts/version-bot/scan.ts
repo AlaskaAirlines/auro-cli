@@ -1,18 +1,20 @@
 import { Octokit } from "@octokit/rest";
 import ora from "ora";
+import { newRunId } from "./audit-log.ts";
 import {
+  complianceFindingsPath,
   displayPath,
   readScanCache,
   scanCachePath,
   upgradeCandidatesPath,
+  writeComplianceFindings,
   writeScanCache,
   writeUpgradeCandidates,
 } from "./cache.ts";
-import { type ComplianceStatus, evaluatePackage } from "./evaluate.ts";
+import { buildComplianceFindings, evaluateRepoPackage } from "./findings.ts";
 import { discoverAuroManifests } from "./manifest-discovery.ts";
 import {
   compareSemver,
-  majorsBehind,
   type ResolvedLatest,
   resolveLatestAcrossAliases,
 } from "./npm-registry.ts";
@@ -37,8 +39,10 @@ interface ScanSummary {
   reposSkipped: number;
   reposErrored: number;
   candidatesFound: number;
+  findingsCount: number;
   cachePath: string;
   candidatesPath: string;
+  findingsPath: string;
 }
 
 export async function runScan(options: ScanOptions): Promise<ScanSummary> {
@@ -123,9 +127,26 @@ export async function runScan(options: ScanOptions): Promise<ScanSummary> {
 
   writeScanCache(cache, options.outputDir);
 
-  const candidates = await buildUpgradeCandidates(
+  const latestByPackage = await resolveLatestVersions(cache, archivedPackages);
+
+  // One scanRunId stamped onto every finding in this run. Forward-compatible
+  // with the SQLite migration in the compliance recommendation (rows in a
+  // findings table joining to a scan_runs table by this id).
+  const scanRunId = newRunId();
+  const scannedAt = new Date().toISOString();
+  const findings = buildComplianceFindings(
     cache,
     archivedPackages,
+    latestByPackage,
+    scanRunId,
+    scannedAt,
+  );
+  writeComplianceFindings(findings, options.outputDir);
+
+  const candidates = collapseCandidatesByPackage(
+    cache,
+    archivedPackages,
+    latestByPackage,
     options.org,
   );
   writeUpgradeCandidates(candidates, options.outputDir);
@@ -135,8 +156,10 @@ export async function runScan(options: ScanOptions): Promise<ScanSummary> {
     reposSkipped: skipped,
     reposErrored: errored,
     candidatesFound: candidates.length,
+    findingsCount: findings.length,
     cachePath: displayPath(scanCachePath(options.outputDir)),
     candidatesPath: displayPath(upgradeCandidatesPath(options.outputDir)),
+    findingsPath: displayPath(complianceFindingsPath(options.outputDir)),
   };
 }
 
@@ -295,11 +318,17 @@ function countAuroDeps(entry: RepoEntry): number {
   return n;
 }
 
-async function buildUpgradeCandidates(
+/**
+ * Walks the cache once to collect every Auro package name (plus any
+ * catalog `replacedBy` successors) and resolves their npm latest in
+ * parallel. Returns a map suitable for both `buildComplianceFindings`
+ * and `collapseCandidatesByPackage` — the npm calls are the slow part
+ * of the run, so we make them once and feed both outputs.
+ */
+async function resolveLatestVersions(
   cache: ScanCache,
   archivedPackages: Set<string>,
-  org: string,
-): Promise<UpgradeCandidate[]> {
+): Promise<Map<string, ResolvedLatest>> {
   const distinctPackages = new Set<string>();
   for (const repoEntry of Object.values(cache.repos)) {
     if (repoEntry.error || repoEntry.archived) continue;
@@ -334,13 +363,7 @@ async function buildUpgradeCandidates(
   latestSpinner.succeed(
     `Resolved ${latestByPackage.size} package versions on npm.`,
   );
-
-  return collapseCandidatesByPackage(
-    cache,
-    archivedPackages,
-    latestByPackage,
-    org,
-  );
+  return latestByPackage;
 }
 
 /**
@@ -366,88 +389,56 @@ export function collapseCandidatesByPackage(
     if (repoEntry.error || repoEntry.archived) continue;
     for (const pkgScan of Object.values(repoEntry.packages)) {
       for (const [name, pinned] of Object.entries(pkgScan.auroDeps)) {
-        const policy = findPackagePolicy(name);
-        // Defer the archived filter when the catalog points at a successor:
-        // the deprecation ticket is the value-add, and the body will direct
-        // consumers at policy.replacedBy.
-        if (archivedPackages.has(name) && !policy?.replacedBy) continue;
-
-        // For deprecation tickets, the upgrade target is the successor
-        // package, not the deprecated package's own npm latest. Resolve the
-        // successor's version up front; bail if it can't be resolved because
-        // a deprecation ticket without a real successor version has nothing
-        // actionable to recommend.
-        let targetPackage: string | undefined;
-        let effectiveLatest: string;
-        if (policy?.replacedBy) {
-          const successor = latestByPackage.get(policy.replacedBy);
-          if (!successor?.version) continue;
-          targetPackage = policy.replacedBy;
-          effectiveLatest = successor.version;
-        } else {
-          const resolved = latestByPackage.get(name);
-          if (!resolved?.version) continue;
-          // The catalog's targetVersion is the incident knob: when an engineer
-          // pins it (off a regressed release), the bot files tickets against
-          // that pin instead of npm latest. With no catalog override, the
-          // effective target is whatever npm currently calls latest.
-          effectiveLatest = policy?.targetVersion ?? resolved.version;
-          if (resolved.resolvedPackage !== name) {
-            targetPackage = resolved.resolvedPackage;
-          }
-        }
-        const mb = majorsBehind(pinned, effectiveLatest);
-
-        const evalResult = evaluatePackage(
-          { packageName: name, detected: true, declaredVersion: pinned },
-          policy,
+        const evaluated = evaluateRepoPackage(
+          name,
+          pinned,
+          archivedPackages,
+          latestByPackage,
         );
-        let status: ComplianceStatus = evalResult.status;
-        let statusReason = evalResult.reason;
-        // Uncataloged packages default to npm-latest-driven Behind/Current
-        // rather than evaluatePackage's literal 'Unknown'. Without this, the
-        // first deploy after wiring evaluatePackage in would flood
-        // Unknown-tagged tickets for every uncataloged package the bot
-        // currently ships tickets for.
-        if (!policy) {
-          if (mb >= 1) {
-            status = "Behind";
-            statusReason = `Version ${pinned} is behind npm latest (${effectiveLatest}).`;
-          } else {
-            status = "Current";
-            statusReason = `Version ${pinned} matches the latest published major.`;
-          }
-        }
-        if (status === "Current") continue;
+        if (!evaluated) continue;
+        // Candidates are the action subset: drop `Current` rows. Findings
+        // keep them so dashboards can show "you're on the latest."
+        if (evaluated.status === "Current") continue;
 
         const key = `${repoEntry.name}|${name}`;
         const existing = byKey.get(key);
         if (existing) {
           if (!existing.manifestPaths) existing.manifestPaths = [];
           existing.manifestPaths.push(pkgScan.path);
+          // Lower pin wins: re-evaluate the worse case so status,
+          // majorsBehind, and statusReason reflect the most out-of-date
+          // manifest in the repo.
           if ((compareSemver(pinned, existing.pinned) ?? 0) < 0) {
-            existing.pinned = pinned;
-            existing.majorsBehind = mb;
-            existing.status = status;
-            existing.statusReason = statusReason;
+            const reEval = evaluateRepoPackage(
+              name,
+              pinned,
+              archivedPackages,
+              latestByPackage,
+            );
+            if (reEval && reEval.status !== "Current") {
+              existing.pinned = pinned;
+              existing.majorsBehind = reEval.majorsBehind;
+              existing.status = reEval.status;
+              existing.statusReason = reEval.statusReason;
+            }
           }
         } else {
           const candidate: UpgradeCandidate = {
             repo: repoEntry.name,
             package: name,
             pinned,
-            latest: effectiveLatest,
-            majorsBehind: mb,
+            latest: evaluated.effectiveLatest,
+            majorsBehind: evaluated.majorsBehind,
             repoUrl: `https://github.com/${org}/${repoEntry.name}`,
             manifestPaths: [pkgScan.path],
-            status,
-            statusReason,
+            status: evaluated.status,
+            statusReason: evaluated.statusReason,
           };
-          if (targetPackage) {
-            candidate.targetPackage = targetPackage;
+          if (evaluated.targetPackage) {
+            candidate.targetPackage = evaluated.targetPackage;
           }
-          if (policy?.notes) {
-            candidate.notes = policy.notes;
+          if (evaluated.policy?.notes) {
+            candidate.notes = evaluated.policy.notes;
           }
           byKey.set(key, candidate);
         }
