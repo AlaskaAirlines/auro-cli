@@ -305,8 +305,18 @@ async function buildUpgradeCandidates(
     if (repoEntry.error || repoEntry.archived) continue;
     for (const pkgScan of Object.values(repoEntry.packages)) {
       for (const name of Object.keys(pkgScan.auroDeps)) {
-        if (archivedPackages.has(name)) continue;
+        const policy = findPackagePolicy(name);
+        // Archived packages with a catalog deprecation pointer (replacedBy)
+        // are NOT skipped — the catalog tells consumers where to migrate, so
+        // the ticket is still actionable. Archived without a successor in the
+        // catalog stays skipped (we have nothing useful to recommend).
+        if (archivedPackages.has(name) && !policy?.replacedBy) continue;
         distinctPackages.add(name);
+        // Also resolve the successor's npm latest so deprecation tickets can
+        // target it. In practice every successor is already in distinctPackages
+        // (consumers declare it directly too), but seeding explicitly removes
+        // the dependency on that incidental coverage.
+        if (policy?.replacedBy) distinctPackages.add(policy.replacedBy);
       }
     }
   }
@@ -356,16 +366,36 @@ export function collapseCandidatesByPackage(
     if (repoEntry.error || repoEntry.archived) continue;
     for (const pkgScan of Object.values(repoEntry.packages)) {
       for (const [name, pinned] of Object.entries(pkgScan.auroDeps)) {
-        if (archivedPackages.has(name)) continue;
-        const resolved = latestByPackage.get(name);
-        if (!resolved?.version) continue;
-
-        // The catalog's targetVersion is the incident knob: when an engineer
-        // pins it (off a regressed release), the bot files tickets against
-        // that pin instead of npm latest. With no catalog override, the
-        // effective target is whatever npm currently calls latest.
         const policy = findPackagePolicy(name);
-        const effectiveLatest = policy?.targetVersion ?? resolved.version;
+        // Defer the archived filter when the catalog points at a successor:
+        // the deprecation ticket is the value-add, and the body will direct
+        // consumers at policy.replacedBy.
+        if (archivedPackages.has(name) && !policy?.replacedBy) continue;
+
+        // For deprecation tickets, the upgrade target is the successor
+        // package, not the deprecated package's own npm latest. Resolve the
+        // successor's version up front; bail if it can't be resolved because
+        // a deprecation ticket without a real successor version has nothing
+        // actionable to recommend.
+        let targetPackage: string | undefined;
+        let effectiveLatest: string;
+        if (policy?.replacedBy) {
+          const successor = latestByPackage.get(policy.replacedBy);
+          if (!successor?.version) continue;
+          targetPackage = policy.replacedBy;
+          effectiveLatest = successor.version;
+        } else {
+          const resolved = latestByPackage.get(name);
+          if (!resolved?.version) continue;
+          // The catalog's targetVersion is the incident knob: when an engineer
+          // pins it (off a regressed release), the bot files tickets against
+          // that pin instead of npm latest. With no catalog override, the
+          // effective target is whatever npm currently calls latest.
+          effectiveLatest = policy?.targetVersion ?? resolved.version;
+          if (resolved.resolvedPackage !== name) {
+            targetPackage = resolved.resolvedPackage;
+          }
+        }
         const mb = majorsBehind(pinned, effectiveLatest);
 
         const evalResult = evaluatePackage(
@@ -413,8 +443,8 @@ export function collapseCandidatesByPackage(
             status,
             statusReason,
           };
-          if (resolved.resolvedPackage !== name) {
-            candidate.targetPackage = resolved.resolvedPackage;
+          if (targetPackage) {
+            candidate.targetPackage = targetPackage;
           }
           if (policy?.notes) {
             candidate.notes = policy.notes;

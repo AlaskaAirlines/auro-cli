@@ -217,6 +217,9 @@ describe("collapseCandidatesByPackage", () => {
   });
 
   it("sets targetPackage when the npm resolver returned a cross-scope alias", () => {
+    // @alaskaairux/auro-button is in the catalog with replacedBy →
+    // collapseCandidatesByPackage will use the successor's resolved version
+    // as the upgrade target, so both packages must be in the latest map.
     const cache = makeCache([
       makeRepo("legacy-scope", {
         "package.json": makeScan("package.json", {
@@ -229,6 +232,7 @@ describe("collapseCandidatesByPackage", () => {
         "@alaskaairux/auro-button",
         resolved("12.3.2", "@aurodesignsystem/auro-button"),
       ],
+      ["@aurodesignsystem/auro-button", resolved("12.3.2")],
     ]);
 
     const result = collapseCandidatesByPackage(cache, new Set(), latest, org);
@@ -264,9 +268,10 @@ describe("collapseCandidatesByPackage — compliance status wiring", () => {
     expect(result[0].notes).toBeUndefined();
   });
 
-  it("attaches status='Unsupported' for cataloged formkit-successor packages", () => {
+  it("attaches status='Unsupported' for cataloged formkit-successor packages and points at the successor", () => {
     // @aurodesignsystem/auro-checkbox carries replacedBy in the seed list
-    // → Unsupported regardless of pin or majorsBehind.
+    // → Unsupported, and the ticket targets the successor (auro-formkit),
+    // not the deprecated package's own latest.
     const cache = makeCache([
       makeRepo("formkit-consumer", {
         "package.json": makeScan("package.json", {
@@ -275,7 +280,8 @@ describe("collapseCandidatesByPackage — compliance status wiring", () => {
       }),
     ]);
     const latest = new Map([
-      ["@aurodesignsystem/auro-checkbox", resolved("4.0.0")],
+      ["@aurodesignsystem/auro-checkbox", resolved("4.1.4")],
+      ["@aurodesignsystem/auro-formkit", resolved("4.0.0")],
     ]);
 
     const result = collapseCandidatesByPackage(cache, new Set(), latest, org);
@@ -285,6 +291,11 @@ describe("collapseCandidatesByPackage — compliance status wiring", () => {
     expect(result[0].statusReason).toMatch(
       /Migrate to @aurodesignsystem\/auro-formkit/,
     );
+    expect(result[0].targetPackage).toBe("@aurodesignsystem/auro-formkit");
+    // The upgrade target is the successor's version, not auro-checkbox's own
+    // latest — pointing consumers at the deprecated package's 4.1.4 would
+    // be telling them to "upgrade" to a still-deprecated version.
+    expect(result[0].latest).toBe("4.0.0");
   });
 
   it("attaches status='Unsupported' for legacy @alaskaairux/* retirements", () => {
@@ -300,6 +311,7 @@ describe("collapseCandidatesByPackage — compliance status wiring", () => {
         "@alaskaairux/auro-button",
         resolved("12.0.0", "@aurodesignsystem/auro-button"),
       ],
+      ["@aurodesignsystem/auro-button", resolved("12.0.0")],
     ]);
 
     const result = collapseCandidatesByPackage(cache, new Set(), latest, org);
@@ -311,6 +323,53 @@ describe("collapseCandidatesByPackage — compliance status wiring", () => {
     );
     // Cross-scope alias still resolves to the new namespace as the upgrade target.
     expect(result[0].targetPackage).toBe("@aurodesignsystem/auro-button");
+  });
+
+  it("keeps archived packages with replacedBy in the candidate set (deprecation tickets stay actionable)", () => {
+    // auro-checkbox is BOTH in the archived-Auro-repos set AND in the
+    // policy catalog with replacedBy. The catalog wins — without this,
+    // the 73 manifests across Alaska-ECommerce that still declare the
+    // deprecated formkit-standalone packages would silently never ticket.
+    const cache = makeCache([
+      makeRepo("formkit-consumer", {
+        "package.json": makeScan("package.json", {
+          "@aurodesignsystem/auro-checkbox": "^3.0.0",
+        }),
+      }),
+    ]);
+    const archived = new Set([
+      "@aurodesignsystem/auro-checkbox",
+      "@alaskaairux/auro-checkbox",
+    ]);
+    const latest = new Map([
+      ["@aurodesignsystem/auro-checkbox", resolved("4.1.4")],
+      ["@aurodesignsystem/auro-formkit", resolved("4.0.0")],
+    ]);
+
+    const result = collapseCandidatesByPackage(cache, archived, latest, org);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].status).toBe("Unsupported");
+    expect(result[0].targetPackage).toBe("@aurodesignsystem/auro-formkit");
+  });
+
+  it("still drops archived packages that have NO catalog deprecation pointer", () => {
+    // The archived filter is only deferred for catalog entries with
+    // replacedBy. Archived without a successor stays skipped — the bot
+    // has nothing useful to recommend.
+    const cache = makeCache([
+      makeRepo("ghost-dep", {
+        "package.json": makeScan("package.json", {
+          "@aurodesignsystem/auro-orphan": "^1.0.0",
+        }),
+      }),
+    ]);
+    const archived = new Set(["@aurodesignsystem/auro-orphan"]);
+    const latest = new Map<string, ResolvedLatest>();
+
+    const result = collapseCandidatesByPackage(cache, archived, latest, org);
+
+    expect(result).toHaveLength(0);
   });
 
   it("does NOT emit candidates for uncataloged packages already at the latest major", () => {
