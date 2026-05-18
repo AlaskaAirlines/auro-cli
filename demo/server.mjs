@@ -288,12 +288,22 @@ function stripAnsi(s) {
   return s.replace(ANSI, "");
 }
 
+const CACHE_DIR = path.join(PROJECT_ROOT, ".cache", "version-bot");
+const FINDINGS_FILE = path.join(CACHE_DIR, "auro-compliance-findings.json");
+const CANDIDATES_FILE = path.join(CACHE_DIR, "auro-upgrade-candidates.json");
+const SCAN_CACHE_FILE = path.join(
+  CACHE_DIR,
+  "auro-deps-by-ecommerce-repo.json",
+);
+
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
   try {
     if (url.pathname === "/") return serveIndex(res);
+    if (url.pathname === "/dashboard") return serveDashboard(res);
     if (url.pathname === "/scenarios") return serveScenarios(res);
     if (url.pathname === "/run") return runScenario(url, res);
+    if (url.pathname === "/api/findings") return serveFindings(res);
     if (url.pathname.startsWith("/preview/")) return servePreview(url, res);
     res.writeHead(404, { "Content-Type": "text/plain" });
     res.end("Not found");
@@ -312,6 +322,214 @@ function serveIndex(res) {
   const html = fs.readFileSync(path.join(__dirname, "index.html"));
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
   res.end(html);
+}
+
+function serveDashboard(res) {
+  const html = fs.readFileSync(path.join(__dirname, "dashboard.html"));
+  res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+  res.end(html);
+}
+
+/**
+ * Aggregates the cached scan output into the shape the dashboard needs:
+ * KPIs, status distribution, top-10 repos, top-10 packages, and a
+ * deprecation-surface summary. Dashboard fetches this once on load
+ * instead of pulling the raw findings JSON (which can be 1k+ rows).
+ */
+function serveFindings(res) {
+  if (!fs.existsSync(FINDINGS_FILE)) {
+    res.writeHead(404, { "Content-Type": "application/json" });
+    res.end(
+      JSON.stringify({
+        error:
+          "No compliance-findings file found. Run `node ./dist/auro-cli.js version-scan` first.",
+      }),
+    );
+    return;
+  }
+
+  let findings;
+  let candidates = [];
+  let reposScanned = 0;
+  try {
+    findings = JSON.parse(fs.readFileSync(FINDINGS_FILE, "utf8"));
+    if (fs.existsSync(CANDIDATES_FILE)) {
+      candidates = JSON.parse(fs.readFileSync(CANDIDATES_FILE, "utf8"));
+    }
+    if (fs.existsSync(SCAN_CACHE_FILE)) {
+      const cache = JSON.parse(fs.readFileSync(SCAN_CACHE_FILE, "utf8"));
+      reposScanned = Object.values(cache.repos ?? {}).filter(
+        (r) => !r.error && !r.archived,
+      ).length;
+    }
+  } catch (err) {
+    res.writeHead(500, { "Content-Type": "application/json" });
+    res.end(
+      JSON.stringify({
+        error: `Could not parse scan output: ${err instanceof Error ? err.message : err}`,
+      }),
+    );
+    return;
+  }
+
+  const total = findings.length;
+  const statusCounts = {};
+  for (const f of findings) {
+    statusCounts[f.status] = (statusCounts[f.status] ?? 0) + 1;
+  }
+  const currentCount = statusCounts.Current ?? 0;
+  const behindCount = statusCounts.Behind ?? 0;
+  const unsupportedCount = statusCounts.Unsupported ?? 0;
+  const compliancePct = total ? Math.round((currentCount / total) * 100) : 0;
+
+  // Top repos by candidate count — every (repo) with N candidates needing
+  // tickets, sorted descending. Surfaces "Borealis: 13" type signals.
+  const candidatesByRepo = new Map();
+  for (const c of candidates) {
+    candidatesByRepo.set(c.repo, (candidatesByRepo.get(c.repo) ?? 0) + 1);
+  }
+  const topRepos = [...candidatesByRepo.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([repo, count]) => ({ repo, count }));
+
+  // Top packages by consumer count: how many consumer repos are behind on
+  // each package? Surfaces "auro-button: 91 consumers behind" — the
+  // packages with the broadest org-wide upgrade story.
+  const consumersByPackage = new Map();
+  for (const c of candidates) {
+    consumersByPackage.set(
+      c.package,
+      (consumersByPackage.get(c.package) ?? 0) + 1,
+    );
+  }
+  const topPackages = [...consumersByPackage.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([pkg, count]) => ({ package: pkg, count }));
+
+  // Deprecation surface — Unsupported broken down by successor. Surfaces
+  // "formkit migration: 73 deprecation tickets across 8 packages."
+  const deprecationGroups = new Map();
+  for (const c of candidates) {
+    if (c.status !== "Unsupported") continue;
+    const successor = c.targetPackage ?? "(unknown)";
+    if (!deprecationGroups.has(successor)) {
+      deprecationGroups.set(successor, {
+        successor,
+        packages: new Set(),
+        repos: new Set(),
+        count: 0,
+      });
+    }
+    const g = deprecationGroups.get(successor);
+    g.packages.add(c.package);
+    g.repos.add(c.repo);
+    g.count += 1;
+  }
+  const deprecationSurface = [...deprecationGroups.values()]
+    .map((g) => ({
+      successor: g.successor,
+      packageCount: g.packages.size,
+      packages: [...g.packages].sort(),
+      repoCount: g.repos.size,
+      ticketCount: g.count,
+    }))
+    .sort((a, b) => b.ticketCount - a.ticketCount);
+
+  // Per-repo compliance breakdown. Findings drive the counts (they include
+  // Current rows that candidates drop); candidates drive the drilldown
+  // (which packages does this repo actually need to action?). Joining by
+  // repo gives each row both the "where you stand" summary and the
+  // "what's left to do" list.
+  const repoMap = new Map();
+  for (const f of findings) {
+    if (!repoMap.has(f.repository)) {
+      repoMap.set(f.repository, {
+        repo: f.repository,
+        repoUrl: `https://github.com/Alaska-ECommerce/${f.repository}`,
+        total: 0,
+        current: 0,
+        behind: 0,
+        unsupported: 0,
+        issues: [],
+      });
+    }
+    const r = repoMap.get(f.repository);
+    r.total += 1;
+    if (f.status === "Current") r.current += 1;
+    else if (f.status === "Behind") r.behind += 1;
+    else if (f.status === "Unsupported") r.unsupported += 1;
+  }
+  for (const c of candidates) {
+    const r = repoMap.get(c.repo);
+    if (!r) continue;
+    r.issues.push({
+      package: c.package,
+      pinned: c.pinned,
+      recommended: c.latest,
+      status: c.status ?? "Behind",
+      successorPackage: c.targetPackage ?? null,
+      majorsBehind: c.majorsBehind,
+    });
+  }
+  // Sort each repo's issues so Unsupported floats to the top of the
+  // drilldown, then Behind by descending majorsBehind. Engineers reading
+  // the row see the riskiest items first.
+  const statusRank = { Unsupported: 0, Behind: 1, "Review needed": 2 };
+  for (const r of repoMap.values()) {
+    r.issues.sort((a, b) => {
+      const sa = statusRank[a.status] ?? 9;
+      const sb = statusRank[b.status] ?? 9;
+      if (sa !== sb) return sa - sb;
+      return (b.majorsBehind ?? 0) - (a.majorsBehind ?? 0);
+    });
+  }
+  const repoBreakdown = [...repoMap.values()]
+    .map((r) => ({
+      ...r,
+      compliancePct: r.total
+        ? Math.round((r.current / r.total) * 100)
+        : 0,
+    }))
+    // Default sort: lowest compliance first (most work at top). Ties
+    // broken by descending Unsupported count, then by total package count
+    // so high-surface-area repos float to the top of equally-bad rows.
+    .sort((a, b) => {
+      if (a.compliancePct !== b.compliancePct) {
+        return a.compliancePct - b.compliancePct;
+      }
+      if (a.unsupported !== b.unsupported) {
+        return b.unsupported - a.unsupported;
+      }
+      return b.total - a.total;
+    });
+
+  const meta = findings[0]
+    ? { scanRunId: findings[0].scanRunId, scannedAt: findings[0].scannedAt }
+    : { scanRunId: null, scannedAt: null };
+
+  res.writeHead(200, { "Content-Type": "application/json" });
+  res.end(
+    JSON.stringify({
+      meta,
+      kpis: {
+        reposScanned,
+        totalFindings: total,
+        candidatesNeedingTickets: candidates.length,
+        compliancePct,
+      },
+      statusBreakdown: {
+        Current: currentCount,
+        Behind: behindCount,
+        Unsupported: unsupportedCount,
+      },
+      topRepos,
+      topPackages,
+      deprecationSurface,
+      repoBreakdown,
+    }),
+  );
 }
 
 function serveScenarios(res) {
