@@ -295,15 +295,25 @@ const SCAN_CACHE_FILE = path.join(
   CACHE_DIR,
   "auro-deps-by-ecommerce-repo.json",
 );
+const AURO_PKG_ROOT = path.join(
+  PROJECT_ROOT,
+  "node_modules",
+  "@aurodesignsystem",
+);
 
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
   try {
-    if (url.pathname === "/") return serveIndex(res);
-    if (url.pathname === "/dashboard") return serveDashboard(res);
+    if (url.pathname === "/") return serveDashboard(res);
+    if (url.pathname === "/runbook") return serveRunbook(res);
+    if (url.pathname === "/dashboard") {
+      res.writeHead(301, { Location: "/" });
+      return res.end();
+    }
     if (url.pathname === "/scenarios") return serveScenarios(res);
     if (url.pathname === "/run") return runScenario(url, res);
     if (url.pathname === "/api/findings") return serveFindings(res);
+    if (url.pathname.startsWith("/auro/")) return serveAuroAsset(url, res);
     if (url.pathname.startsWith("/preview/")) return servePreview(url, res);
     res.writeHead(404, { "Content-Type": "text/plain" });
     res.end("Not found");
@@ -318,8 +328,8 @@ server.listen(PORT, () => {
   console.log("Open that URL in a browser. Press Ctrl-C here to stop.\n");
 });
 
-function serveIndex(res) {
-  const html = fs.readFileSync(path.join(__dirname, "index.html"));
+function serveRunbook(res) {
+  const html = fs.readFileSync(path.join(__dirname, "runbook.html"));
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
   res.end(html);
 }
@@ -328,6 +338,44 @@ function serveDashboard(res) {
   const html = fs.readFileSync(path.join(__dirname, "dashboard.html"));
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
   res.end(html);
+}
+
+const AURO_CONTENT_TYPE = {
+  ".css": "text/css; charset=utf-8",
+  ".js": "application/javascript; charset=utf-8",
+  ".mjs": "application/javascript; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
+  ".svg": "image/svg+xml",
+  ".map": "application/json; charset=utf-8",
+};
+
+// Serves files from node_modules/@aurodesignsystem so the demo can <link> the
+// real Alaska design tokens + webcorestylesheets CSS shipped in those packages
+// instead of inlining a copy. Path is restricted to the @aurodesignsystem
+// scope to prevent traversal into the rest of node_modules.
+function serveAuroAsset(url, res) {
+  const requested = decodeURIComponent(url.pathname.slice("/auro/".length));
+  const filePath = path.resolve(AURO_PKG_ROOT, requested);
+  if (!filePath.startsWith(AURO_PKG_ROOT + path.sep)) {
+    res.writeHead(400, { "Content-Type": "text/plain" });
+    res.end("Bad path");
+    return;
+  }
+  if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+    res.writeHead(404, { "Content-Type": "text/plain" });
+    res.end("Not found");
+    return;
+  }
+  const ext = path.extname(filePath).toLowerCase();
+  const contentType =
+    AURO_CONTENT_TYPE[ext] ?? "application/octet-stream";
+  res.writeHead(200, {
+    "Content-Type": contentType,
+    "Cache-Control": "public, max-age=3600",
+  });
+  res.end(fs.readFileSync(filePath));
 }
 
 /**
