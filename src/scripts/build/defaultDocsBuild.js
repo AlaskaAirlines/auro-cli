@@ -6,9 +6,7 @@ import {
   processContentForFile,
   templateFiller,
 } from "@aurodesignsystem/auro-library/scripts/utils/sharedFileProcessorUtils.mjs";
-import fs from "node:fs";
 import { readFileSync, existsSync } from "node:fs";
-import path from "node:path";
 
 const PAGE_TEMPLATE_PATH = "/docs/pages";
 

@@ -1,7 +1,6 @@
 import { program } from "commander";
 import { api, cem, docs, serve, watchDocs } from "#scripts/docs/index.ts";
 import { withServerOptions } from "#commands/_sharedOptions.js";
-import { api, cem, docs, serve } from "#scripts/docs/index.ts";
 
 let docsCommand = program
   .command("docs")
