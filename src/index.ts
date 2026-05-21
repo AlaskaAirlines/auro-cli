@@ -1,3 +1,6 @@
+// Load .env into process.env before any command file imports — version-scan
+// reads ECOM_ORG at option-registration time, which fires during import.
+import "dotenv/config";
 import { program } from "commander";
 import auroSplash from "#utils/auroSplash.js";
 import getPackageVersion from "#utils/packageVersion.js";
@@ -15,6 +18,8 @@ import "#commands/agent.ts";
 import "#commands/docs.ts";
 import "#commands/ado.ts";
 import "#commands/rc-workflow.ts";
+import "#commands/version-scan.ts";
+import "#commands/version-tickets.ts";
 
 program
   .name("auro")

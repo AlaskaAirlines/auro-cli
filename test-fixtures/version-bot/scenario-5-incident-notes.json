@@ -1,0 +1,13 @@
+[
+  {
+    "repo": "LoungeMembership-Web",
+    "package": "@aurodesignsystem/auro-button",
+    "pinned": "11.5.1",
+    "latest": "12.3.2",
+    "majorsBehind": 1,
+    "repoUrl": "https://github.com/Alaska-ECommerce/LoungeMembership-Web",
+    "status": "Behind",
+    "statusReason": "Version 11.5.1 is behind the target version 12.3.2.",
+    "notes": "Skip 12.4 — regression in the disabled-state focus trap (Auro #1234). The design system team pinned the bot to 12.3.2 as the last-known-good major while the fix is in review. When 12.5 ships with the fix, the targetVersion pin will lift."
+  }
+]

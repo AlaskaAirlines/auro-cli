@@ -11,3 +11,18 @@ dist/
 ## Code coverage reports
 coverage/
 .secrets
+
+## Local environment file — never commit PATs
+.env
+
+## Generated test scenario output
+test-fixtures/version-bot/preview-output/
+
+## Personal scratchpad for Claude collaboration. Narrow to the notes/ subdir so future
+## intentional .claude/ subdirs (settings, hooks, skills) can still be tracked.
+##
+## TEMPORARY: tracking .claude/notes/ in git while the auro-scan integration plan
+## is in flight, so a rebase + git clean can't wipe it again. Re-enable this
+## ignore (uncomment the line below) once the integration ships and the notes
+## are no longer load-bearing. Tracking ref: .claude/notes/auro-scan-integration.md
+# .claude/notes/

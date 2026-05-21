@@ -1,7 +1,7 @@
 import { Octokit } from "@octokit/rest";
 import * as azdev from "azure-devops-node-api";
-import ora from "ora";
 import type { WorkItem } from "azure-devops-node-api/interfaces/WorkItemTrackingInterfaces.js";
+import ora from "ora";
 
 interface GitHubIssue {
   title: string;
@@ -34,22 +34,26 @@ const fetchGitHubIssue = async (issueUrl: string): Promise<GitHubIssue> => {
   let issueNumberStr: string;
 
   // Parse the issue URL or reference
-  if (issueUrl.includes('github.com')) {
+  if (issueUrl.includes("github.com")) {
     // Full URL format: https://github.com/owner/repo/issues/123
-    const urlMatch = issueUrl.match(/github\.com\/([^\/]+)\/([^\/]+)\/issues\/(\d+)/);
+    const urlMatch = issueUrl.match(
+      /github\.com\/([^/]+)\/([^/]+)\/issues\/(\d+)/,
+    );
     if (!urlMatch) {
       throw new Error("Invalid GitHub issue URL format");
     }
     [, owner, repo, issueNumberStr] = urlMatch;
-  } else if (issueUrl.includes('#')) {
+  } else if (issueUrl.includes("#")) {
     // Short format: owner/repo#123
-    const shortMatch = issueUrl.match(/([^\/]+)\/([^#]+)#(\d+)/);
+    const shortMatch = issueUrl.match(/([^/]+)\/([^#]+)#(\d+)/);
     if (!shortMatch) {
       throw new Error("Invalid GitHub issue reference format");
     }
     [, owner, repo, issueNumberStr] = shortMatch;
   } else {
-    throw new Error("Issue must be provided as full URL or in format 'owner/repo#number'");
+    throw new Error(
+      "Issue must be provided as full URL or in format 'owner/repo#number'",
+    );
   }
 
   const issueNumber = Number.parseInt(issueNumberStr, 10);
@@ -81,7 +85,9 @@ const fetchGitHubIssue = async (issueUrl: string): Promise<GitHubIssue> => {
  * @param issue - GitHub issue details
  * @returns ADO URL if found, null otherwise
  */
-const getExistingADOLink = async (issue: GitHubIssue): Promise<string | null> => {
+const getExistingADOLink = async (
+  issue: GitHubIssue,
+): Promise<string | null> => {
   const ghToken = process.env.GH_TOKEN;
   if (!ghToken) {
     return null;
@@ -127,7 +133,7 @@ const getExistingADOLink = async (issue: GitHubIssue): Promise<string | null> =>
       issueNumber: issue.number,
     };
 
-    const response = await octokit.graphql(query, variables) as {
+    const response = (await octokit.graphql(query, variables)) as {
       repository: {
         issue: {
           projectItems: {
@@ -147,12 +153,14 @@ const getExistingADOLink = async (issue: GitHubIssue): Promise<string | null> =>
 
     // Look for project #19 with ado field
     const project19Item = response.repository.issue.projectItems.nodes.find(
-      item => item.project.number === 19
+      (item) => item.project.number === 19,
     );
 
     if (project19Item) {
       const adoFieldValue = project19Item.fieldValues.nodes.find(
-        fieldValue => fieldValue.field?.name?.toLowerCase() === 'ado' && fieldValue.text?.trim()
+        (fieldValue) =>
+          fieldValue.field?.name?.toLowerCase() === "ado" &&
+          fieldValue.text?.trim(),
       );
 
       if (adoFieldValue?.text?.trim()) {
@@ -174,7 +182,7 @@ const getExistingADOLink = async (issue: GitHubIssue): Promise<string | null> =>
  */
 const updateGitHubProject = async (
   issue: GitHubIssue,
-  adoWorkItemUrl: string
+  adoWorkItemUrl: string,
 ): Promise<void> => {
   const ghToken = process.env.GH_TOKEN;
   if (!ghToken) {
@@ -236,7 +244,7 @@ const updateGitHubProject = async (
       issueNumber: issue.number,
     };
 
-    const response = await octokit.graphql(query, variables) as {
+    const response = (await octokit.graphql(query, variables)) as {
       organization: {
         projectV2: {
           id: string;
@@ -261,12 +269,12 @@ const updateGitHubProject = async (
     const projectId = response.organization.projectV2.id;
     const issueId = response.repository.issue.id;
     const adoField = response.organization.projectV2.fields.nodes.find(
-      field => field.name?.toLowerCase() === 'ado'
+      (field) => field.name?.toLowerCase() === "ado",
     );
 
     // Check if issue is already in the project
     let projectItemId = response.repository.issue.projectItems.nodes.find(
-      item => item.project.number === projectNumber
+      (item) => item.project.number === projectNumber,
     )?.id;
 
     // Add to project if not already there
@@ -286,10 +294,10 @@ const updateGitHubProject = async (
         }
       `;
 
-      const addResponse = await octokit.graphql(addMutation, {
+      const addResponse = (await octokit.graphql(addMutation, {
         projectId,
         contentId: issueId,
-      }) as {
+      })) as {
         addProjectV2ItemById: {
           item: { id: string };
         };
@@ -331,68 +339,138 @@ const updateGitHubProject = async (
     } else if (!adoField) {
       throw new Error("No 'ado' field found in GitHub project");
     }
-
   } catch (error) {
     console.error(`Failed to update GitHub project: ${error}`);
     // Don't throw - we don't want to fail the entire process
   }
 };
 
-/**
- * Creates a user story work item in Azure DevOps
- * @param issue - GitHub issue details
- * @returns Created work item
- */
-const createADOWorkItem = async (issue: GitHubIssue): Promise<WorkItem> => {
+const ADO_ORG_URL = "https://dev.azure.com/itsals";
+const ADO_PROJECT_NAME = "E_Retain_Content";
+const ADO_AREA_PATH = "E_Retain_Content\\Auro Design System";
+
+function getWorkItemTrackingApi() {
   const adoToken = process.env.ADO_TOKEN;
   if (!adoToken) {
     throw new Error("ADO_TOKEN environment variable is required");
   }
-
-  // ADO organization and project details
-  const orgUrl = "https://dev.azure.com/itsals";
-  const projectName = "E_Retain_Content";
-  const areaPath = "E_Retain_Content\\Auro Design System";
-
-  // Create connection to Azure DevOps
   const authHandler = azdev.getPersonalAccessTokenHandler(adoToken);
-  const connection = new azdev.WebApi(orgUrl, authHandler);
-  const workItemTrackingApi = await connection.getWorkItemTrackingApi();
+  const connection = new azdev.WebApi(ADO_ORG_URL, authHandler);
+  return connection.getWorkItemTrackingApi();
+}
+
+export interface CreateADOWorkItemInput {
+  title: string;
+  descriptionHtml: string;
+  acceptanceCriteriaHtml?: string;
+  tags?: string[];
+}
+
+/**
+ * Creates a User Story work item in Azure DevOps under the
+ * E_Retain_Content\Auro Design System area path.
+ *
+ * Generic over input source — the GitHub-issue path supplies its own
+ * title + description, and Phase 5's version-tickets command does the same
+ * with its generated upgrade story.
+ */
+export const createADOWorkItem = async (
+  input: CreateADOWorkItemInput,
+): Promise<WorkItem> => {
+  const workItemTrackingApi = await getWorkItemTrackingApi();
 
   try {
     // Prepare work item data - omitting iteration path to use project default
-    const workItemData = [
+    const workItemData: Array<{ op: string; path: string; value: string }> = [
       {
         op: "add",
         path: "/fields/System.Title",
-        value: issue.title,
+        value: input.title,
       },
       {
         op: "add",
         path: "/fields/System.Description",
-        value: `GitHub Issue: <a href="${issue.html_url}">${issue.html_url}</a>`,
+        value: input.descriptionHtml,
       },
       {
         op: "add",
         path: "/fields/System.AreaPath",
-        value: areaPath,
+        value: ADO_AREA_PATH,
       },
     ];
+
+    if (input.acceptanceCriteriaHtml) {
+      workItemData.push({
+        op: "add",
+        path: "/fields/Microsoft.VSTS.Common.AcceptanceCriteria",
+        value: input.acceptanceCriteriaHtml,
+      });
+    }
+
+    if (input.tags && input.tags.length > 0) {
+      workItemData.push({
+        op: "add",
+        path: "/fields/System.Tags",
+        value: input.tags.join("; "),
+      });
+    }
 
     return await workItemTrackingApi.createWorkItem(
       null,
       workItemData,
-      projectName,
-      "User Story"
+      ADO_PROJECT_NAME,
+      "User Story",
     );
   } catch (error) {
     throw new Error(`Failed to create ADO work item: ${error}`);
   }
 };
 
+export interface CloseADOWorkItemInput {
+  id: number;
+  /** Plain-text comment appended to System.History for audit context. */
+  comment?: string;
+  /** ADO state to transition to. Defaults to "Removed" (soft-delete). */
+  state?: string;
+}
+
+/**
+ * Soft-deletes (state = "Removed") an existing ADO work item and optionally
+ * appends a history comment explaining why. Requires the same PAT scope as
+ * `createADOWorkItem` (Work Items: Read, write, & manage).
+ */
+export const closeADOWorkItem = async (
+  input: CloseADOWorkItemInput,
+): Promise<WorkItem> => {
+  const workItemTrackingApi = await getWorkItemTrackingApi();
+  const state = input.state ?? "Removed";
+
+  const patch: Array<{ op: string; path: string; value: string }> = [
+    { op: "add", path: "/fields/System.State", value: state },
+  ];
+  if (input.comment) {
+    patch.push({
+      op: "add",
+      path: "/fields/System.History",
+      value: input.comment,
+    });
+  }
+
+  try {
+    return await workItemTrackingApi.updateWorkItem(
+      null,
+      patch,
+      input.id,
+      ADO_PROJECT_NAME,
+    );
+  } catch (error) {
+    throw new Error(`Failed to close ADO work item #${input.id}: ${error}`);
+  }
+};
+
 export const createADOItem = async (ghIssue: string) => {
   const spinner = ora(`Processing GitHub issue: ${ghIssue}`).start();
-  
+
   try {
     // Validate environment variables
     if (!process.env.GH_TOKEN) {
@@ -409,29 +487,34 @@ export const createADOItem = async (ghIssue: string) => {
     // Check if issue already has an ADO work item linked in the project
     const checkSpinner = ora("Checking for existing ADO work item...").start();
     const existingADOLink = await getExistingADOLink(issue);
-    
+
     if (existingADOLink) {
       checkSpinner.succeed("ADO work item already exists for this issue!");
       console.log(`${existingADOLink}`);
       return; // Exit early - no need to create a new work item
     }
-    
+
     checkSpinner.succeed("No existing ADO work item found");
 
     const createSpinner = ora("Creating new ADO work item...").start();
-    const workItem = await createADOWorkItem(issue);
+    const workItem = await createADOWorkItem({
+      title: issue.title,
+      descriptionHtml: `GitHub Issue: <a href="${issue.html_url}">${issue.html_url}</a>`,
+    });
     createSpinner.succeed(`Successfully created ADO work item #${workItem.id}`);
-    
-    console.log(`Work item: ${workItem._links?.html?.href || 'N/A'}`);
+
+    console.log(`Work item: ${workItem._links?.html?.href || "N/A"}`);
 
     // Add to GitHub project and update the ado field with the new work item
     if (workItem._links?.html?.href) {
-      const projectSpinner = ora("Adding to GitHub project and updating ADO field...").start();
+      const projectSpinner = ora(
+        "Adding to GitHub project and updating ADO field...",
+      ).start();
       await updateGitHubProject(issue, workItem._links.html.href);
       projectSpinner.succeed("Updated GitHub project with ADO link");
-    }    
+    }
   } catch (error) {
     spinner.fail(`Error: ${error instanceof Error ? error.message : error}`);
     process.exit(1);
   }
-}
+};

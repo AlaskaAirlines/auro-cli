@@ -8,8 +8,11 @@
   },
   "scripts": {
     "lint": "biome check --fix --no-errors-on-unmatched",
+    "check-tokens": "node scripts/check-tokens.js",
+    "demo": "node demo/server.mjs",
     "prepare": "husky",
-    "test": "echo \"Notice: no tests available\" && exit 0",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "dev": "tsc && npm run copy-files && npm run bundle -- --watch --dev",
     "build": "tsc && npm run copy-files && npm run bundle",
     "build:dev": "tsc && npm run copy-files && npm run bundle -- --dev",
@@ -54,7 +57,7 @@
   ],
   "dependencies": {
     "@actions/github": "^9.1.1",
-    "@aurodesignsystem/auro-library": "^5.5.4",
+    "@aurodesignsystem/auro-library": "^5.12.3",
     "@babel/preset-env": "^7.28.3",
     "@custom-elements-manifest/analyzer": "^0.11.0",
     "@npmcli/package-json": "^7.0.1",
@@ -74,6 +77,7 @@
     "azure-devops-node-api": "^15.1.1",
     "chalk": "^5.6.2",
     "commander": "^13.1.0",
+    "dotenv": "^17.4.2",
     "figlet": "^1.9.3",
     "glob": "^11.0.3",
     "gradient-string": "^3.0.0",
@@ -86,7 +90,11 @@
     "typescript": "^5.9.2"
   },
   "devDependencies": {
+    "@aurodesignsystem/auro-alert": "^5.0.2",
+    "@aurodesignsystem/auro-button": "^12.3.2",
     "@aurodesignsystem/auro-config": "^1.3.1",
+    "@aurodesignsystem/design-tokens": "^8.18.0",
+    "@aurodesignsystem/webcorestylesheets": "^11.1.1",
     "@types/node": "^22.15.3",
     "copyfiles": "^2.4.1",
     "custom-elements-manifest": "^2.1.0",
@@ -94,7 +102,8 @@
     "husky": "^9.1.7",
     "open": "^10.2.0",
     "plop": "^4.0.3",
-    "tsc-alias": "^1.8.16"
+    "tsc-alias": "^1.8.16",
+    "vitest": "^4.1.6"
   },
   "optionalDependencies": {
     "@rollup/rollup-linux-x64-gnu": "*"

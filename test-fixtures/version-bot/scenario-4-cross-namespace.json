@@ -1,0 +1,11 @@
+[
+  {
+    "repo": "dated-flight-ui",
+    "package": "@alaskaairux/auro-icon",
+    "pinned": "^1.0.1",
+    "latest": "9.2.0",
+    "majorsBehind": 8,
+    "repoUrl": "https://github.com/Alaska-ECommerce/dated-flight-ui",
+    "targetPackage": "@aurodesignsystem/auro-icon"
+  }
+]

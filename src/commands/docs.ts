@@ -13,24 +13,22 @@ let docsCommand = program
   
   docsCommand = withServerOptions(docsCommand);
 
-  export default docsCommand.action(async (options) => {
+export default docsCommand.action(async (options) => {
+  if (options.cem) {
+    await cem();
+  }
 
-    if (options.cem) {
-      await cem();
-    }
+  if (options.api) {
+    await api();
+  }
 
-    if (options.api) {
-      await api();
-    }
+  await docs(options);
 
-    await docs(options);
-
-    if( options.serve ) {
-        await serve(options);
-    }
-
+  if (options.serve) {
+    await serve(options);
+  }
     if (options.watch) {
         await watchDocs(options);
     }
 
-  });
+});

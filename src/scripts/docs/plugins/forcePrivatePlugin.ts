@@ -1,13 +1,12 @@
+import { toCamelCase } from "@wc-toolkit/cem-utilities";
 import type {
+  Attribute,
   ClassMember,
+  CustomElementDeclaration,
   Declaration,
   Module,
   Package,
-  CustomElementDeclaration,
-  Attribute,
 } from "custom-elements-manifest";
-
-import { toCamelCase } from '@wc-toolkit/cem-utilities';
 
 interface ForcePrivateContext {
   forcePrivateProperties?: Map<string, string[]>;
@@ -32,10 +31,11 @@ export default function forcePrivatePlugin() {
 
       customElementsManifest.modules?.forEach((module: Module) => {
         module.declarations?.forEach((declaration: Declaration) => {
-          const propertiesToMarkPrivate = context.forcePrivateProperties!.get(declaration.name);
-          
-          if (propertiesToMarkPrivate && propertiesToMarkPrivate.length > 0) {
+          const propertiesToMarkPrivate = context.forcePrivateProperties!.get(
+            declaration.name,
+          );
 
+          if (propertiesToMarkPrivate && propertiesToMarkPrivate.length > 0) {
             // Mark members/properties as private only in the class where @forcePrivate was defined
             if ("members" in declaration && declaration.members) {
               declaration.members.forEach((member: ClassMember) => {
@@ -50,25 +50,34 @@ export default function forcePrivatePlugin() {
 
             // Handle attributes for CustomElementDeclaration
             // Since attributes don't have a privacy field in the schema, we remove them entirely
-            if ("attributes" in declaration && declaration.attributes && 
-                'customElement' in declaration && declaration.customElement) {
-              const customElementDeclaration = declaration as CustomElementDeclaration;
-              
+            if (
+              "attributes" in declaration &&
+              declaration.attributes &&
+              "customElement" in declaration &&
+              declaration.customElement
+            ) {
+              const customElementDeclaration =
+                declaration as CustomElementDeclaration;
+
               // Filter out attributes that match forcePrivate properties
               if (customElementDeclaration.attributes) {
-                customElementDeclaration.attributes = customElementDeclaration.attributes.filter(
-                  (attr: Attribute) => {
-                    const camelCaseName = toCamelCase(attr.name);
+                customElementDeclaration.attributes =
+                  customElementDeclaration.attributes.filter(
+                    (attr: Attribute) => {
+                      const camelCaseName = toCamelCase(attr.name);
 
-                    if (propertiesToMarkPrivate.includes(camelCaseName) || propertiesToMarkPrivate.includes(attr.name)) {
-                      console.log(
-                        `\rFound attribute '${attr.name}' in ${declaration.name}, removing from manifest`,
-                      );
-                      return false;
-                    }
-                    return true;
-                  }
-                );
+                      if (
+                        propertiesToMarkPrivate.includes(camelCaseName) ||
+                        propertiesToMarkPrivate.includes(attr.name)
+                      ) {
+                        console.log(
+                          `\rFound attribute '${attr.name}' in ${declaration.name}, removing from manifest`,
+                        );
+                        return false;
+                      }
+                      return true;
+                    },
+                  );
               }
             }
           }

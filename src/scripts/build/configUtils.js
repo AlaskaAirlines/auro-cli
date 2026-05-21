@@ -47,7 +47,11 @@ export function getPluginsConfig(modulePaths = [], options = {}) {
       // Disable CSS minification in dev for readability and faster rebuilds
       minify: dev ? false : { fast: true },
       options: {
-        loadPaths: [...allModulePaths, join(process.cwd(), "src", "styles"), join(process.cwd(), "src")],
+        loadPaths: [
+          ...allModulePaths,
+          join(process.cwd(), "src", "styles"),
+          join(process.cwd(), "src"),
+        ],
       },
     }),
     watchGlobs(watchPatterns),

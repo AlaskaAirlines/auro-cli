@@ -1,0 +1,691 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Auro Version Bot — Runbook</title>
+    <!-- Auro Alaska design tokens — CSS custom properties served from
+         node_modules/@aurodesignsystem/design-tokens. -->
+    <link
+      rel="stylesheet"
+      href="/auro/design-tokens/dist/themes/alaska/CSSCustomProperties--alaska.min.css"
+    />
+    <!-- Auro webcorestylesheets Alaska global — sets body type, hyperlinks,
+         and loads the AS Circular @font-face declarations. -->
+    <link
+      rel="stylesheet"
+      href="/auro/webcorestylesheets/dist/bundled/themes/alaska.global.min.css"
+    />
+    <!-- Auro web components — loaded from jsdelivr's +esm endpoint so the
+         Lit bare-specifier imports resolve in-browser without a bundler.
+         Versions pinned to package.json deps. -->
+    <script type="module">
+      import { AuroAlert } from "https://cdn.jsdelivr.net/npm/@aurodesignsystem/auro-alert@5.0.2/+esm";
+      import { AuroButton } from "https://cdn.jsdelivr.net/npm/@aurodesignsystem/auro-button@12.3.2/+esm";
+      AuroAlert.register();
+      AuroButton.register();
+    </script>
+    <style>
+      :root {
+        --ds-color-brand-primary: var(--ds-basic-color-brand-primary, #01426a);
+        --ds-color-brand-primary-muted: var(--ds-basic-color-brand-primary-muted, #ebf3f9);
+        --ds-color-surface-default: var(--ds-basic-color-surface-default, #ffffff);
+        --ds-color-surface-neutral: var(--ds-basic-color-surface-neutral-subtle, #f7f7f7);
+        --ds-color-surface-neutral-bold: var(--ds-basic-color-surface-neutral, #f2f2f2);
+        --ds-color-border-subtle: var(--ds-basic-color-border-subtle, #dddddd);
+        --ds-color-text-default: var(--ds-basic-color-texticon-default, #2a2a2a);
+        --ds-color-text-muted: var(--ds-basic-color-texticon-muted, #676767);
+        --ds-color-text-accent: var(--ds-basic-color-texticon-accent1, #265688);
+        --ds-color-hyperlink: var(--ds-advanced-color-hyperlink-text, #2875b5);
+        --ds-color-hyperlink-hover: var(--ds-advanced-color-hyperlink-text-hover, #01426a);
+        --ds-color-status-success: var(--ds-basic-color-status-success, #447a1f);
+        --ds-color-status-error: var(--ds-advanced-color-boolean-error-hover, #b1161c);
+        --ds-color-status-warning-fg: #8a6a00;
+        --ds-color-status-warning-subtle: var(--ds-basic-color-status-warning-subtle, #fff0b2);
+        --ds-type-family-display:
+          var(--ds-basic-type-family-display, "AS Circular"),
+          system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+
+        --bg: var(--ds-color-surface-neutral);
+        --panel: var(--ds-color-surface-default);
+        --panel-2: var(--ds-color-surface-neutral-bold);
+        --fg: var(--ds-color-text-default);
+        --muted: var(--ds-color-text-muted);
+        --accent: var(--ds-color-brand-primary);
+        --accent-soft: var(--ds-color-brand-primary-muted);
+        --border: var(--ds-color-border-subtle);
+        --danger: var(--ds-color-status-error);
+        --ok: var(--ds-color-status-success);
+        --card-shadow:
+          0 1px 2px rgba(0, 0, 0, 0.04),
+          0 1px 3px rgba(0, 0, 0, 0.05);
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; }
+      body {
+        background: var(--bg);
+        font-size: 14px;
+        line-height: 1.5;
+        min-height: 100vh;
+      }
+      a { color: var(--ds-color-hyperlink); text-decoration: none; }
+      a:hover { color: var(--ds-color-hyperlink-hover); text-decoration: underline; }
+      code, .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; }
+
+      header.top {
+        padding: 24px 32px;
+        background: var(--panel);
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 24px;
+      }
+      header.top h1 {
+        margin: 0;
+        font-family: var(--ds-type-family-display);
+        font-size: 24px;
+        font-weight: 300;
+        color: var(--accent);
+      }
+      header.top .subtitle { color: var(--muted); font-size: 13px; margin-top: 4px; }
+      header.top nav a { font-size: 13px; margin-left: 16px; font-weight: 500; }
+
+      main {
+        display: grid;
+        grid-template-columns: minmax(460px, 1fr) minmax(0, 1.4fr);
+        gap: 0;
+        min-height: calc(100vh - 73px);
+      }
+
+      aside {
+        padding: 28px 28px 80px;
+        border-right: 1px solid var(--border);
+        overflow-y: auto;
+        max-height: calc(100vh - 73px);
+      }
+
+      .intro { display: block; margin-bottom: 28px; }
+      .intro p { margin: 0 0 10px; line-height: 1.6; }
+      .intro p:last-child { margin-bottom: 0; }
+      .intro code {
+        background: rgba(1, 66, 106, 0.08);
+        color: var(--accent);
+        padding: 1px 6px;
+        border-radius: 4px;
+        font-size: 12px;
+      }
+
+      .phase { margin-bottom: 32px; }
+      .phase h2 {
+        font-family: var(--ds-type-family-display);
+        font-size: 18px;
+        font-weight: 300;
+        color: var(--accent);
+        margin: 0 0 4px;
+      }
+      .phase-desc {
+        color: var(--muted);
+        font-size: 13px;
+        margin: 0 0 16px;
+        line-height: 1.5;
+      }
+      .phase-warning { display: block; margin: 0 0 16px; }
+
+      .phase-scenarios {
+        display: grid;
+        gap: 12px;
+      }
+
+      .scenario {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 18px 20px;
+        box-shadow: var(--card-shadow);
+      }
+      .scenario.danger {
+        border-left: 3px solid var(--danger);
+      }
+      .scenario .top {
+        display: flex;
+        align-items: flex-start;
+        gap: 16px;
+      }
+      .scenario .copy {
+        flex: 1;
+        min-width: 0;
+      }
+      .scenario .label {
+        font-size: 15px;
+        font-weight: 500;
+        color: var(--fg);
+        margin: 0;
+        line-height: 1.4;
+      }
+      .scenario .desc {
+        color: var(--muted);
+        font-size: 13px;
+        margin: 6px 0 0;
+        line-height: 1.5;
+      }
+      .scenario .danger-pill {
+        display: inline-block;
+        color: #ffffff;
+        background: var(--danger);
+        padding: 1px 8px;
+        margin-left: 10px;
+        border-radius: 999px;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        font-weight: 700;
+        vertical-align: 2px;
+      }
+      .scenario .run-cell { flex-shrink: 0; }
+
+      .scenario details {
+        margin-top: 12px;
+        font-size: 12px;
+      }
+      .scenario details summary {
+        cursor: pointer;
+        font-weight: 500;
+        color: var(--ds-color-text-accent);
+        list-style: none;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        user-select: none;
+        padding: 4px 0;
+      }
+      .scenario details summary::-webkit-details-marker { display: none; }
+      .scenario details summary::before {
+        content: "▸";
+        color: var(--muted);
+        font-size: 10px;
+        transition: transform 0.15s ease;
+      }
+      .scenario details[open] summary::before { transform: rotate(90deg); }
+      .scenario details .detail-body {
+        padding: 12px 0 4px;
+        color: var(--muted);
+        line-height: 1.55;
+      }
+      .scenario details .detail-body code.cmd {
+        display: block;
+        background: var(--panel-2);
+        color: var(--fg);
+        padding: 8px 10px;
+        border-radius: 6px;
+        font-size: 11px;
+        word-break: break-all;
+        margin-top: 8px;
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        border: 1px solid var(--border);
+      }
+
+      section#output-pane {
+        display: flex;
+        flex-direction: column;
+        background: var(--panel);
+        max-height: calc(100vh - 73px);
+        min-height: 0;
+      }
+      section#output-pane header.output-header {
+        padding: 16px 28px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        background: var(--panel);
+      }
+      .output-label {
+        font-weight: 500;
+        font-size: 14px;
+        color: var(--fg);
+      }
+      .output-cmd {
+        color: var(--muted);
+        font-size: 12px;
+        margin-top: 2px;
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        word-break: break-all;
+      }
+      .walkthrough {
+        margin: 16px 28px 0;
+        display: block;
+      }
+      .walkthrough[hidden] { display: none; }
+      .walkthrough .wt-content {
+        line-height: 1.55;
+      }
+      .output-wrap {
+        padding: 16px 28px 24px;
+        overflow-y: auto;
+        flex: 1;
+        min-height: 0;
+      }
+      pre.output {
+        margin: 0;
+        background: #0e2034;
+        color: #e6eef7;
+        border: 1px solid #0a1828;
+        border-radius: 8px;
+        padding: 16px 18px;
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        font-size: 12.5px;
+        line-height: 1.55;
+        white-space: pre-wrap;
+        min-height: 200px;
+      }
+      pre.output:empty::before {
+        content: "Output will appear here when a scenario runs.";
+        color: #6f88a3;
+        font-style: italic;
+      }
+      pre.output .stderr { color: #ffb4a8; }
+      pre.output .meta { color: #8fc8ff; }
+      pre.output .done-ok { color: #b8e6a8; font-weight: 700; }
+      pre.output .done-fail { color: #ff9b88; font-weight: 700; }
+
+      .preview-links {
+        margin-top: 14px;
+        padding: 12px 14px;
+        background: var(--ds-basic-color-status-success-subtle, #d6eac7);
+        border: 1px solid var(--ok);
+        border-radius: 8px;
+        font-size: 13px;
+        color: var(--fg);
+      }
+      .preview-links a {
+        color: var(--ok);
+        font-weight: 500;
+      }
+      .preview-links[hidden] { display: none; }
+
+      auro-button { vertical-align: middle; }
+
+      @media (max-width: 900px) {
+        main {
+          grid-template-columns: 1fr;
+          min-height: auto;
+        }
+        aside, section#output-pane {
+          max-height: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="top">
+      <div>
+        <h1>Auro Version Bot — Runbook</h1>
+        <div class="subtitle">
+          Step through each part of the bot's quarterly pipeline against real
+          GitHub and Azure DevOps data
+        </div>
+      </div>
+      <nav>
+        <a href="/">Dashboard →</a>
+      </nav>
+    </header>
+    <main>
+      <aside id="scenarios-pane">
+        <auro-alert type="information" class="intro">
+          <p>
+            The Auro Version Bot scans every consumer repo in
+            <code>Alaska-ECommerce</code> for outdated Auro design-system
+            packages and files Azure DevOps tickets recommending the upgrade —
+            so individual teams don't have to manually track which repos are
+            behind.
+          </p>
+          <p>
+            <b>Read-only</b> scenarios describe or preview what the bot would
+            do. <b>Live</b> scenarios — labeled with a red pill — create real
+            ADO tickets and require a confirmation click.
+          </p>
+        </auro-alert>
+
+        <section class="phase" data-phase="preview">
+          <h2>1. Preview what the bot would do</h2>
+          <p class="phase-desc">
+            Safe — nothing in this section writes to Azure DevOps. Use these to
+            understand what tickets would look like before turning the bot
+            loose on real work.
+          </p>
+          <div class="phase-scenarios" id="phase-preview"></div>
+        </section>
+
+        <section class="phase" data-phase="apply">
+          <h2>2. Create real tickets in ADO</h2>
+          <auro-alert type="warning" class="phase-warning">
+            Each scenario below creates real Azure DevOps tickets when you
+            click Run. Safety flags (limit, target repo, severity threshold)
+            bound the blast radius, and every run can be rolled back from
+            section 3.
+          </auro-alert>
+          <div class="phase-scenarios" id="phase-apply"></div>
+        </section>
+
+        <section class="phase" data-phase="audit">
+          <h2>3. Audit &amp; roll back</h2>
+          <p class="phase-desc">
+            Inspect what the bot has done — and undo it if needed.
+          </p>
+          <div class="phase-scenarios" id="phase-audit"></div>
+        </section>
+      </aside>
+
+      <section id="output-pane">
+        <header class="output-header">
+          <div>
+            <div class="output-label" id="current-label">No scenario running</div>
+            <div class="output-cmd" id="current-cmd">Pick one on the left and click Run.</div>
+          </div>
+          <auro-button id="clear-btn" variant="secondary" size="sm">
+            Clear
+          </auro-button>
+        </header>
+        <auro-alert type="information" class="walkthrough" id="walkthrough" hidden>
+          <div class="wt-content" id="walkthrough-text"></div>
+        </auro-alert>
+        <div class="output-wrap">
+          <pre class="output" id="output"></pre>
+          <div class="preview-links" id="preview-links" hidden></div>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      // PM-friendly overlay: each scenario id maps to a phase, plain-English
+      // label, and 1–2 sentence description. The server's SCENARIOS data
+      // stays engineer-targeted (used by the demo programmatically); this
+      // overlay reframes it for managers/PMs. Scenarios without an entry
+      // here fall back to engineer text in the "audit" phase.
+      const PM_OVERLAY = {
+        "00-tokens": {
+          phase: "preview",
+          label: "Check credentials",
+          description:
+            "Confirms the bot can authenticate with GitHub and Azure DevOps before any scenario runs. Two green PASS lines means we're good to go.",
+        },
+        "01-scan-info": {
+          phase: "preview",
+          label: "How the quarterly scan works",
+          description:
+            "An informational tour of what the scan does without actually running it. The real scan takes 3–5 minutes; this scenario explains its inputs, outputs, and where caching keeps subsequent runs fast.",
+        },
+        "02-overview": {
+          phase: "preview",
+          label: "Today's compliance snapshot",
+          description:
+            "Aggregate stats from the most recent cached scan — total candidates, top affected packages, and most-behind repos. The Dashboard tab visualizes this same data.",
+        },
+        "03-dry-single": {
+          phase: "preview",
+          label: "Preview a single upgrade ticket",
+          description:
+            "Renders one example ticket end-to-end and saves a styled HTML preview. This is the core demo — see exactly what a generated ticket looks like before any are filed.",
+        },
+        "04-dry-batch": {
+          phase: "preview",
+          label: "Preview how the severity filter works",
+          description:
+            "Three example candidates of different severity. Watch the severity filter drop the lowest-impact one so the bot only files tickets for substantial upgrades.",
+        },
+        "05-dry-namespace": {
+          phase: "preview",
+          label: "Preview a package-rename migration",
+          description:
+            "When Auro republishes a package under a new name, the bot generates a ticket that calls out the rename explicitly with a yellow callout and rewritten first acceptance criterion.",
+        },
+        "05b-dry-incident-notes": {
+          phase: "preview",
+          label: "Preview an incident-paused upgrade",
+          description:
+            "When Auro flags a release as having a regression, the bot pins consumers to the last-known-good version and surfaces the incident notice in every affected ticket.",
+        },
+        "06-apply-single": {
+          phase: "apply",
+          label: "Create 1 real ticket",
+          description:
+            "First live write. Bounded to one ticket against one repo (Web-AccountOverview) for safety. The run ID printed at the top is your rollback handle.",
+        },
+        "07-apply-batch": {
+          phase: "apply",
+          label: "Create up to 3 real tickets",
+          description:
+            "Same as above but creates a small batch in one run. All tickets share a single run ID, so the rollback in section 3 treats them as a unit.",
+        },
+        "08-rerun-dedupe": {
+          phase: "apply",
+          label: "Re-run → verify deduplication",
+          description:
+            "Identical command to the previous scenario, run a second time. Watch the bot skip rather than double-create — the dedupe gate is what prevents quarterly cron runs from spamming.",
+        },
+        "09-cleanup-last": {
+          phase: "audit",
+          label: "Roll back the most recent batch",
+          description:
+            "Moves every ticket from the most recent run to Removed state, with a history comment explaining the rollback. Soft delete — safe to re-run.",
+        },
+        "10-list-runs": {
+          phase: "audit",
+          label: "Show every batch ever run",
+          description:
+            "Read-only history of every batch the bot has created and every cleanup that rolled one back. The audit surface a manager would want when asked \"what has the bot done and what's been undone?\"",
+        },
+      };
+
+      const $output = document.getElementById("output");
+      const $currentLabel = document.getElementById("current-label");
+      const $currentCmd = document.getElementById("current-cmd");
+      const $previewLinks = document.getElementById("preview-links");
+      const $clearBtn = document.getElementById("clear-btn");
+      const $walkthrough = document.getElementById("walkthrough");
+      const $walkthroughText = document.getElementById("walkthrough-text");
+
+      let activeEventSource = null;
+
+      // Tiny DOM-builder. Text nodes for strings means user-controlled values
+      // (scenario labels from server, command text) cannot be parsed as HTML.
+      function el(tag, props, ...children) {
+        const node = document.createElement(tag);
+        if (props) {
+          for (const [k, v] of Object.entries(props)) {
+            if (v == null || v === false) continue;
+            if (k === "class") node.className = v;
+            else if (k === "style" && typeof v === "object") {
+              Object.assign(node.style, v);
+            } else if (k.startsWith("on") && typeof v === "function") {
+              node.addEventListener(k.slice(2).toLowerCase(), v);
+            } else {
+              node.setAttribute(k, v);
+            }
+          }
+        }
+        for (const c of children.flat()) {
+          if (c == null || c === false) continue;
+          if (typeof c === "string" || typeof c === "number") {
+            node.appendChild(document.createTextNode(String(c)));
+          } else {
+            node.appendChild(c);
+          }
+        }
+        return node;
+      }
+
+      function append(text, cls) {
+        const span = el("span", cls ? { class: cls } : null, text);
+        $output.appendChild(span);
+        $output.parentElement.scrollTop = $output.parentElement.scrollHeight;
+      }
+
+      function clearOutput() {
+        while ($output.firstChild) $output.removeChild($output.firstChild);
+        $previewLinks.hidden = true;
+        while ($previewLinks.firstChild) {
+          $previewLinks.removeChild($previewLinks.firstChild);
+        }
+      }
+
+      $clearBtn.addEventListener("click", clearOutput);
+
+      function renderScenarioCard(s) {
+        const pm = PM_OVERLAY[s.id] ?? {
+          phase: "audit",
+          label: s.label,
+          description: s.description,
+        };
+
+        const labelNode = el(
+          "div",
+          { class: "label" },
+          pm.label,
+          s.danger
+            ? el("span", { class: "danger-pill" }, "Live")
+            : null,
+        );
+
+        const descNode = el("p", { class: "desc" }, pm.description);
+
+        const runBtn = el(
+          "auro-button",
+          {
+            variant: "primary",
+            size: "sm",
+          },
+          "Run",
+        );
+        runBtn.addEventListener("click", () => runScenario(s, pm));
+
+        const techDetail = el(
+          "details",
+          null,
+          el("summary", null, "Technical detail"),
+          el(
+            "div",
+            { class: "detail-body" },
+            el("div", null, el("b", null, "Engineer label: "), s.label),
+            s.walkthrough
+              ? el(
+                  "div",
+                  { style: { marginTop: "8px" } },
+                  el("b", null, "What this shows: "),
+                  s.walkthrough,
+                )
+              : null,
+            el("code", { class: "cmd" }, s.commandDisplay),
+          ),
+        );
+
+        return el(
+          "div",
+          { class: `scenario${s.danger ? " danger" : ""}` },
+          el(
+            "div",
+            { class: "top" },
+            el("div", { class: "copy" }, labelNode, descNode),
+            el("div", { class: "run-cell" }, runBtn),
+          ),
+          techDetail,
+        );
+      }
+
+      async function loadScenarios() {
+        try {
+          const { scenarios } = await fetch("/scenarios").then((r) => r.json());
+          for (const s of scenarios) {
+            const pm = PM_OVERLAY[s.id] ?? { phase: "audit" };
+            const container = document.getElementById(`phase-${pm.phase}`);
+            if (!container) continue;
+            container.appendChild(renderScenarioCard(s));
+          }
+        } catch (err) {
+          $output.appendChild(
+            el(
+              "span",
+              { class: "stderr" },
+              `Could not load scenarios: ${err.message ?? String(err)}\n`,
+            ),
+          );
+        }
+      }
+
+      function runScenario(s, pm) {
+        if (s.danger) {
+          const ok = window.confirm(
+            `${pm.label}\n\nThis will create real tickets in Azure DevOps. Continue?\n\nUnderlying command:\n${s.commandDisplay}`,
+          );
+          if (!ok) return;
+        }
+        clearOutput();
+        if (activeEventSource) activeEventSource.close();
+        $currentLabel.textContent = pm.label;
+        $currentCmd.textContent = s.commandDisplay;
+        if (s.walkthrough) {
+          while ($walkthroughText.firstChild) {
+            $walkthroughText.removeChild($walkthroughText.firstChild);
+          }
+          $walkthroughText.appendChild(document.createTextNode(s.walkthrough));
+          $walkthrough.hidden = false;
+        } else {
+          $walkthrough.hidden = true;
+        }
+
+        const es = new EventSource(`/run?id=${encodeURIComponent(s.id)}`);
+        activeEventSource = es;
+        es.addEventListener("meta", (e) => {
+          const data = JSON.parse(e.data);
+          append(`$ ${data.commandDisplay}\n`, "meta");
+        });
+        es.addEventListener("stdout", (e) => {
+          append(JSON.parse(e.data));
+        });
+        es.addEventListener("stderr", (e) => {
+          append(JSON.parse(e.data), "stderr");
+        });
+        es.addEventListener("done", (e) => {
+          const data = JSON.parse(e.data);
+          const ok = data.exitCode === 0;
+          append(
+            `\n(${ok ? "Success — exit 0" : `Failed — exit ${data.exitCode}`})\n`,
+            ok ? "done-ok" : "done-fail",
+          );
+          if (data.previewUrls && data.previewUrls.length > 0) {
+            $previewLinks.hidden = false;
+            $previewLinks.appendChild(
+              el(
+                "span",
+                null,
+                "📄 Generated preview" +
+                  (data.previewUrls.length === 1 ? "" : "s") +
+                  ": ",
+              ),
+            );
+            data.previewUrls.forEach((u, i) => {
+              if (i > 0) $previewLinks.appendChild(el("span", null, ", "));
+              const a = el(
+                "a",
+                { href: u, target: "_blank", rel: "noopener" },
+                u.split("/").pop(),
+              );
+              $previewLinks.appendChild(a);
+            });
+          }
+          es.close();
+          activeEventSource = null;
+        });
+        es.onerror = () => {
+          append("\n(connection closed)\n", "done-fail");
+          es.close();
+          activeEventSource = null;
+        };
+      }
+
+      loadScenarios();
+    </script>
+  </body>
+</html>
