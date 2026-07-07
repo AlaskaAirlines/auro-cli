@@ -1,10 +1,11 @@
 /**
- * The published Auro component packages that ship a Custom Elements Manifest
- * (`custom-elements.json`) at their package root.
+ * Candidate Auro component packages to check for a Custom Elements Manifest
+ * (`custom-elements.json`) at their package root. Not every component publishes
+ * one yet — the `auro cem` command fetches each and skips those that 404, so
+ * this list can safely include components ahead of their CEM adoption.
  *
  * Keep this list in sync with the components published under the
- * `@aurodesignsystem/` npm scope. Used by the `auro cem --aggregate` command
- * to fetch and merge each component's manifest into a single file.
+ * `@aurodesignsystem/` npm scope.
  */
 export const AURO_COMPONENT_PACKAGES = [
   "@aurodesignsystem/auro-accordion",
