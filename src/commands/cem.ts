@@ -19,6 +19,15 @@ interface Manifest {
   [key: string]: unknown;
 }
 
+interface FetchOutcome {
+  pkg: string;
+  manifest: Manifest | null;
+  /** Human-readable reason the manifest was skipped. */
+  reason?: string;
+  /** True when the skip was caused by a transient error (network/5xx), not a genuine 404. */
+  transient?: boolean;
+}
+
 interface ManifestSource {
   pkg: string;
   manifest: Manifest;
@@ -26,9 +35,10 @@ interface ManifestSource {
 
 /**
  * Fetch a single package's Custom Elements Manifest from unpkg.
- * Returns the parsed manifest, or null if the package does not publish one.
+ * Never throws — failures are returned as an outcome so the caller can
+ * distinguish a genuine absence (404) from a transient error.
  */
-async function fetchManifest(pkg: string): Promise<Manifest | null> {
+async function fetchManifest(pkg: string): Promise<FetchOutcome> {
   const url = `${UNPKG_BASE}/${pkg}/custom-elements.json`;
 
   let response: Response;
@@ -36,45 +46,80 @@ async function fetchManifest(pkg: string): Promise<Manifest | null> {
     response = await fetch(url);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    Logger.warn(`Skipping ${pkg}: request failed (${message})`);
-    return null;
+    return { pkg, manifest: null, reason: `request failed (${message})`, transient: true };
+  }
+
+  if (response.status === 404) {
+    return { pkg, manifest: null, reason: "no custom-elements.json published" };
   }
 
   if (!response.ok) {
-    Logger.warn(
-      `Skipping ${pkg}: no custom-elements.json (HTTP ${response.status})`,
-    );
-    return null;
+    return { pkg, manifest: null, reason: `HTTP ${response.status}`, transient: true };
   }
 
   try {
-    return (await response.json()) as Manifest;
-  } catch (_error) {
-    Logger.warn(`Skipping ${pkg}: custom-elements.json is not valid JSON`);
-    return null;
+    return { pkg, manifest: (await response.json()) as Manifest };
+  } catch {
+    return { pkg, manifest: null, reason: "custom-elements.json is not valid JSON", transient: true };
   }
 }
 
 /**
+ * Recursively namespace every local module reference in a CEM node with the
+ * owning package. A reference is local only when it has a `module` string and
+ * no `package` sibling (a `package` means it points at an external package, so
+ * its `module` must be left untouched). This keeps the merged manifest's
+ * internal references (exports' `declaration.module`, `references[].module`,
+ * etc.) pointing at the same paths as their now-namespaced modules.
+ */
+function namespaceReferences(node: unknown, pkg: string): unknown {
+  if (Array.isArray(node)) {
+    return node.map((item) => namespaceReferences(item, pkg));
+  }
+
+  if (node && typeof node === "object") {
+    const source = node as Record<string, unknown>;
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(source)) {
+      if (key === "module" && typeof value === "string" && source.package == null) {
+        result[key] = `${pkg}/${value}`;
+      } else {
+        result[key] = namespaceReferences(value, pkg);
+      }
+    }
+    return result;
+  }
+
+  return node;
+}
+
+/**
  * Merge per-package manifests into a single Custom Elements Manifest.
- * Each source module's path is namespaced with its package so paths stay
- * unique and consumers can trace a declaration back to its component.
+ * Every module (and its internal references) is namespaced with its package so
+ * paths stay unique and every declaration remains traceable to its component.
  */
 function mergeManifests(sources: ManifestSource[]): Manifest {
   const modules: CemModule[] = [];
 
   for (const { pkg, manifest } of sources) {
     for (const module of manifest.modules ?? []) {
-      modules.push({
-        ...module,
-        path: `${pkg}/${module.path}`,
-      });
+      const namespaced = namespaceReferences(module, pkg) as CemModule;
+      namespaced.path = `${pkg}/${module.path}`;
+      modules.push(namespaced);
     }
+  }
+
+  const schemaVersions = new Set(
+    sources.map((source) => source.manifest.schemaVersion).filter(Boolean),
+  );
+  if (schemaVersions.size > 1) {
+    Logger.warn(
+      `Merging mixed CEM schema versions: ${[...schemaVersions].join(", ")}`,
+    );
   }
 
   return {
     schemaVersion: sources[0]?.manifest.schemaVersion ?? "1.0.0",
-    readme: "",
     modules,
   };
 }
@@ -82,9 +127,8 @@ function mergeManifests(sources: ManifestSource[]): Manifest {
 export default program
   .command("cem")
   .description(
-    "Aggregate the Custom Elements Manifests of all published Auro components into a single file",
+    "Fetch every published Auro component's custom-elements.json and merge them into a single aggregated manifest",
   )
-  .option("--aggregate", "Fetch and merge every component manifest", true)
   .option(
     "-o, --output <file>",
     "Path to write the aggregated manifest",
@@ -95,20 +139,14 @@ export default program
       `Fetching manifests for ${AURO_COMPONENT_PACKAGES.length} components...`,
     ).start();
 
-    const results = await Promise.allSettled(
-      AURO_COMPONENT_PACKAGES.map(async (pkg) => ({
-        pkg,
-        manifest: await fetchManifest(pkg),
-      })),
+    const outcomes = await Promise.all(
+      AURO_COMPONENT_PACKAGES.map((pkg) => fetchManifest(pkg)),
     );
 
     const sources: ManifestSource[] = [];
-    for (const result of results) {
-      if (result.status === "fulfilled" && result.value.manifest) {
-        sources.push({
-          pkg: result.value.pkg,
-          manifest: result.value.manifest,
-        });
+    for (const outcome of outcomes) {
+      if (outcome.manifest) {
+        sources.push({ pkg: outcome.pkg, manifest: outcome.manifest });
       }
     }
 
@@ -136,4 +174,21 @@ export default program
     spinner.succeed(
       `Aggregated ${sources.length}/${AURO_COMPONENT_PACKAGES.length} component manifests (${aggregate.modules?.length ?? 0} modules) to ${options.output}`,
     );
+
+    // Report skips after the spinner so output isn't garbled. Genuine 404s are
+    // expected (not every component publishes a CEM yet); transient failures
+    // mean the aggregate is incomplete and are treated as an error.
+    const skipped = outcomes.filter((outcome) => !outcome.manifest);
+    const transientFailures = skipped.filter((outcome) => outcome.transient);
+
+    for (const outcome of skipped) {
+      Logger.info(`Skipped ${outcome.pkg}: ${outcome.reason}`);
+    }
+
+    if (transientFailures.length > 0) {
+      Logger.error(
+        `${transientFailures.length} component(s) failed to fetch transiently; the aggregate may be incomplete. Re-run to retry.`,
+      );
+      process.exit(1);
+    }
   });
