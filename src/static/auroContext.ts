@@ -46,7 +46,7 @@ Auro is Alaska Airlines' design system built on Web Components (Custom Elements 
    \`\`\`css
    @import "@aurodesignsystem/design-tokens/dist/themes/CSSCustomProperties--bundled.css";
    \`\`\`
-   Token naming: \`--ds-color-*\`, \`--ds-size-*\`, \`--ds-font-*\`, \`--ds-border-*\`
+   Token naming: \`--ds-basic-*\` and \`--ds-advanced-*\` (e.g. \`--ds-advanced-color-*\`, \`--ds-basic-color-*\`)
 
 ## Component Reference
 
@@ -78,8 +78,8 @@ Auro is Alaska Airlines' design system built on Web Components (Custom Elements 
 | \`<auro-icon>\` | \`@aurodesignsystem/auro-icon\` | Alaska Airlines icon: \`category\` + \`name\` attributes |
 | \`<auro-loader>\` | \`@aurodesignsystem/auro-loader\` | Loading spinner |
 | \`<auro-lockup>\` | \`@aurodesignsystem/auro-lockup\` | Image + text layout lockup |
-| \`<auro-nav>\` | \`@aurodesignsystem/auro-nav\` | Breadcrumb / secondary navigation |
-| \`<auro-pane>\` | \`@aurodesignsystem/auro-pane\` | Selectable pricing or option pane |
+| \`<auro-nav>\` | \`@aurodesignsystem/auro-nav\` | Secondary navigation aid (relation to higher-level pages) |
+| \`<auro-pane>\` | \`@aurodesignsystem/auro-pane\` | Selectable shoulder dates with associated prices |
 | \`<auro-popover>\` | \`@aurodesignsystem/auro-popover\` | Tooltip-style popover |
 | \`<auro-sidenav>\` | \`@aurodesignsystem/auro-sidenav\` | Vertical side navigation |
 | \`<auro-skeleton>\` | \`@aurodesignsystem/auro-skeleton\` | Loading placeholder skeleton |
@@ -108,13 +108,18 @@ Auro is Alaska Airlines' design system built on Web Components (Custom Elements 
 \`\`\`
 
 ### Form inputs (auro-formkit)
+auro-formkit has no root export — always import the specific sub-component.
+The field label is a **slot**, not an attribute.
 \`\`\`js
-import "@aurodesignsystem/auro-formkit";
+import "@aurodesignsystem/auro-formkit/auro-input";
+import "@aurodesignsystem/auro-formkit/auro-select";
 \`\`\`
 \`\`\`html
-<auro-input label="First name" required></auro-input>
-<auro-input label="Email" type="email"></auro-input>
-<auro-select label="Seat preference">
+<auro-input required>
+  <span slot="label">First name</span>
+</auro-input>
+<auro-select>
+  <span slot="label">Seat preference</span>
   <auro-menu>
     <auro-menuoption value="window">Window</auro-menuoption>
     <auro-menuoption value="aisle">Aisle</auro-menuoption>
@@ -123,9 +128,10 @@ import "@aurodesignsystem/auro-formkit";
 \`\`\`
 
 ### Icon
+Set \`category\` and \`name\`. Icon names are exact — check the icon library for the correct name.
 \`\`\`html
 <auro-icon category="interface" name="arrow-right"></auro-icon>
-<auro-icon category="terminal" name="plane-side" customSize style="width: 48px"></auro-icon>
+<auro-icon category="terminal" name="plane-side-fill"></auro-icon>
 \`\`\`
 
 ### Hyperlink
