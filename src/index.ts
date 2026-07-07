@@ -12,6 +12,7 @@ import "#commands/check-commits.ts";
 import "#commands/pr-release.ts";
 import "#commands/test.js";
 import "#commands/agent.ts";
+import "#commands/component.ts";
 import "#commands/docs.ts";
 import "#commands/ado.ts";
 import "#commands/rc-workflow.ts";
