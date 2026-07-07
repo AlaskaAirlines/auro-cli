@@ -37,6 +37,7 @@
     "#configs/*": "./src/configs/*",
     "#commands/*": "./src/commands/*",
     "#scripts/*": "./src/scripts/*",
+    "#static/*": "./src/static/*",
     "#utils/*": "./src/utils/*"
   },
   "publishConfig": {
