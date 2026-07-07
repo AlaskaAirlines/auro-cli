@@ -81,12 +81,11 @@ auro context --output AURO_CONTEXT.md
 ```
 
 `auro cem`
-Aggregates the Custom Elements Manifests (`custom-elements.json`) of every published Auro component into a single file. Components that do not publish a manifest are skipped with a warning. Useful for feeding a complete, machine-readable component API index to IDEs, docs tooling, and AI assistants.
+Aggregates the Custom Elements Manifests (`custom-elements.json`) of every published Auro component into a single file. Each component's manifest is fetched from the latest published version on unpkg; components that do not publish a manifest yet are skipped. Useful for feeding a complete, machine-readable component API index to IDEs, docs tooling, and AI assistants.
 
 #### Options
 
 - `-o, --output <file>` Path to write the aggregated manifest (default: `custom-elements.aggregate.json`).
-- `--aggregate` Fetch and merge every component manifest (default behavior).
 
 #### Examples
 
