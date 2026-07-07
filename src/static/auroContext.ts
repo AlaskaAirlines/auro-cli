@@ -88,6 +88,7 @@ Auro is Alaska Airlines' design system built on Web Components (Custom Elements 
 | \`<auro-tabs>\` | \`@aurodesignsystem/auro-tabs\` | Tabbed content panels |
 | \`<auro-tail>\` | \`@aurodesignsystem/auro-tail\` | Alaska, Hawaiian, and partner airline tail graphics |
 | \`<auro-toast>\` | \`@aurodesignsystem/auro-toast\` | Transient notification toast |
+| \`<auro-tokenlist>\` | \`@aurodesignsystem/auro-tokenlist\` | Design token display utilities |
 
 ## Common Patterns
 
