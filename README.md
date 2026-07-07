@@ -159,3 +159,23 @@ Reads the repo's commits, classifies each by conventional-commit type, and repor
 - `-l, --set-label`: label the PR by the highest-priority commit type.
 - `-d, --debug`: print detailed commit info.
 - `-r, --release-notes`: generate release notes from the commits.
+
+### AI assistant context
+
+#### `auro context`
+
+Prints an AI-ready context document describing the Auro Design System, its components, and usage patterns. Designed to be piped into or pasted into AI coding assistants (Claude, Cursor, Copilot, etc.) to prime them on Auro.
+
+- `-o, --output <file>`: write the context document to a file instead of stdout (e.g. `AURO_CONTEXT.md`).
+
+Print the context to the terminal:
+
+```bash
+auro context
+```
+
+Write the context to a file for your AI tool:
+
+```bash
+auro context --output AURO_CONTEXT.md
+```
