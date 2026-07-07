@@ -58,3 +58,24 @@ Open the server to a specific directory:
 ```
 auro dev --open src/
 ```
+
+`auro context`
+Prints an AI-ready context document describing the Auro Design System, its components, and usage patterns. Designed to be piped into or pasted into AI coding assistants (Claude, Cursor, Copilot, etc.) to prime them on Auro.
+
+#### Options
+
+- `-o, --output <file>` Write the context document to a file instead of stdout (e.g. `AURO_CONTEXT.md`).
+
+#### Examples
+
+Print the context to the terminal:
+
+```
+auro context
+```
+
+Write the context to a file for your AI tool:
+
+```
+auro context --output AURO_CONTEXT.md
+```

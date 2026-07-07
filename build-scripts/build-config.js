@@ -46,6 +46,7 @@ export const aliases = {
   "#configs": resolve(projectRoot, "src/configs"),
   "#commands": resolve(projectRoot, "src/commands"),
   "#scripts": resolve(projectRoot, "src/scripts"),
+  "#static": resolve(projectRoot, "src/static"),
   "#utils": resolve(projectRoot, "src/utils"),
 };
 

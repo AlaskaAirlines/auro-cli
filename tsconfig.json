@@ -34,6 +34,7 @@
       "#configs/*": ["src/configs/*"],
       "#commands/*": ["src/commands/*"],
       "#scripts/*": ["src/scripts/*"],
+      "#static/*": ["src/static/*"],
       "#utils/*": ["src/utils/*"]
     },
     // "rootDirs": [],                                   /* Allow multiple folders to be treated as one when resolving modules. */
