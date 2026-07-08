@@ -27,6 +27,7 @@ interface CemMember {
   privacy?: string;
   static?: boolean;
   type?: CemType;
+  default?: string;
   description?: string;
   deprecated?: Deprecated;
   return?: { type?: CemType };
@@ -178,9 +179,10 @@ function formatDeclaration(pkg: string, decl: CemDeclaration): string {
         const label = isMethod ? `${m.name}()` : m.name;
         const typeText = isMethod ? m.return?.type?.text : m.type?.text;
         const type = typeText ? ` {${clean(typeText)}}` : "";
+        const def = !isMethod && m.default ? ` = ${clean(m.default)}` : "";
         return [
           label,
-          `${clean(m.description)}${type}${deprecatedTag(m.deprecated)}`.trim(),
+          `${clean(m.description)}${type}${def}${deprecatedTag(m.deprecated)}`.trim(),
         ];
       }),
     ),

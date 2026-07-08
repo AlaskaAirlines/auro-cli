@@ -60,10 +60,11 @@ auro dev --open src/
 ```
 
 `auro component <name>`
-Looks up a single Auro component's API — attributes, slots, events, and CSS parts — from its published Custom Elements Manifest. Useful for humans and for AI coding assistants that call the CLI in a tool-use loop to avoid guessing an API.
+Looks up a single Auro component's API — attributes, properties/methods, slots, events, and CSS parts — from its published Custom Elements Manifest. Useful for humans and for AI coding assistants that call the CLI in a tool-use loop to avoid guessing an API.
 
 #### Options
 
+- `-t, --tag <version>` npm dist-tag or version to look up (default: `latest`).
 - `--json` Output the raw manifest declaration(s) as JSON instead of formatted text.
 
 #### Examples
@@ -74,6 +75,13 @@ Look up a component (name is normalized, so all of these work):
 auro component button
 auro component auro-button
 auro component @aurodesignsystem/auro-button
+```
+
+Look up a specific version or dist-tag:
+
+```
+auro component auro-button --tag beta
+auro component auro-button --tag 11.0.0
 ```
 
 Get machine-readable output:
