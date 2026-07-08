@@ -10,11 +10,26 @@ interface CemType {
   text?: string;
 }
 
+type Deprecated = boolean | string | undefined;
+
 interface CemAttribute {
   name: string;
+  fieldName?: string;
   type?: CemType;
   default?: string;
   description?: string;
+  deprecated?: Deprecated;
+}
+
+interface CemMember {
+  kind: string;
+  name: string;
+  privacy?: string;
+  static?: boolean;
+  type?: CemType;
+  description?: string;
+  deprecated?: Deprecated;
+  return?: { type?: CemType };
 }
 
 interface CemSlot {
@@ -40,7 +55,9 @@ interface CemDeclaration {
   customElement?: boolean;
   description?: string;
   summary?: string;
+  superclass?: { name?: string };
   attributes?: CemAttribute[];
+  members?: CemMember[];
   slots?: CemSlot[];
   events?: CemEvent[];
   cssParts?: CemNamed[];
@@ -57,24 +74,39 @@ interface Manifest {
 
 /**
  * Normalize a user-supplied component name into a full npm package name.
- * Accepts "button", "auro-button", or "@aurodesignsystem/auro-button".
+ * Accepts "button", "auro-button", or "@aurodesignsystem/auro-button" (and
+ * tolerates surrounding whitespace / casing). An explicit scope is respected.
  */
 function toPackageName(name: string): string {
-  if (name.startsWith(`${SCOPE}/`)) {
-    return name;
+  const trimmed = name.trim();
+  if (trimmed.startsWith("@")) {
+    return trimmed;
   }
-  if (name.startsWith("auro-")) {
-    return `${SCOPE}/${name}`;
+  const lower = trimmed.toLowerCase();
+  if (lower.startsWith("auro-")) {
+    return `${SCOPE}/${lower}`;
   }
-  return `${SCOPE}/auro-${name}`;
+  return `${SCOPE}/auro-${lower}`;
 }
 
 /**
- * Collapse whitespace (including embedded newlines from JSDoc) to keep each
- * entry on a single line so the aligned columns don't break.
+ * Collapse whitespace (including embedded newlines from JSDoc descriptions) to
+ * a single space so aligned columns don't break.
  */
 function clean(text: string | undefined): string {
   return (text ?? "").replace(/\s+/gu, " ").trim();
+}
+
+/**
+ * Render a `[deprecated]` (optionally with a reason) marker.
+ */
+function deprecatedTag(deprecated: Deprecated): string {
+  if (!deprecated) {
+    return "";
+  }
+  return typeof deprecated === "string"
+    ? ` [deprecated: ${clean(deprecated)}]`
+    : " [deprecated]";
 }
 
 /**
@@ -95,13 +127,16 @@ function renderList(rows: Array<[string, string]>): string {
  */
 function formatDeclaration(pkg: string, decl: CemDeclaration): string {
   const lines: string[] = [];
-  const tag = decl.tagName ?? decl.name;
 
-  lines.push(`${tag}  (${pkg})`);
+  lines.push(`${decl.tagName}  (${pkg})`);
   const description = decl.summary || decl.description;
   if (description) {
-    lines.push(description.trim());
+    lines.push(clean(description));
   }
+  const heritage = decl.superclass?.name
+    ? `${decl.name} extends ${decl.superclass.name}`
+    : decl.name;
+  lines.push(`Class: ${heritage}`);
 
   lines.push("");
   lines.push("Install:");
@@ -116,7 +151,37 @@ function formatDeclaration(pkg: string, decl: CemDeclaration): string {
       attributes.map((a) => {
         const type = a.type?.text ? ` {${clean(a.type.text)}}` : "";
         const def = a.default ? ` = ${clean(a.default)}` : "";
-        return [a.name, `${clean(a.description)}${type}${def}`.trim()];
+        return [
+          a.name,
+          `${clean(a.description)}${type}${def}${deprecatedTag(a.deprecated)}`.trim(),
+        ];
+      }),
+    ),
+  );
+
+  // Public properties/methods not already covered by an attribute.
+  const attrFields = new Set(
+    attributes.map((a) => a.fieldName).filter(Boolean) as string[],
+  );
+  const members = (decl.members ?? []).filter(
+    (m) =>
+      (m.privacy === undefined || m.privacy === "public") &&
+      !m.static &&
+      !(m.kind === "field" && attrFields.has(m.name)),
+  );
+  lines.push("");
+  lines.push(`Properties & Methods (${members.length}):`);
+  lines.push(
+    renderList(
+      members.map((m) => {
+        const isMethod = m.kind === "method";
+        const label = isMethod ? `${m.name}()` : m.name;
+        const typeText = isMethod ? m.return?.type?.text : m.type?.text;
+        const type = typeText ? ` {${clean(typeText)}}` : "";
+        return [
+          label,
+          `${clean(m.description)}${type}${deprecatedTag(m.deprecated)}`.trim(),
+        ];
       }),
     ),
   );
@@ -160,45 +225,53 @@ function formatDeclaration(pkg: string, decl: CemDeclaration): string {
 export default program
   .command("component <name>")
   .description(
-    "Look up an Auro component's API (attributes, slots, events, CSS parts) from its published Custom Elements Manifest",
+    "Look up an Auro component's API (attributes, properties, slots, events, CSS parts) from its published Custom Elements Manifest",
+  )
+  .option(
+    "-t, --tag <version>",
+    "npm dist-tag or version to look up (default: latest)",
   )
   .option("--json", "Output the raw manifest declaration(s) as JSON", false)
   .action(async (name, options) => {
     const pkg = toPackageName(name);
-    const spinner = ora(`Fetching ${pkg}...`).start();
+    const target = options.tag ? `${pkg}@${options.tag}` : pkg;
+    const spinner = ora(`Fetching ${target}...`).start();
 
     let manifest: Manifest;
     try {
-      const response = await fetch(`${UNPKG_BASE}/${pkg}/custom-elements.json`);
+      const response = await fetch(
+        `${UNPKG_BASE}/${target}/custom-elements.json`,
+      );
       if (response.status === 404) {
         spinner.fail(
-          `No custom-elements.json published for ${pkg}. It may not exist or may not publish a manifest yet.`,
+          `No custom-elements.json published for ${target}. It may not exist or may not publish a manifest yet.`,
         );
         process.exit(1);
       }
       if (!response.ok) {
-        spinner.fail(`Failed to fetch ${pkg} (HTTP ${response.status}).`);
+        spinner.fail(`Failed to fetch ${target} (HTTP ${response.status}).`);
         process.exit(1);
       }
       manifest = (await response.json()) as Manifest;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      spinner.fail(`Request failed for ${pkg}: ${message}`);
+      spinner.fail(`Request failed for ${target}: ${message}`);
       process.exit(1);
-      return;
     }
 
+    // Only real registered elements — a declaration can be customElement: true
+    // yet be an internal base class with no tagName.
     const declarations = (manifest.modules ?? [])
       .flatMap((module) => module.declarations ?? [])
-      .filter((decl) => decl.customElement);
+      .filter((decl) => decl.customElement && decl.tagName);
 
     if (declarations.length === 0) {
-      spinner.fail(`No custom elements found in the manifest for ${pkg}.`);
+      spinner.fail(`No registered custom elements found for ${target}.`);
       process.exit(1);
     }
 
     spinner.succeed(
-      `${pkg} — ${declarations.length} custom element${declarations.length === 1 ? "" : "s"}`,
+      `${target} — ${declarations.length} custom element${declarations.length === 1 ? "" : "s"}`,
     );
 
     if (options.json) {
@@ -209,5 +282,5 @@ export default program
     process.stdout.write(
       `\n${declarations.map((decl) => formatDeclaration(pkg, decl)).join("\n\n---\n\n")}\n`,
     );
-    Logger.info(`\nFull docs: https://auro.alaskaair.com`);
+    Logger.info("\nFull docs: https://auro.alaskaair.com");
   });
