@@ -57,9 +57,14 @@ function renderList(rows: Array<[string, string]>): string {
   if (rows.length === 0) {
     return "  (none)";
   }
-  const width = Math.max(...rows.map(([label]) => label.length));
+  // Coerce label/description defensively: published manifests occasionally ship
+  // an entry missing its `name` (the types promise a string but the data can
+  // violate it), and one bad row must not crash the whole lookup.
+  const width = Math.max(...rows.map(([label]) => (label ?? "").length));
   return rows
-    .map(([label, desc]) => `  ${label.padEnd(width)}  ${desc}`.trimEnd())
+    .map(([label, desc]) =>
+      `  ${(label ?? "").padEnd(width)}  ${desc ?? ""}`.trimEnd(),
+    )
     .join("\n");
 }
 
@@ -112,6 +117,9 @@ function formatDeclaration(pkg: string, decl: CemDeclaration): string {
   );
   const members = (decl.members ?? []).filter(
     (m) =>
+      // A member with no name is malformed CEM data — it can't be referenced,
+      // so drop it rather than list an unnamed row.
+      m.name &&
       (m.privacy === undefined || m.privacy === "public") &&
       !m.static &&
       !(m.kind === "field" && attrFields.has(m.name)),
