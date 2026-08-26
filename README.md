@@ -166,7 +166,10 @@ Reads the repo's commits, classifies each by conventional-commit type, and repor
 
 Prints an AI-ready context document describing the Auro Design System, its components, and usage patterns. Designed to be piped into or pasted into AI coding assistants (Claude, Cursor, Copilot, etc.) to prime them on Auro.
 
+The Component Reference table is enriched from each component's published Custom Elements Manifest so descriptions stay current; the curated built-in list is used as a fallback for any component that can't be fetched (or when `--offline` is passed).
+
 - `-o, --output <file>`: write the context document to a file instead of stdout (e.g. `AURO_CONTEXT.md`).
+- `--offline`: skip fetching live manifests and use the built-in component table (no network).
 
 Print the context to the terminal:
 

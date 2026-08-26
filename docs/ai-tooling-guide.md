@@ -47,7 +47,15 @@ auro context
 
 # Write to a file you can attach or paste into an AI tool
 auro context --output AURO_CONTEXT.md
+
+# Skip the network and use the built-in component table
+auro context --offline
 ```
+
+Component descriptions are pulled from each component's published Custom
+Elements Manifest and fall back to a curated built-in list when a manifest
+can't be fetched, so the document stays current without ever dropping a
+component. Use `--offline` to skip the network entirely.
 
 **Typical workflow**
 
