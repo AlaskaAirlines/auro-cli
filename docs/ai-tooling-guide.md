@@ -52,10 +52,13 @@ auro context --output AURO_CONTEXT.md
 auro context --offline
 ```
 
-Component descriptions are pulled from each component's published Custom
-Elements Manifest and fall back to a curated built-in list when a manifest
-can't be fetched, so the document stays current without ever dropping a
-component. Use `--offline` to skip the network entirely.
+Component descriptions come from each component's Custom Elements Manifest:
+installed components are read from your project's `node_modules` (matching the
+version you have), and the rest are fetched from unpkg, falling back to a
+curated built-in list so no component is ever dropped. Any installed component
+that isn't on the latest published release is flagged on stderr after the
+document is generated. Use `--offline` to enrich only from installed manifests
+and skip the network entirely.
 
 **Typical workflow**
 

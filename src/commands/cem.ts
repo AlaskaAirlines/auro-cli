@@ -92,8 +92,12 @@ export default program
       `Fetching manifests for ${AURO_COMPONENT_PACKAGES.length} components...`,
     ).start();
 
+    // Aggregate the canonical latest published manifests, not whatever happens
+    // to be installed locally, so the index doesn't mix versions per machine.
     const outcomes = await Promise.all(
-      AURO_COMPONENT_PACKAGES.map((pkg) => fetchManifest(pkg)),
+      AURO_COMPONENT_PACKAGES.map((pkg) =>
+        fetchManifest(pkg, { preferLocal: false }),
+      ),
     );
 
     const sources: ManifestSource[] = [];
