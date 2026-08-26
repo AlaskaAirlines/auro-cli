@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import chalk from "chalk";
 import { program } from "commander";
 import ora from "ora";
 import { AURO_COMPONENT_PACKAGES } from "#static/auroComponents.js";
@@ -81,11 +82,12 @@ async function reportOutdated(local: Map<string, string>): Promise<void> {
     entries.map(([pkg]) => fetchLatestVersion(pkg)),
   );
 
-  const outdated: string[] = [];
+  const outdated: Array<{ pkg: string; installed: string; latest: string }> =
+    [];
   entries.forEach(([pkg, installed], index) => {
     const newest = latest[index];
     if (newest && newest !== installed) {
-      outdated.push(`  ${pkg}: installed ${installed}, latest ${newest}`);
+      outdated.push({ pkg, installed, latest: newest });
     }
   });
 
@@ -94,11 +96,61 @@ async function reportOutdated(local: Map<string, string>): Promise<void> {
     return;
   }
 
-  spinner.warn(
-    `${outdated.length} installed Auro component(s) are not on the latest release:`,
+  // Stop the spinner without its own icon/line — the banner below carries the
+  // warning, and a leftover spinner line would dilute it.
+  spinner.stop();
+  // stderr — keep the generated document (stdout) clean. A bordered, bold banner
+  // so the notice stands out from the streamed markdown context on stdout rather
+  // than scrolling past unnoticed.
+  console.error(renderOutdatedBanner(outdated));
+}
+
+/**
+ * Render the "components behind latest" notice as a bold, bordered banner with
+ * an aligned version table and a ready-to-run update command. Colors degrade
+ * automatically (chalk disables them when stderr is not a TTY, e.g. redirected
+ * to a file), while the border and heading keep it prominent regardless.
+ */
+function renderOutdatedBanner(
+  outdated: Array<{ pkg: string; installed: string; latest: string }>,
+): string {
+  const heading = `⚠  ${outdated.length} Auro component(s) are NOT on the latest release`;
+  const pkgWidth = Math.max(...outdated.map((o) => o.pkg.length));
+  const installedWidth = Math.max(...outdated.map((o) => o.installed.length));
+
+  const rows = outdated.map(
+    (o) =>
+      `  ${chalk.bold(o.pkg.padEnd(pkgWidth))}  ${chalk.dim(
+        o.installed.padStart(installedWidth),
+      )} ${chalk.dim("→")} ${chalk.green.bold(o.latest)}`,
   );
-  // stderr — keep the generated document (stdout) clean.
-  console.error(outdated.join("\n"));
+
+  const updateCmd = `npm install ${outdated
+    .map((o) => `${o.pkg}@latest`)
+    .join(" ")}`;
+
+  // Border width tracks the widest visible line (ignoring color codes), capped
+  // so a long update command doesn't blow out the terminal.
+  const visibleWidths = [
+    heading.length,
+    ...outdated.map(
+      (o) => 2 + pkgWidth + 2 + installedWidth + 3 + o.latest.length,
+    ),
+  ];
+  const width = Math.min(Math.max(...visibleWidths), 78);
+  const border = "─".repeat(width);
+
+  return [
+    "",
+    chalk.yellow.bold(`┌${border}┐`),
+    chalk.yellow.bold(heading),
+    chalk.yellow.bold(`└${border}┘`),
+    ...rows,
+    "",
+    chalk.dim("  Update all with:"),
+    `  ${chalk.cyan(updateCmd)}`,
+    "",
+  ].join("\n");
 }
 
 export default program
