@@ -1,5 +1,13 @@
 const UNPKG_BASE = "https://unpkg.com";
 
+/**
+ * Abort a manifest request that stalls. Without this a single connection that
+ * is accepted but never answered would hang the CLI indefinitely — `auro cem`
+ * fetches every component concurrently via `Promise.all`, so one stalled
+ * request would leave the whole command spinning forever.
+ */
+const REQUEST_TIMEOUT_MS = 10_000;
+
 /** Outcome of fetching a package's Custom Elements Manifest from unpkg. */
 export interface ManifestFetchResult {
   /** The npm package (or `package@tag`) that was requested. */
@@ -26,9 +34,17 @@ export async function fetchManifest(
 
   let response: Response;
   try {
-    response = await fetch(url);
+    response = await fetch(url, {
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const timedOut =
+      error instanceof DOMException && error.name === "TimeoutError";
+    const message = timedOut
+      ? `timed out after ${REQUEST_TIMEOUT_MS / 1000}s`
+      : error instanceof Error
+        ? error.message
+        : String(error);
     return {
       target,
       manifest: null,
@@ -38,7 +54,11 @@ export async function fetchManifest(
   }
 
   if (response.status === 404) {
-    return { target, manifest: null, reason: "no custom-elements.json published" };
+    return {
+      target,
+      manifest: null,
+      reason: "no custom-elements.json published",
+    };
   }
 
   if (!response.ok) {
