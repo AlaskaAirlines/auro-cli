@@ -99,6 +99,14 @@ function clean(text: string | undefined): string {
 }
 
 /**
+ * Convert a kebab-case attribute name to its camelCase property form
+ * (`no-validate` → `noValidate`), matching how Lit maps attributes to fields.
+ */
+function kebabToCamel(name: string): string {
+  return name.replace(/-([a-z])/gu, (_, char: string) => char.toUpperCase());
+}
+
+/**
  * Render a `[deprecated]` (optionally with a reason) marker.
  */
 function deprecatedTag(deprecated: Deprecated): string {
@@ -160,9 +168,15 @@ function formatDeclaration(pkg: string, decl: CemDeclaration): string {
     ),
   );
 
-  // Public properties/methods not already covered by an attribute.
+  // Public properties/methods not already covered by an attribute. An
+  // attribute's backing field is named by `fieldName`; when a manifest omits it
+  // we fall back to the attribute `name` and its camelCase form (attribute
+  // names are kebab-case, fields camelCase) so the field isn't listed a second
+  // time under Properties & Methods.
   const attrFields = new Set(
-    attributes.map((a) => a.fieldName).filter(Boolean) as string[],
+    attributes.flatMap((a) =>
+      a.fieldName ? [a.fieldName] : [a.name, kebabToCamel(a.name)],
+    ),
   );
   const members = (decl.members ?? []).filter(
     (m) =>
