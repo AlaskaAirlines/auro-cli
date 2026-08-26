@@ -5,63 +5,12 @@ import { Logger } from "@aurodesignsystem/auro-library/scripts/utils/logger.mjs"
 import { program } from "commander";
 import ora from "ora";
 import { AURO_COMPONENT_PACKAGES } from "#static/auroComponents.js";
-
-const UNPKG_BASE = "https://unpkg.com";
-
-interface CemModule {
-  path: string;
-  [key: string]: unknown;
-}
-
-interface Manifest {
-  schemaVersion?: string;
-  modules?: CemModule[];
-  [key: string]: unknown;
-}
-
-interface FetchOutcome {
-  pkg: string;
-  manifest: Manifest | null;
-  /** Human-readable reason the manifest was skipped. */
-  reason?: string;
-  /** True when the skip was caused by a transient error (network/5xx), not a genuine 404. */
-  transient?: boolean;
-}
+import type { CemModule, Manifest } from "#utils/cem.js";
+import { fetchManifest } from "#utils/fetchManifest.js";
 
 interface ManifestSource {
   pkg: string;
   manifest: Manifest;
-}
-
-/**
- * Fetch a single package's Custom Elements Manifest from unpkg.
- * Never throws — failures are returned as an outcome so the caller can
- * distinguish a genuine absence (404) from a transient error.
- */
-async function fetchManifest(pkg: string): Promise<FetchOutcome> {
-  const url = `${UNPKG_BASE}/${pkg}/custom-elements.json`;
-
-  let response: Response;
-  try {
-    response = await fetch(url);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return { pkg, manifest: null, reason: `request failed (${message})`, transient: true };
-  }
-
-  if (response.status === 404) {
-    return { pkg, manifest: null, reason: "no custom-elements.json published" };
-  }
-
-  if (!response.ok) {
-    return { pkg, manifest: null, reason: `HTTP ${response.status}`, transient: true };
-  }
-
-  try {
-    return { pkg, manifest: (await response.json()) as Manifest };
-  } catch {
-    return { pkg, manifest: null, reason: "custom-elements.json is not valid JSON", transient: true };
-  }
 }
 
 /**
@@ -81,7 +30,11 @@ function namespaceReferences(node: unknown, pkg: string): unknown {
     const source = node as Record<string, unknown>;
     const result: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(source)) {
-      if (key === "module" && typeof value === "string" && source.package == null) {
+      if (
+        key === "module" &&
+        typeof value === "string" &&
+        source.package == null
+      ) {
         result[key] = `${pkg}/${value}`;
       } else {
         result[key] = namespaceReferences(value, pkg);
@@ -146,7 +99,10 @@ export default program
     const sources: ManifestSource[] = [];
     for (const outcome of outcomes) {
       if (outcome.manifest) {
-        sources.push({ pkg: outcome.pkg, manifest: outcome.manifest });
+        sources.push({
+          pkg: outcome.target,
+          manifest: outcome.manifest as Manifest,
+        });
       }
     }
 
@@ -182,7 +138,7 @@ export default program
     const transientFailures = skipped.filter((outcome) => outcome.transient);
 
     for (const outcome of skipped) {
-      Logger.info(`Skipped ${outcome.pkg}: ${outcome.reason}`);
+      Logger.info(`Skipped ${outcome.target}: ${outcome.reason}`);
     }
 
     if (transientFailures.length > 0) {
