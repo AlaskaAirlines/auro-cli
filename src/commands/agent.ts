@@ -8,6 +8,7 @@ import {
   formatDependencyTree,
   getBatchedUpdateOrder,
 } from "#scripts/formatDependencyTree.ts";
+import { AURO_COMPONENT_PACKAGES } from "#static/auroComponents.js";
 import { fromCliRoot, withHomeDir } from "#utils/pathUtils.js";
 import { shell } from "#utils/shell.js";
 
@@ -27,42 +28,11 @@ interface AgentAnswers {
 
 // Agent component options
 // =========================================================
-
-const auroComponents = [
-  "@aurodesignsystem/auro-accordion",
-  "@aurodesignsystem/auro-alert",
-  "@aurodesignsystem/auro-avatar",
-  "@aurodesignsystem/auro-background",
-  "@aurodesignsystem/auro-backtotop",
-  "@aurodesignsystem/auro-button",
-  "@aurodesignsystem/auro-badge",
-  "@aurodesignsystem/auro-banner",
-  "@aurodesignsystem/auro-card",
-  "@aurodesignsystem/auro-carousel",
-  "@aurodesignsystem/auro-datetime",
-  "@aurodesignsystem/auro-dialog",
-  "@aurodesignsystem/auro-drawer",
-  "@aurodesignsystem/auro-formkit",
-  "@aurodesignsystem/auro-flight",
-  "@aurodesignsystem/auro-flightline",
-  "@aurodesignsystem/auro-header",
-  "@aurodesignsystem/auro-hyperlink",
-  "@aurodesignsystem/auro-icon",
-  "@aurodesignsystem/auro-loader",
-  "@aurodesignsystem/auro-lockup",
-  "@aurodesignsystem/auro-nav",
-  "@aurodesignsystem/auro-pane",
-  "@aurodesignsystem/auro-popover",
-  "@aurodesignsystem/auro-sidenav",
-  "@aurodesignsystem/auro-skeleton",
-  "@aurodesignsystem/auro-slideshow",
-  "@aurodesignsystem/auro-table",
-  "@aurodesignsystem/auro-tabs",
-  "@aurodesignsystem/auro-toast",
-];
+// The canonical component list lives in #static/auroComponents so `auro cem`,
+// `auro component`, and this command can't drift out of sync.
 
 const auroPackages = [
-  ...auroComponents,
+  ...AURO_COMPONENT_PACKAGES,
   "@aurodesignsystem/auro-library",
   "@aurodesignsystem/WebCoreStyleSheets",
   "@aurodesignsystem/AuroDesignTokens",
@@ -171,7 +141,7 @@ export default program.command("agent").action(async (option) => {
       name: "startWithComponents",
       message:
         "Enter the components to start with (comma-separated, blank for all):",
-      choices: auroComponents.map((component) => ({
+      choices: AURO_COMPONENT_PACKAGES.map((component) => ({
         name: component.replace("@aurodesignsystem/", ""),
         value: component,
       })),
