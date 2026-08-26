@@ -126,18 +126,33 @@ export default program
     const { rows, enriched, local } = await buildComponentTable(online);
     const context = buildAuroContext(rows);
 
-    if (enriched > 0) {
-      spinner.succeed(
-        online
-          ? `Enriched ${enriched} component description(s) (${local.size} from local node_modules).`
-          : `Enriched ${enriched} component description(s) from local node_modules.`,
-      );
+    if (online) {
+      // Online success is measured by descriptions enriched from any source
+      // (local or unpkg); a run that resolves nothing falls back to the table.
+      if (enriched > 0) {
+        spinner.succeed(
+          `Enriched ${enriched} component description(s) (${local.size} from local node_modules).`,
+        );
+      } else {
+        spinner.warn(
+          "No manifests available; using the built-in component table.",
+        );
+      }
     } else {
-      spinner.warn(
-        online
-          ? "No manifests available; using the built-in component table."
-          : "No installed component manifests found; using the built-in component table.",
-      );
+      // Offline success is measured by manifests *found* in node_modules, not by
+      // descriptions enriched — an installed manifest can document no element
+      // description (e.g. auro-button@12.3.0) yet is still a valid local read.
+      if (local.size > 0) {
+        spinner.succeed(
+          enriched > 0
+            ? `Read ${local.size} installed component manifest(s) from local node_modules; enriched ${enriched} description(s).`
+            : `Read ${local.size} installed component manifest(s) from local node_modules; none documented a description, using the built-in table.`,
+        );
+      } else {
+        spinner.warn(
+          "No installed component manifests found; using the built-in component table.",
+        );
+      }
     }
 
     if (options.output) {
