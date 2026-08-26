@@ -9,6 +9,7 @@ import {
   type Manifest,
 } from "#utils/cem.js";
 import { fetchManifest } from "#utils/fetchManifest.js";
+import { checkOutdated, renderOutdatedBanner } from "#utils/outdated.js";
 
 const SCOPE = "@aurodesignsystem";
 
@@ -214,8 +215,26 @@ export default program
       `${target} — ${declarations.length} custom element${declarations.length === 1 ? "" : "s"}${origin}`,
     );
 
+    // When the manifest came from a local install, check whether that install is
+    // behind the latest published release and warn — mirroring `auro context`.
+    // Only meaningful for a local read (unpkg already serves latest, and an
+    // explicit --tag forces a network fetch, so source is never "local" then).
+    let outdatedBanner: string | null = null;
+    if (result.source === "local" && result.version) {
+      const check = ora("Checking for a newer release...").start();
+      const outdated = await checkOutdated(new Map([[pkg, result.version]]));
+      check.stop();
+      if (outdated.length > 0) {
+        outdatedBanner = renderOutdatedBanner(outdated);
+      }
+    }
+
     if (options.json) {
       process.stdout.write(`${JSON.stringify(declarations, null, 2)}\n`);
+      // stderr — keep JSON on stdout machine-parseable.
+      if (outdatedBanner) {
+        console.error(outdatedBanner);
+      }
       return;
     }
 
@@ -223,4 +242,8 @@ export default program
       `\n${declarations.map((decl) => formatDeclaration(pkg, decl)).join("\n\n---\n\n")}\n`,
     );
     Logger.info("\nFull docs: https://auro.alaskaair.com");
+    // Warn last so it's the final thing on screen, not scrolled off by the API dump.
+    if (outdatedBanner) {
+      console.error(outdatedBanner);
+    }
   });
