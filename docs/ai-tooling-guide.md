@@ -31,9 +31,10 @@ npm install -g @aurodesignsystem/auro-cli
 npx @aurodesignsystem/auro-cli <command>
 ```
 
-All commands read from data Auro already publishes to npm/unpkg, so no extra
-setup or authentication is required. A network connection is needed for the
-commands that fetch manifests.
+No extra setup or authentication is required. Components installed in your
+project are read from `node_modules` (no network needed); anything not
+installed is fetched from unpkg. `auro context --offline` skips the network
+entirely and works from installed manifests plus the built-in table.
 
 ## `auro context` — prime your AI assistant
 
