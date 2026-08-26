@@ -1,4 +1,4 @@
-export const AURO_CONTEXT = `# Auro Design System — AI Assistant Context
+const AURO_CONTEXT_HEADER = `# Auro Design System — AI Assistant Context
 Alaska Airlines open-source design system | https://auro.alaskaair.com
 
 ## What is Auro?
@@ -50,47 +50,241 @@ Auro is Alaska Airlines' design system built on Web Components (Custom Elements 
 
 ## Component Reference
 
-| Element Tag | Package | Description |
-|---|---|---|
-| \`<auro-accordion>\` | \`@aurodesignsystem/auro-accordion\` | Expandable content sections |
-| \`<auro-alert>\` | \`@aurodesignsystem/auro-alert\` | Inline status messages: error, warning, success, information |
-| \`<auro-avatar>\` | \`@aurodesignsystem/auro-avatar\` | User or entity avatar |
-| \`<auro-background>\` | \`@aurodesignsystem/auro-background\` | Themed background wrapper |
-| \`<auro-backtotop>\` | \`@aurodesignsystem/auro-backtotop\` | Scroll-to-top button |
-| \`<auro-badge>\` | \`@aurodesignsystem/auro-badge\` | Status or count badge |
-| \`<auro-banner>\` | \`@aurodesignsystem/auro-banner\` | Full-width promotional banner |
-| \`<auro-button>\` | \`@aurodesignsystem/auro-button\` | Interactive button; supports \`loading\`, \`disabled\`, \`shape\` |
-| \`<auro-card>\` | \`@aurodesignsystem/auro-card\` | Content card container |
-| \`<auro-carousel>\` | \`@aurodesignsystem/auro-carousel\` | Horizontally scrollable carousel |
-| \`<auro-datetime>\` | \`@aurodesignsystem/auro-datetime\` | Localized date and time formatting |
-| \`<auro-dialog>\` | \`@aurodesignsystem/auro-dialog\` | Modal dialog; slots: header, content, footer |
-| \`<auro-drawer>\` | \`@aurodesignsystem/auro-drawer\` | Slide-in panel; slots: header, content, footer |
-| \`<auro-flight>\` | \`@aurodesignsystem/auro-flight\` | Flight segment display (origin, destination, stops) |
-| \`<auro-flightline>\` | \`@aurodesignsystem/auro-flightline\` | Visual flight path/stop indicator |
-| \`<auro-input>\` | \`@aurodesignsystem/auro-formkit\` | Text input field |
-| \`<auro-select>\` | \`@aurodesignsystem/auro-formkit\` | Select/dropdown |
-| \`<auro-datepicker>\` | \`@aurodesignsystem/auro-formkit\` | Date picker input |
-| \`<auro-combobox>\` | \`@aurodesignsystem/auro-formkit\` | Combobox with search |
-| \`<auro-checkbox>\` | \`@aurodesignsystem/auro-formkit\` | Checkbox input |
-| \`<auro-radio>\` | \`@aurodesignsystem/auro-formkit\` | Radio button input |
-| \`<auro-header>\` | \`@aurodesignsystem/auro-header\` | Page/section heading |
-| \`<auro-hyperlink>\` | \`@aurodesignsystem/auro-hyperlink\` | Accessible anchor link |
-| \`<auro-icon>\` | \`@aurodesignsystem/auro-icon\` | Alaska Airlines icon: \`category\` + \`name\` attributes |
-| \`<auro-loader>\` | \`@aurodesignsystem/auro-loader\` | Loading spinner |
-| \`<auro-lockup>\` | \`@aurodesignsystem/auro-lockup\` | Image + text layout lockup |
-| \`<auro-nav>\` | \`@aurodesignsystem/auro-nav\` | Secondary navigation aid (relation to higher-level pages) |
-| \`<auro-pane>\` | \`@aurodesignsystem/auro-pane\` | Selectable shoulder dates with associated prices |
-| \`<auro-popover>\` | \`@aurodesignsystem/auro-popover\` | Tooltip-style popover |
-| \`<auro-sidenav>\` | \`@aurodesignsystem/auro-sidenav\` | Vertical side navigation |
-| \`<auro-skeleton>\` | \`@aurodesignsystem/auro-skeleton\` | Loading placeholder skeleton |
-| \`<auro-slideshow>\` | \`@aurodesignsystem/auro-slideshow\` | Image/content slideshow |
-| \`<auro-table>\` | \`@aurodesignsystem/auro-table\` | Accessible data table |
-| \`<auro-tabs>\` | \`@aurodesignsystem/auro-tabs\` | Tabbed content panels |
-| \`<auro-tail>\` | \`@aurodesignsystem/auro-tail\` | Alaska, Hawaiian, and partner airline tail graphics |
-| \`<auro-toast>\` | \`@aurodesignsystem/auro-toast\` | Transient notification toast |
-| \`<auro-tokenlist>\` | \`@aurodesignsystem/auro-tokenlist\` | Design token display utilities |
+`;
 
-## Common Patterns
+/** The Markdown table header rows the component-reference body sits under. */
+const COMPONENT_TABLE_HEADER = `| Element Tag | Package | Description |
+|---|---|---|`;
+
+/** A single component's entry in the curated Component Reference. */
+export interface AuroComponent {
+  /** The custom element tag, without angle brackets — e.g. \`auro-button\`. */
+  tag: string;
+  /** The npm package that publishes the component. */
+  pkg: string;
+  /** One-line description shown in the Component Reference table. */
+  description: string;
+}
+
+/**
+ * Curated component data, used as the offline fallback and as the base set the
+ * \`auro context\` command enriches with live Custom Elements Manifest data.
+ * Descriptions here are hand-written and may lag the published manifests —
+ * \`auro context\` overrides them with live manifest data where available, but
+ * always keeps every component listed so nothing is dropped before a component
+ * publishes a CEM.
+ */
+export const STATIC_COMPONENTS: AuroComponent[] = [
+  {
+    tag: "auro-accordion",
+    pkg: "@aurodesignsystem/auro-accordion",
+    description: "Expandable content sections",
+  },
+  {
+    tag: "auro-alert",
+    pkg: "@aurodesignsystem/auro-alert",
+    description: "Inline status messages: error, warning, success, information",
+  },
+  {
+    tag: "auro-avatar",
+    pkg: "@aurodesignsystem/auro-avatar",
+    description: "User or entity avatar",
+  },
+  {
+    tag: "auro-background",
+    pkg: "@aurodesignsystem/auro-background",
+    description: "Themed background wrapper",
+  },
+  {
+    tag: "auro-backtotop",
+    pkg: "@aurodesignsystem/auro-backtotop",
+    description: "Scroll-to-top button",
+  },
+  {
+    tag: "auro-badge",
+    pkg: "@aurodesignsystem/auro-badge",
+    description: "Status or count badge",
+  },
+  {
+    tag: "auro-banner",
+    pkg: "@aurodesignsystem/auro-banner",
+    description: "Full-width promotional banner",
+  },
+  {
+    tag: "auro-button",
+    pkg: "@aurodesignsystem/auro-button",
+    description: "Interactive button; supports `loading`, `disabled`, `shape`",
+  },
+  {
+    tag: "auro-card",
+    pkg: "@aurodesignsystem/auro-card",
+    description: "Content card container",
+  },
+  {
+    tag: "auro-carousel",
+    pkg: "@aurodesignsystem/auro-carousel",
+    description: "Horizontally scrollable carousel",
+  },
+  {
+    tag: "auro-datetime",
+    pkg: "@aurodesignsystem/auro-datetime",
+    description: "Localized date and time formatting",
+  },
+  {
+    tag: "auro-dialog",
+    pkg: "@aurodesignsystem/auro-dialog",
+    description: "Modal dialog; slots: header, content, footer",
+  },
+  {
+    tag: "auro-drawer",
+    pkg: "@aurodesignsystem/auro-drawer",
+    description: "Slide-in panel; slots: header, content, footer",
+  },
+  {
+    tag: "auro-flight",
+    pkg: "@aurodesignsystem/auro-flight",
+    description: "Flight segment display (origin, destination, stops)",
+  },
+  {
+    tag: "auro-flightline",
+    pkg: "@aurodesignsystem/auro-flightline",
+    description: "Visual flight path/stop indicator",
+  },
+  {
+    tag: "auro-input",
+    pkg: "@aurodesignsystem/auro-formkit",
+    description: "Text input field",
+  },
+  {
+    tag: "auro-select",
+    pkg: "@aurodesignsystem/auro-formkit",
+    description: "Select/dropdown",
+  },
+  {
+    tag: "auro-datepicker",
+    pkg: "@aurodesignsystem/auro-formkit",
+    description: "Date picker input",
+  },
+  {
+    tag: "auro-combobox",
+    pkg: "@aurodesignsystem/auro-formkit",
+    description: "Combobox with search",
+  },
+  {
+    tag: "auro-checkbox",
+    pkg: "@aurodesignsystem/auro-formkit",
+    description: "Checkbox input",
+  },
+  {
+    tag: "auro-radio",
+    pkg: "@aurodesignsystem/auro-formkit",
+    description: "Radio button input",
+  },
+  {
+    tag: "auro-header",
+    pkg: "@aurodesignsystem/auro-header",
+    description: "Page/section heading",
+  },
+  {
+    tag: "auro-hyperlink",
+    pkg: "@aurodesignsystem/auro-hyperlink",
+    description: "Accessible anchor link",
+  },
+  {
+    tag: "auro-icon",
+    pkg: "@aurodesignsystem/auro-icon",
+    description: "Alaska Airlines icon: `category` + `name` attributes",
+  },
+  {
+    tag: "auro-loader",
+    pkg: "@aurodesignsystem/auro-loader",
+    description: "Loading spinner",
+  },
+  {
+    tag: "auro-lockup",
+    pkg: "@aurodesignsystem/auro-lockup",
+    description: "Image + text layout lockup",
+  },
+  {
+    tag: "auro-nav",
+    pkg: "@aurodesignsystem/auro-nav",
+    description: "Secondary navigation aid (relation to higher-level pages)",
+  },
+  {
+    tag: "auro-pane",
+    pkg: "@aurodesignsystem/auro-pane",
+    description: "Selectable shoulder dates with associated prices",
+  },
+  {
+    tag: "auro-popover",
+    pkg: "@aurodesignsystem/auro-popover",
+    description: "Tooltip-style popover",
+  },
+  {
+    tag: "auro-sidenav",
+    pkg: "@aurodesignsystem/auro-sidenav",
+    description: "Vertical side navigation",
+  },
+  {
+    tag: "auro-skeleton",
+    pkg: "@aurodesignsystem/auro-skeleton",
+    description: "Loading placeholder skeleton",
+  },
+  {
+    tag: "auro-slideshow",
+    pkg: "@aurodesignsystem/auro-slideshow",
+    description: "Image/content slideshow",
+  },
+  {
+    tag: "auro-table",
+    pkg: "@aurodesignsystem/auro-table",
+    description: "Accessible data table",
+  },
+  {
+    tag: "auro-tabs",
+    pkg: "@aurodesignsystem/auro-tabs",
+    description: "Tabbed content panels",
+  },
+  {
+    tag: "auro-tail",
+    pkg: "@aurodesignsystem/auro-tail",
+    description: "Alaska, Hawaiian, and partner airline tail graphics",
+  },
+  {
+    tag: "auro-toast",
+    pkg: "@aurodesignsystem/auro-toast",
+    description: "Transient notification toast",
+  },
+  {
+    tag: "auro-tokenlist",
+    pkg: "@aurodesignsystem/auro-tokenlist",
+    description: "Design token display utilities",
+  },
+];
+
+/**
+ * Render a set of components as the Markdown Component Reference body (the
+ * \`| tag | package | description |\` rows, without the header). Pipes in
+ * descriptions are escaped so they don't break the table.
+ */
+export function renderComponentRows(
+  components: readonly AuroComponent[],
+): string {
+  return components
+    .map(
+      (component) =>
+        `| \`<${component.tag}>\` | \`${component.pkg}\` | ${component.description.replace(/\|/gu, "\\|")} |`,
+    )
+    .join("\n");
+}
+
+/**
+ * Hand-written component-reference table body, used as the offline fallback
+ * when the live Custom Elements Manifests can't be fetched.
+ */
+export const STATIC_COMPONENT_TABLE = renderComponentRows(STATIC_COMPONENTS);
+
+const AURO_CONTEXT_FOOTER = `## Common Patterns
 
 ### Button (default, secondary, tertiary)
 \`\`\`html
@@ -169,3 +363,19 @@ document.querySelector('#confirmDialog').show();
 - Contributing: https://auro.alaskaair.com/getting-started/developers/contributing
 - GitHub: https://github.com/AlaskaAirlines
 `;
+
+/**
+ * Assemble the full AI-assistant context document from a Component Reference
+ * table body (the \`| tag | package | description |\` rows, without the header).
+ * The surrounding prose — rules, patterns, accessibility notes — is static; only
+ * the component table varies between the live-manifest and fallback versions.
+ */
+export function buildAuroContext(componentTable: string): string {
+  return `${AURO_CONTEXT_HEADER}${COMPONENT_TABLE_HEADER}\n${componentTable}\n\n${AURO_CONTEXT_FOOTER}`;
+}
+
+/**
+ * Fully static context document using the hand-written component table. Used as
+ * the offline fallback when live manifests can't be fetched.
+ */
+export const AURO_CONTEXT = buildAuroContext(STATIC_COMPONENT_TABLE);
