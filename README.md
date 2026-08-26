@@ -183,7 +183,8 @@ Write the context to a file for your AI tool:
 auro context --output AURO_CONTEXT.md
 ```
 
-`auro cem`
+#### `auro cem`
+
 Aggregates the Custom Elements Manifests (`custom-elements.json`) of every published Auro component into a single file. Each component's manifest is fetched from the latest published version on unpkg; components that do not publish a manifest yet are skipped. Useful for feeding a complete, machine-readable component API index to IDEs, docs tooling, and AI assistants.
 
 #### Options
@@ -204,7 +205,8 @@ Write it to a specific path:
 auro cem --output dist/custom-elements.aggregate.json
 ```
 
-`auro component <name>`
+#### `auro component <name>`
+
 Looks up a single Auro component's API — attributes, properties/methods, slots, events, and CSS parts — from its Custom Elements Manifest. Useful for humans and for AI coding assistants that call the CLI in a tool-use loop to avoid guessing an API.
 
 If the component is installed in the current project's `node_modules`, its manifest is read locally so the API matches the version you actually have — the success line shows `(local vX.Y.Z)`. Otherwise it's fetched from unpkg (shown as `(unpkg)`). Passing an explicit `--tag`/version always fetches that version from unpkg.
