@@ -206,8 +206,12 @@ export default program
       process.exit(1);
     }
 
+    const origin =
+      result.source === "local"
+        ? ` (local${result.version ? ` v${result.version}` : ""})`
+        : " (unpkg)";
     spinner.succeed(
-      `${target} — ${declarations.length} custom element${declarations.length === 1 ? "" : "s"}`,
+      `${target} — ${declarations.length} custom element${declarations.length === 1 ? "" : "s"}${origin}`,
     );
 
     if (options.json) {

@@ -166,10 +166,10 @@ Reads the repo's commits, classifies each by conventional-commit type, and repor
 
 Prints an AI-ready context document describing the Auro Design System, its components, and usage patterns. Designed to be piped into or pasted into AI coding assistants (Claude, Cursor, Copilot, etc.) to prime them on Auro.
 
-The Component Reference table is enriched from each component's published Custom Elements Manifest so descriptions stay current; the curated built-in list is used as a fallback for any component that can't be fetched (or when `--offline` is passed).
+The Component Reference table is enriched from each component's Custom Elements Manifest so descriptions stay current. For components installed in the current project, the manifest is read from `node_modules` (matching your installed version); everything else is fetched from unpkg. The curated built-in list is the fallback for any component that can't be resolved. After generating the document, any installed component that isn't on the latest published release is reported to stderr (so it never pollutes the document itself).
 
 - `-o, --output <file>`: write the context document to a file instead of stdout (e.g. `AURO_CONTEXT.md`).
-- `--offline`: skip fetching live manifests and use the built-in component table (no network).
+- `--offline`: skip network fetches — enrich only from locally installed manifests and fall back to the built-in table (also skips the outdated-release check).
 
 Print the context to the terminal:
 
@@ -205,11 +205,13 @@ auro cem --output dist/custom-elements.aggregate.json
 ```
 
 `auro component <name>`
-Looks up a single Auro component's API — attributes, properties/methods, slots, events, and CSS parts — from its published Custom Elements Manifest. Useful for humans and for AI coding assistants that call the CLI in a tool-use loop to avoid guessing an API.
+Looks up a single Auro component's API — attributes, properties/methods, slots, events, and CSS parts — from its Custom Elements Manifest. Useful for humans and for AI coding assistants that call the CLI in a tool-use loop to avoid guessing an API.
+
+If the component is installed in the current project's `node_modules`, its manifest is read locally so the API matches the version you actually have — the success line shows `(local vX.Y.Z)`. Otherwise it's fetched from unpkg (shown as `(unpkg)`). Passing an explicit `--tag`/version always fetches that version from unpkg.
 
 #### Options
 
-- `-t, --tag <version>` npm dist-tag or version to look up (default: `latest`).
+- `-t, --tag <version>` npm dist-tag or version to look up (default: `latest`; forces an unpkg fetch).
 - `--json` Output the raw manifest declaration(s) as JSON instead of formatted text.
 
 #### Examples
