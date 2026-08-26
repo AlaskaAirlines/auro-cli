@@ -2,76 +2,15 @@ import process from "node:process";
 import { Logger } from "@aurodesignsystem/auro-library/scripts/utils/logger.mjs";
 import { program } from "commander";
 import ora from "ora";
+import {
+  type CemDeclaration,
+  clean,
+  type Deprecated,
+  type Manifest,
+} from "#utils/cem.js";
+import { fetchManifest } from "#utils/fetchManifest.js";
 
-const UNPKG_BASE = "https://unpkg.com";
 const SCOPE = "@aurodesignsystem";
-
-interface CemType {
-  text?: string;
-}
-
-type Deprecated = boolean | string | undefined;
-
-interface CemAttribute {
-  name: string;
-  fieldName?: string;
-  type?: CemType;
-  default?: string;
-  description?: string;
-  deprecated?: Deprecated;
-}
-
-interface CemMember {
-  kind: string;
-  name: string;
-  privacy?: string;
-  static?: boolean;
-  type?: CemType;
-  default?: string;
-  description?: string;
-  deprecated?: Deprecated;
-  return?: { type?: CemType };
-}
-
-interface CemSlot {
-  name: string;
-  description?: string;
-}
-
-interface CemEvent {
-  name: string;
-  type?: CemType;
-  description?: string;
-}
-
-interface CemNamed {
-  name: string;
-  description?: string;
-}
-
-interface CemDeclaration {
-  kind: string;
-  name: string;
-  tagName?: string;
-  customElement?: boolean;
-  description?: string;
-  summary?: string;
-  superclass?: { name?: string };
-  attributes?: CemAttribute[];
-  members?: CemMember[];
-  slots?: CemSlot[];
-  events?: CemEvent[];
-  cssParts?: CemNamed[];
-  cssProperties?: CemNamed[];
-}
-
-interface CemModule {
-  declarations?: CemDeclaration[];
-}
-
-interface Manifest {
-  modules?: CemModule[];
-}
 
 /**
  * Normalize a user-supplied component name into a full npm package name.
@@ -88,14 +27,6 @@ function toPackageName(name: string): string {
     return `${SCOPE}/${lower}`;
   }
   return `${SCOPE}/auro-${lower}`;
-}
-
-/**
- * Collapse whitespace (including embedded newlines from JSDoc descriptions) to
- * a single space so aligned columns don't break.
- */
-function clean(text: string | undefined): string {
-  return (text ?? "").replace(/\s+/gu, " ").trim();
 }
 
 /**
@@ -253,27 +184,16 @@ export default program
     const target = options.tag ? `${pkg}@${options.tag}` : pkg;
     const spinner = ora(`Fetching ${target}...`).start();
 
-    let manifest: Manifest;
-    try {
-      const response = await fetch(
-        `${UNPKG_BASE}/${target}/custom-elements.json`,
+    const result = await fetchManifest(target);
+    if (!result.manifest) {
+      spinner.fail(
+        result.transient
+          ? `Failed to fetch ${target}: ${result.reason}.`
+          : `No custom-elements.json published for ${target}. It may not exist or may not publish a manifest yet.`,
       );
-      if (response.status === 404) {
-        spinner.fail(
-          `No custom-elements.json published for ${target}. It may not exist or may not publish a manifest yet.`,
-        );
-        process.exit(1);
-      }
-      if (!response.ok) {
-        spinner.fail(`Failed to fetch ${target} (HTTP ${response.status}).`);
-        process.exit(1);
-      }
-      manifest = (await response.json()) as Manifest;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      spinner.fail(`Request failed for ${target}: ${message}`);
       process.exit(1);
     }
+    const manifest = result.manifest as Manifest;
 
     // Only real registered elements — a declaration can be customElement: true
     // yet be an internal base class with no tagName.
