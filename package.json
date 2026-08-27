@@ -9,7 +9,7 @@
   "scripts": {
     "lint": "biome check --fix --no-errors-on-unmatched",
     "prepare": "husky",
-    "test": "node --test \"test/**/*.test.ts\"",
+    "test": "node --import ./test/register.mjs --test \"test/**/*.test.ts\"",
     "dev": "tsc && npm run copy-files && npm run bundle -- --watch --dev",
     "build": "tsc && npm run copy-files && npm run bundle",
     "build:dev": "tsc && npm run copy-files && npm run bundle -- --dev",
