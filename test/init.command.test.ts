@@ -475,3 +475,65 @@ test("a committed mixed-prefix config regenerates cleanly without prompting or f
     "settled default is preserved",
   );
 });
+
+test("AST scan warns (never guesses) on default, computed, and auto-versioned registrations", async (t) => {
+  const cwd = await tempCwd(t);
+  await installLocalPackage(
+    cwd,
+    "@aurodesignsystem/auro-button",
+    "1.0.0",
+    elementManifest("auro-button"),
+  );
+  // A realistic consumer file mixing every AST-scan false-negative: the canonical
+  // default register(), a computed template-literal tag, and Auro's auto-versioned
+  // dependency registration (generateTag + customElements.define).
+  await writeFile(
+    path.join(cwd, "app.js"),
+    [
+      'import { AuroButton } from "@aurodesignsystem/auro-button";',
+      'import { AuroDependencyVersioning } from "@aurodesignsystem/auro-library/scripts/runtime/dependencyTagVersioning.mjs";',
+      "const versioning = new AuroDependencyVersioning();",
+      'const inputTag = versioning.generateTag("auro-input", "3.0.0", AuroInput);',
+      'customElements.define("auro-input-3_0_0", class extends AuroInput {});',
+      "AuroButton.register();",
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: intentional — the scanner must skip this computed tag.
+      "AuroSelect.register(`${prefix}-select`);",
+      "",
+    ].join("\n"),
+  );
+  t.mock.method(process, "cwd", () => cwd);
+  t.mock.method(process, "exit", () => {
+    throw new Error("a settled --prefix must not exit");
+  });
+  const stderr = captureWrite(t, process.stderr);
+  t.mock.method(globalThis, "fetch", async () => {
+    throw new Error("init must not hit the network");
+  });
+
+  await runInit({ prefix: "myapp-" });
+
+  const agents = await readOutput(cwd, "AGENTS.md");
+  assert.match(
+    agents,
+    /<myapp-button>/u,
+    "the installed component is grounded",
+  );
+
+  const errors = stderr();
+  // Default no-arg register() vs the prefixed grounding: a mismatch to fix.
+  assert.match(
+    errors,
+    /AuroButton\.register\(\) uses the default '<auro-button>'/u,
+  );
+  assert.match(errors, /'<myapp-button>'/u);
+  // Computed tag is warned and skipped, never guessed.
+  assert.match(errors, /non-literal tag/u);
+  // The auto-versioned dependency tag is neither grounded nor guessed. (Narrow to
+  // the versioned signals — bare "auro-input" appears in the static coding-rules
+  // boilerplate, so assert the version suffix and a grounded <auro-input> tag are
+  // absent rather than the substring.)
+  assert.doesNotMatch(agents, /3_0_0/u);
+  assert.doesNotMatch(agents, /<auro-input>/u);
+  assert.doesNotMatch(errors, /3_0_0/u);
+  assert.doesNotMatch(errors, /auro-input/u);
+});

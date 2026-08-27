@@ -127,6 +127,13 @@ export interface RegistrationMatch {
 /** The result of scanning source: resolvable matches plus skip/parse warnings. */
 export interface RegistrationScan {
   matches: RegistrationMatch[];
+  /**
+   * Callee class names that called `register()` with **no argument** — the
+   * canonical default-tag registration (e.g. `AuroButton.register()` registers
+   * `<auro-button>`). Optional so callers may omit it; the planner reads it to
+   * warn when a default registration is grounded under a custom prefix.
+   */
+  defaultRegistrations?: string[];
   warnings: string[];
 }
 
@@ -162,13 +169,17 @@ function staticTag(arg: ts.Expression | undefined): string | null {
 /**
  * Scan one source string for `<Class>.register('<tag>')` calls. Purely syntactic
  * (`ts.createSourceFile`, no type-checker): captures every call whose first
- * argument is a static tag; warns and skips any `.register(...)` whose tag is a
- * template with substitutions, an identifier, a call, a spread, or absent — the
- * scan never guesses a computed tag. A parse failure warns and yields no matches
- * for that file rather than throwing.
+ * argument is a static tag. A `register()` with **no argument** is the canonical
+ * default-tag registration — recorded (by callee class name) in
+ * `defaultRegistrations`, never warned, since the tag is known (the component's
+ * `auro-*` tag). Any `.register(...)` whose tag is a template with substitutions,
+ * an identifier, a call, or a spread is warned and skipped — the scan never
+ * guesses a computed tag. A parse failure warns and yields no matches for that
+ * file rather than throwing.
  */
 export function scanSource(filePath: string, source: string): RegistrationScan {
   const matches: RegistrationMatch[] = [];
+  const defaultRegistrations: string[] = [];
   const warnings: string[] = [];
 
   let sourceFile: ts.SourceFile;
@@ -183,6 +194,7 @@ export function scanSource(filePath: string, source: string): RegistrationScan {
   } catch {
     return {
       matches,
+      defaultRegistrations,
       warnings: [`${filePath}: could not be parsed; skipped.`],
     };
   }
@@ -193,24 +205,33 @@ export function scanSource(filePath: string, source: string): RegistrationScan {
       ts.isPropertyAccessExpression(node.expression) &&
       node.expression.name.text === "register"
     ) {
-      const tag = staticTag(node.arguments[0]);
-      if (tag === null) {
-        warnings.push(
-          `${filePath}: register() with a non-literal tag could not be resolved; skipped.`,
-        );
+      const object = node.expression.expression;
+      const className = ts.isIdentifier(object) ? object.text : undefined;
+
+      if (node.arguments.length === 0) {
+        // A no-arg register() uses the component's canonical default tag. Record
+        // it (when the callee is a plain class name) so the planner can flag an
+        // app-vs-grounding mismatch under a custom prefix; a callee we cannot name
+        // is not actionable, so drop it silently.
+        if (className) {
+          defaultRegistrations.push(className);
+        }
       } else {
-        const object = node.expression.expression;
-        matches.push({
-          className: ts.isIdentifier(object) ? object.text : undefined,
-          tag,
-        });
+        const tag = staticTag(node.arguments[0]);
+        if (tag === null) {
+          warnings.push(
+            `${filePath}: register() with a non-literal tag could not be resolved; skipped.`,
+          );
+        } else {
+          matches.push({ className, tag });
+        }
       }
     }
     ts.forEachChild(node, visit);
   };
   visit(sourceFile);
 
-  return { matches, warnings };
+  return { matches, defaultRegistrations, warnings };
 }
 
 /**
@@ -234,6 +255,7 @@ export function scanProject(cwd: string): RegistrationScan {
   });
 
   const matches: RegistrationMatch[] = [];
+  const defaultRegistrations: string[] = [];
   const warnings: string[] = [];
   for (const file of files) {
     let source: string;
@@ -245,9 +267,10 @@ export function scanProject(cwd: string): RegistrationScan {
     }
     const scan = scanSource(file, source);
     matches.push(...scan.matches);
+    defaultRegistrations.push(...(scan.defaultRegistrations ?? []));
     warnings.push(...scan.warnings);
   }
-  return { matches, warnings };
+  return { matches, defaultRegistrations, warnings };
 }
 
 // ---------------------------------------------------------------------------
@@ -323,18 +346,23 @@ export function suggestDefaultPrefix(
 interface Reconciled {
   /** canonical `auro-*` tag → the custom tag detected for it. */
   overrides: Map<string, string>;
+  /** canonical `auro-*` tag → callee class name that registered its default tag. */
+  defaultRegistered: Map<string, string>;
   warnings: string[];
 }
 
 /**
  * Tie each scanned registration to an installed component by matching the
- * callee class name against the component's declaration `name`. A match whose
- * class name is missing or unknown among the components is warned (a
- * `register()` we cannot attribute to an installed component) and dropped.
+ * callee class name against the component's declaration `name`. A static-tag
+ * match whose class name is missing or unknown among the components is warned (a
+ * `register()` we cannot attribute to an installed component) and dropped. No-arg
+ * default registrations are tied the same way, but an untieable one is dropped
+ * silently — a bare `register()` on an unknown class is not actionable.
  */
 function reconcileRegistrations(
   components: readonly ResolvedComponent[],
   matches: readonly RegistrationMatch[],
+  defaultRegistrations: readonly string[] = [],
 ): Reconciled {
   const byClassName = new Map<string, string>();
   for (const component of components) {
@@ -355,7 +383,15 @@ function reconcileRegistrations(
     }
     overrides.set(canonical, match.tag);
   }
-  return { overrides, warnings };
+
+  const defaultRegistered = new Map<string, string>();
+  for (const className of defaultRegistrations) {
+    const canonical = byClassName.get(className);
+    if (canonical) {
+      defaultRegistered.set(canonical, className);
+    }
+  }
+  return { overrides, defaultRegistered, warnings };
 }
 
 /** Options controlling {@link planTagResolution}. */
@@ -413,7 +449,11 @@ export function planTagResolution(
 ): TagResolutionPlan {
   const { config, scan, prefix } = options;
   const configOverrides = config?.init.prefix.overrides ?? {};
-  const reconciled = reconcileRegistrations(components, scan?.matches ?? []);
+  const reconciled = reconcileRegistrations(
+    components,
+    scan?.matches ?? [],
+    scan?.defaultRegistrations ?? [],
+  );
 
   // The effective default: an explicit --prefix wins over a persisted config
   // default. `undefined` means "not yet known" (distinct from a bare "").
@@ -451,6 +491,19 @@ export function planTagResolution(
     if (resolved === tag) {
       warnings.push(
         `${tag}: no custom prefix — grounding it under its bare 'auro-*' tag. Pass a prefix to avoid registration collisions.`,
+      );
+    }
+  }
+
+  // A component the consumer registers with the default no-arg register() keeps
+  // its canonical `auro-*` tag at runtime. If we grounded it under a custom tag
+  // (a prefix or a config/scan override), the app and AGENTS.md diverge — warn so
+  // the user updates their register() call. Never rewrite their source (v1 docs).
+  for (const [canonical, className] of reconciled.defaultRegistered) {
+    const resolved = resolvedTags.get(canonical);
+    if (resolved !== undefined && resolved !== canonical) {
+      warnings.push(
+        `${className}.register() uses the default '<${canonical}>' tag, but this project grounds it as '<${resolved}>'. Update the register() call to '${resolved}' so your app matches AGENTS.md.`,
       );
     }
   }
