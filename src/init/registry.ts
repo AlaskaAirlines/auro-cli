@@ -176,8 +176,16 @@ function staticTag(arg: ts.Expression | undefined): string | null {
  * an identifier, a call, or a spread is warned and skipped — the scan never
  * guesses a computed tag. A parse failure warns and yields no matches for that
  * file rather than throwing.
+ *
+ * `scriptKind` defaults to the one inferred from `filePath`'s extension; callers
+ * that feed extracted source under a different-looking path (e.g. a Svelte
+ * `<script lang="ts">` block scanned under its `.svelte` path) pass it explicitly.
  */
-export function scanSource(filePath: string, source: string): RegistrationScan {
+export function scanSource(
+  filePath: string,
+  source: string,
+  scriptKind: ts.ScriptKind = scriptKindFor(filePath),
+): RegistrationScan {
   const matches: RegistrationMatch[] = [];
   const defaultRegistrations: string[] = [];
   const warnings: string[] = [];
@@ -189,7 +197,7 @@ export function scanSource(filePath: string, source: string): RegistrationScan {
       source,
       ts.ScriptTarget.ES2022,
       /* setParentNodes */ true,
-      scriptKindFor(filePath),
+      scriptKind,
     );
   } catch {
     return {
@@ -234,15 +242,58 @@ export function scanSource(filePath: string, source: string): RegistrationScan {
   return { matches, defaultRegistrations, warnings };
 }
 
+/** One extracted Svelte `<script>` block: its inner source and its language. */
+interface SvelteScript {
+  content: string;
+  scriptKind: ts.ScriptKind;
+}
+
+// A Svelte `<script ...>...</script>` block. Non-greedy body so it stops at the
+// first closing tag; `gi` walks every block (an instance block plus an optional
+// `context="module"` / Svelte-5 `module` block).
+const SVELTE_SCRIPT = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi;
+// A `lang="ts"` / `lang='typescript'` (quotes optional) attribute → TypeScript.
+const SVELTE_LANG_TS = /\blang\s*=\s*["']?(?:ts|typescript)["']?/i;
+
+/**
+ * Pull the JS/TS out of a Svelte single-file component. A `.svelte` file's logic
+ * lives in one or more `<script>` blocks (an instance block plus an optional
+ * `context="module"`/`module` block); the surrounding template markup and
+ * `<style>` are not parseable as a module, so only the script bodies are
+ * returned — each tagged TS or JS from its `lang` attribute. Returns `[]` when
+ * the component has no `<script>` block. Purely lexical (no Svelte compiler): a
+ * literal `</script>` inside a string would end a block early, an accepted v1
+ * limitation.
+ */
+export function extractSvelteScripts(source: string): SvelteScript[] {
+  const scripts: SvelteScript[] = [];
+  // A shared regex with the `g` flag carries lastIndex across calls, so reset it
+  // before each scan to stay reentrant.
+  SVELTE_SCRIPT.lastIndex = 0;
+  let match: RegExpExecArray | null = SVELTE_SCRIPT.exec(source);
+  while (match !== null) {
+    const [, attributes, content] = match;
+    scripts.push({
+      content,
+      scriptKind: SVELTE_LANG_TS.test(attributes)
+        ? ts.ScriptKind.TS
+        : ts.ScriptKind.JS,
+    });
+    match = SVELTE_SCRIPT.exec(source);
+  }
+  return scripts;
+}
+
 /**
  * Scan the project's own sources under `cwd` for existing registrations. Globs
- * `**\/*.{js,jsx,ts,tsx,mjs,cjs}` (excluding `node_modules`/`dist`/`build`/
+ * `**\/*.{js,jsx,ts,tsx,mjs,cjs,svelte}` (excluding `node_modules`/`dist`/`build`/
  * `coverage` — Auro's own `static register` defaults would be false positives),
- * reads each file, and aggregates {@link scanSource}. A read failure on one file
- * warns and continues.
+ * reads each file, and aggregates {@link scanSource}. A `.svelte` file is scanned
+ * per extracted `<script>` block ({@link extractSvelteScripts}) so its template
+ * markup never reaches the parser. A read failure on one file warns and continues.
  */
 export function scanProject(cwd: string): RegistrationScan {
-  const files = globSync("**/*.{js,jsx,ts,tsx,mjs,cjs}", {
+  const files = globSync("**/*.{js,jsx,ts,tsx,mjs,cjs,svelte}", {
     cwd,
     absolute: true,
     nodir: true,
@@ -257,6 +308,12 @@ export function scanProject(cwd: string): RegistrationScan {
   const matches: RegistrationMatch[] = [];
   const defaultRegistrations: string[] = [];
   const warnings: string[] = [];
+  const collect = (scan: RegistrationScan): void => {
+    matches.push(...scan.matches);
+    defaultRegistrations.push(...(scan.defaultRegistrations ?? []));
+    warnings.push(...scan.warnings);
+  };
+
   for (const file of files) {
     let source: string;
     try {
@@ -265,10 +322,13 @@ export function scanProject(cwd: string): RegistrationScan {
       warnings.push(`${file}: could not be read; skipped.`);
       continue;
     }
-    const scan = scanSource(file, source);
-    matches.push(...scan.matches);
-    defaultRegistrations.push(...(scan.defaultRegistrations ?? []));
-    warnings.push(...scan.warnings);
+    if (path.extname(file).toLowerCase() === ".svelte") {
+      for (const { content, scriptKind } of extractSvelteScripts(source)) {
+        collect(scanSource(file, content, scriptKind));
+      }
+    } else {
+      collect(scanSource(file, source));
+    }
   }
   return { matches, defaultRegistrations, warnings };
 }

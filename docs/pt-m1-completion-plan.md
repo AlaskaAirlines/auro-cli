@@ -572,6 +572,27 @@ Map the ticket's enumerated test list to suites (node:test via
   [resolver.test.ts](../test/resolver.test.ts) and an "exactly one API section"
   assertion on `AGENTS.md` in
   [init.command.test.ts](../test/init.command.test.ts).
+- ✅ **Cross-framework source scanning** (vanilla / React / Svelte) — Resolved.
+  Validated against three real consumer apps
+  ([ai-tooling-test-vanilla](https://github.com/AlaskaAirlines/ai-tooling-test-vanilla),
+  [-react](https://github.com/AlaskaAirlines/ai-tooling-test-react),
+  [-svelte](https://github.com/AlaskaAirlines/ai-tooling-test-svelte)), all of which
+  install `auro-button` (standalone) + `auro-formkit` (monorepo) and register via
+  **side-effect import** (`import "@aurodesignsystem/auro-button"`) with no
+  `.register()` calls. Findings + fixes: (1) the dominant side-effect-import pattern
+  yields an empty scan with **no** false-positive warnings (now unit-covered for the
+  vanilla `.js` and Svelte shapes); (2) React `.jsx` with JSX markup parses and a
+  real `.register('legacy-input')` amid JSX is detected; (3) **Svelte `.svelte`
+  files are now scanned** — `scanProject` globs `…,svelte` and
+  [`extractSvelteScripts`](../src/init/registry.ts) pulls each `<script>` block
+  (instance + `context="module"`/Svelte-5 `module`), scanning it as TS or JS per its
+  `lang` attribute so template markup and runes (`$state`) never reach the parser.
+  `scanSource` gained an optional explicit `scriptKind` for the extracted blocks.
+  Covered by `extractSvelteScripts` unit tests + `scanProject` tests for the JS/TS
+  Svelte blocks, the real-app Svelte component, the React `.jsx`, and the vanilla
+  entry in [registry.test.ts](../test/registry.test.ts). Known v1 boundary: a
+  literal `</script>` inside a string ends a block early (lexical extraction, no
+  Svelte compiler).
 
 ## Done when
 
