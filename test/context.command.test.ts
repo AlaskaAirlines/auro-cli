@@ -8,6 +8,7 @@ import { AURO_COMPONENT_PACKAGES } from "../src/static/auroComponents.ts";
 import {
   captureError,
   captureWrite,
+  ExitError,
   elementManifest,
   installLocalPackage,
   tempCwd,
@@ -108,4 +109,28 @@ test("a locally installed outdated component warns on stderr, doc on stdout", as
   const err = stderr();
   assert.match(err, /NOT on the latest release/);
   assert.ok(err.includes(pkg), "names the outdated package");
+});
+
+test("exits 1 with a write-failure message when the output path is unwritable", async (t) => {
+  const cwd = await tempCwd(t);
+  // A path under a directory that does not exist — fs.writeFile rejects with
+  // ENOENT, exercising the --output failure branch deterministically.
+  const output = path.join(cwd, "no-such-dir", "ctx.md");
+  t.mock.method(process, "cwd", () => cwd);
+  t.mock.method(process, "exit", (code?: number): never => {
+    throw new ExitError(code);
+  });
+  // Offline keeps the run network-free; the document still builds, then the
+  // write is what fails. Capture the spinner's stderr output to assert on it.
+  const stderr = captureWrite(t, process.stderr);
+
+  await assert.rejects(
+    runContext({ output, offline: true }),
+    (err: ExitError) => {
+      assert.equal(err.code, 1);
+      return true;
+    },
+  );
+
+  assert.match(stderr(), /Failed to write context/);
 });
