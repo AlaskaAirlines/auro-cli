@@ -155,6 +155,60 @@ test("renderOutdatedBanner lists each component and the update command", () => {
   }
 });
 
+test("renderOutdatedBanner advises migrating a legacy standalone to formkit, not @latest", () => {
+  const prevLevel = chalk.level;
+  chalk.level = 0;
+  try {
+    const banner = renderOutdatedBanner([
+      {
+        pkg: "@aurodesignsystem/auro-input",
+        installed: "8.0.0",
+        latest: "9.0.0",
+      },
+    ]);
+
+    assert.match(banner, /Migrate to auro-formkit/);
+    assert.match(banner, /@aurodesignsystem\/auro-formkit\/auro-input/);
+    assert.ok(
+      !banner.includes("auro-input@latest"),
+      "a legacy standalone is never advised to update to @latest",
+    );
+    assert.match(banner, /⇢ auro-formkit/, "its row is marked for migration");
+  } finally {
+    chalk.level = prevLevel;
+  }
+});
+
+test("renderOutdatedBanner shows both blocks for a mixed legacy + standalone list", () => {
+  const prevLevel = chalk.level;
+  chalk.level = 0;
+  try {
+    const banner = renderOutdatedBanner([
+      {
+        pkg: "@aurodesignsystem/auro-input", // legacy → migrate
+        installed: "8.0.0",
+        latest: "9.0.0",
+      },
+      {
+        pkg: "@aurodesignsystem/auro-button", // true standalone → @latest
+        installed: "12.3.0",
+        latest: "13.0.0",
+      },
+    ]);
+
+    // The standalone still gets @latest; the legacy one gets the migration block.
+    assert.match(banner, /npm install @aurodesignsystem\/auro-button@latest/);
+    assert.ok(
+      !banner.includes("auro-input@latest"),
+      "the legacy package is excluded from the @latest command",
+    );
+    assert.match(banner, /Migrate to auro-formkit/);
+    assert.match(banner, /@aurodesignsystem\/auro-formkit\/auro-input/);
+  } finally {
+    chalk.level = prevLevel;
+  }
+});
+
 test("renderOutdatedBanner returns an empty string for an empty list", () => {
   // Pins the self-guard against `Math.max(...[]) === -Infinity`; without it the
   // width math would garble the banner for a (future) empty-list caller.

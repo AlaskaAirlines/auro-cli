@@ -547,3 +547,121 @@ test("AST scan warns (never guesses) on default, computed, and auto-versioned re
   assert.doesNotMatch(errors, /3_0_0/u);
   assert.doesNotMatch(errors, /auro-input/u);
 });
+
+/**
+ * A project on a legacy standalone form package: the component is installed (so
+ * detection finds it) and declared in `package.json`, and consumer source imports
+ * it from the standalone root. This is the shape the formkit migration acts on.
+ */
+async function installLegacyFormkitProject(cwd: string): Promise<void> {
+  await installLocalPackage(
+    cwd,
+    "@aurodesignsystem/auro-input",
+    "9.0.0",
+    elementManifest("auro-input"),
+  );
+  await writeFile(
+    path.join(cwd, "package.json"),
+    JSON.stringify(
+      { dependencies: { "@aurodesignsystem/auro-input": "^9.0.0" } },
+      null,
+      2,
+    ),
+  );
+  await writeFile(
+    path.join(cwd, "app.js"),
+    'import "@aurodesignsystem/auro-input";\n',
+  );
+}
+
+test("legacy standalone: accepting the prompt migrates to formkit and stops before grounding", async (t) => {
+  const cwd = await tempCwd(t);
+  await installLegacyFormkitProject(cwd);
+  t.mock.method(process, "cwd", () => cwd);
+  t.mock.method(process, "exit", () => {
+    throw new Error("should not exit on a successful migration");
+  });
+  const stderr = captureWrite(t, process.stderr);
+  t.mock.method(globalThis, "fetch", async () => {
+    throw new Error("init must not hit the network");
+  });
+  forceInteractive(t);
+  t.mock.method(inquirer, "prompt", async () => ({ migrate: true }));
+
+  await runInit({ prefix: "myapp-" });
+
+  // package.json swapped: legacy removed, formkit added.
+  const pkg = JSON.parse(await readOutput(cwd, "package.json"));
+  assert.equal(pkg.dependencies["@aurodesignsystem/auro-input"], undefined);
+  assert.equal(pkg.dependencies["@aurodesignsystem/auro-formkit"], "latest");
+  // Source rewritten to the formkit subpath.
+  const app = await readFile(path.join(cwd, "app.js"), "utf-8");
+  assert.match(app, /"@aurodesignsystem\/auro-formkit\/auro-input"/u);
+  // Grounding is deferred until the user reinstalls and re-runs.
+  await assert.rejects(
+    readOutput(cwd, "AGENTS.md"),
+    /ENOENT/u,
+    "no grounding file is written in the migration run",
+  );
+  assert.match(stderr(), /run `npm install`/u);
+});
+
+test("legacy standalone: declining the prompt grounds the standalone as-is", async (t) => {
+  const cwd = await tempCwd(t);
+  await installLegacyFormkitProject(cwd);
+  t.mock.method(process, "cwd", () => cwd);
+  t.mock.method(process, "exit", () => {
+    throw new Error("should not exit on success");
+  });
+  captureWrite(t, process.stderr);
+  t.mock.method(globalThis, "fetch", async () => {
+    throw new Error("init must not hit the network");
+  });
+  forceInteractive(t);
+  t.mock.method(inquirer, "prompt", async () => ({ migrate: false }));
+
+  await runInit({ prefix: "myapp-" });
+
+  // Nothing migrated; normal grounding proceeded.
+  const pkg = JSON.parse(await readOutput(cwd, "package.json"));
+  assert.equal(
+    pkg.dependencies["@aurodesignsystem/auro-input"],
+    "^9.0.0",
+    "declining leaves package.json untouched",
+  );
+  assert.equal(pkg.dependencies["@aurodesignsystem/auro-formkit"], undefined);
+  const app = await readFile(path.join(cwd, "app.js"), "utf-8");
+  assert.match(
+    app,
+    /"@aurodesignsystem\/auro-input"/u,
+    "declining leaves source untouched",
+  );
+  const agents = await readOutput(cwd, "AGENTS.md");
+  assert.match(agents, /<myapp-input>/u, "the standalone is grounded as-is");
+});
+
+test("legacy standalone: a non-interactive run only advises, never migrates", async (t) => {
+  const cwd = await tempCwd(t);
+  await installLegacyFormkitProject(cwd);
+  t.mock.method(process, "cwd", () => cwd);
+  t.mock.method(process, "exit", () => {
+    throw new Error("should not exit on success");
+  });
+  const stderr = captureWrite(t, process.stderr);
+  t.mock.method(globalThis, "fetch", async () => {
+    throw new Error("init must not hit the network");
+  });
+  // No forceInteractive (runner is non-TTY) and no inquirer mock: prompting would
+  // throw, proving the non-interactive path never prompts.
+
+  await runInit({ prefix: "myapp-" });
+
+  // Advisory printed; no edits made.
+  assert.match(stderr(), /can be migrated to @aurodesignsystem\/auro-formkit/u);
+  const pkg = JSON.parse(await readOutput(cwd, "package.json"));
+  assert.equal(pkg.dependencies["@aurodesignsystem/auro-input"], "^9.0.0");
+  assert.equal(pkg.dependencies["@aurodesignsystem/auro-formkit"], undefined);
+  // Grounding still proceeds.
+  const agents = await readOutput(cwd, "AGENTS.md");
+  assert.match(agents, /<myapp-input>/u);
+});
