@@ -520,9 +520,26 @@ Spec handed to step 6: point `process.cwd()` at a tempCwd staged via
      *"detectInstalled pins the installed package.json version, never 'latest'"* —
      asserting the resolved version equals the installed semver and is never the
      `latest` dist-tag. Full suite **151/151**, `tsc`/biome clean, `npm run build` OK.
-9. **Manual verification** — extend [test/manual-testing-ai-tooling.md](../test/manual-testing-ai-tooling.md)
-   with an init section run against a real project (incl. a formkit install and a
-   project with existing custom registrations).
+9. **Manual verification. ✅ DONE (doc authored; human run gated on release).** —
+   extended [test/manual-testing-ai-tooling.md](../test/manual-testing-ai-tooling.md)
+   with a full **PT-M1 / AB#1628541** section mirroring the M0 structure:
+   milestone goal, the `auro init` command/options/outputs, and a **test-projects**
+   block wiring the three real consumer apps
+   ([-vanilla](https://github.com/AlaskaAirlines/ai-tooling-test-vanilla)/[-react](https://github.com/AlaskaAirlines/ai-tooling-test-react)/[-svelte](https://github.com/AlaskaAirlines/ai-tooling-test-svelte))
+   plus derived **migration** and **dedupe** scratch scenarios. An
+   *Automated coverage & manual scope* split cites each init suite as
+   **[Regression-covered]** and isolates the four things automation structurally
+   can't reach — **real-TTY `inquirer` prompts**, the **formkit migration codemod on
+   real source + reinstall loop**, the **cross-framework AST scan over real
+   `.js/.jsx/.svelte`**, and packaging. Seven cases (M1-1…M1-7) cover scoped
+   grounding, monorepo enumeration + subpath imports, prefix resolution (free input /
+   blank-keeps-bare / `--prefix` / CI-fail), existing-registration + cross-framework
+   scan, the legacy→formkit **migration walkthrough** (accept → edit + defer,
+   decline → ground as-is, CI advisory-only), regeneration on dependency change, and
+   the legacy-vs-monorepo dedupe warning — every quoted spinner/prompt/error string
+   verified verbatim against [init.ts](../src/commands/init.ts). Closed with a
+   PT-M1 sign-off checklist. The actual human execution against the real repos is
+   gated on the release/PR #302 the same way M0-6 is.
 10. **Admin** — assign AB#1628541, New → Active, and on merge/verify → Resolved,
     ticking the PT-M1 line on parent story AB#1628539. (Gates on PR #302 merging.)
 

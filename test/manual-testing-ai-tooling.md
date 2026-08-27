@@ -7,8 +7,9 @@ later), each broken into milestones. This document grows one phase and milestone
 at a time; every phase gets its own top-level section below.
 
 **Currently covered:** [Phase 1 — Standalone Grounding (no MCP)](#phase-1--standalone-grounding-no-mcp-ab1628539)
-(AB#1628539), specifically [PT-M0 — Land Tier 1 CLI primitives](#ab1628540--pt-m0-land-tier-1-cli-primitives)
-(AB#1628540). Sections for PT-M1…M4 and later phases will be added as that work
+(AB#1628539) — [PT-M0 — Land Tier 1 CLI primitives](#ab1628540--pt-m0-land-tier-1-cli-primitives)
+(AB#1628540) and [PT-M1 — `auro init` v1 (scoped grounding file)](#ab1628541--pt-m1-auro-init-v1-scoped-grounding-file)
+(AB#1628541). Sections for PT-M2…M4 and later phases will be added as that work
 lands.
 
 ---
@@ -744,7 +745,300 @@ transient mix — run only to confirm real-socket behavior beyond the unit tests
 
 ---
 
+### AB#1628541 — PT-M1: `auro init` v1 (scoped grounding file)
+
+Milestone goal: an engineer runs `auro init` in a project with Auro dependencies
+and gets AI grounding files — **`AGENTS.md`** (canonical), a thin **`CLAUDE.md`**
+that imports it, and a persisted **`auro.config.json`** — that document **exactly**
+the installed components at their installed versions, with correct per-component
+import paths and the Auro coding rules. Multi-component packages (`auro-formkit`)
+are fully enumerated; existing custom registrations are detected and honored under
+their real tags; and legacy standalone form packages can be migrated to formkit.
+
+Reference: [docs/pt-m1-completion-plan.md](../docs/pt-m1-completion-plan.md),
+[src/commands/init.ts](../src/commands/init.ts).
+
+#### Command under test
+
+`auro init` — one command, three options:
+
+| Option | Effect |
+| --- | --- |
+| `--prefix <prefix>` | Default custom-element tag prefix (e.g. `myapp-`) for components with no existing registration. **Settles** the default, so no prompt is needed. |
+| `--non-interactive` | Never prompt; take the prefix from `--prefix` or fail cleanly. **Implied by a non-TTY stdin or a set `CI` env var.** |
+| `--yes` | Alias for `--non-interactive`. |
+
+Outputs, written to the project root:
+
+- **`AGENTS.md`** — canonical grounding: one API section per installed component
+  (tag, install/import lines, attributes/props/slots/events) plus the Auro coding
+  rules block.
+- **`CLAUDE.md`** — a thin file that imports the canonical one (`@AGENTS.md`).
+- **`auro.config.json`** — persisted default prefix + per-component tag overrides;
+  the source of truth that makes regeneration idempotent.
+
+#### Test projects — three real consumer apps
+
+PT-M1's cross-framework scanning and monorepo handling were validated against three
+real apps. Clone them fresh for the manual pass; each installs `auro-button`
+(standalone) **and** `auro-formkit` (monorepo) and registers via **side-effect
+import** (`import "@aurodesignsystem/auro-button"`), matching the dominant
+real-world pattern:
+
+| Repo | Framework / files | Distinguishing trait |
+| --- | --- | --- |
+| [ai-tooling-test-vanilla](https://github.com/AlaskaAirlines/ai-tooling-test-vanilla) | Vanilla `.js` (`src/main.js`) | Side-effect imports only — **no** `.register()` calls |
+| [ai-tooling-test-react](https://github.com/AlaskaAirlines/ai-tooling-test-react) | React `.jsx` with JSX markup | Contains a real `Component.register('legacy-input')` amid JSX — the existing-registration case |
+| [ai-tooling-test-svelte](https://github.com/AlaskaAirlines/ai-tooling-test-svelte) | Svelte `.svelte` (`<script>` blocks) | Registration via side-effect import inside a `<script>` block |
+
+```bash
+# From a scratch working area, per repo:
+git clone https://github.com/AlaskaAirlines/ai-tooling-test-vanilla && cd ai-tooling-test-vanilla
+npm install          # pulls auro-button + auro-formkit into node_modules
+auro init            # the command under test (globally installed local build)
+```
+
+Two **derived scenarios** are built from a scratch project (they exercise paths the
+three apps don't cover as shipped):
+
+- **Migration scenario** — a project that declares a **legacy standalone** form
+  package so the formkit migration offer fires:
+
+  ```bash
+  mkdir -p /tmp/auro-init-migrate && cd /tmp/auro-init-migrate
+  npm init -y
+  npm install @aurodesignsystem/auro-input   # a legacy standalone now shipped by formkit
+  # add a source file that imports it, e.g. src/app.js with:
+  #   import "@aurodesignsystem/auro-input";
+  ```
+
+- **Dedupe scenario** — a project with **both** a legacy standalone and the
+  monorepo installed, so the same tag is registered twice:
+
+  ```bash
+  mkdir -p /tmp/auro-init-dedupe && cd /tmp/auro-init-dedupe
+  npm init -y
+  npm install @aurodesignsystem/auro-input @aurodesignsystem/auro-formkit
+  ```
+
+> **Teardown:** `rm -rf` each scratch dir; for the cloned repos, discard the
+> generated `AGENTS.md`/`CLAUDE.md`/`auro.config.json` (and any migration edits)
+> rather than committing them.
+
+#### Automated coverage & manual scope (PT-M1)
+
+As with M0, the bulk of PT-M1 is locked down by the automated suite (`npm test`),
+which drives the full **detect → plan → generate → write** pipeline with mocked
+`fetch`, on-disk `node_modules` fixtures, and forced non-interactive/TTY states.
+Those tests authoritatively cover **logic, exact messaging, exit codes, stdout vs.
+stderr separation, file contents, scoping, monorepo enumeration, dedupe, prefix
+precedence, AST-scan detection, and the migration codemod** — deterministically and
+offline. Re-running them by hand adds nothing; cite the test in sign-off instead.
+
+**Regression-covered by `npm test` — do not test manually:**
+
+| Area | Test file |
+| --- | --- |
+| Installed-component detection, version pinned from `package.json` (**never `latest`**), not-installed / no-manifest exclusion | [`detectInstalled.test.ts`](detectInstalled.test.ts) |
+| `ResolvedComponent` normalization, monorepo enumeration (all shipped components, per-component subpath imports, shared version), catalog-not-installed exclusion, **grounded-once dedupe** | [`resolver.test.ts`](resolver.test.ts) |
+| Config load/save, AST scan of `.js/.ts/.jsx/.svelte`, precedence config → scan → default, `inferPrefixFromTag`, majority suggestion, mixed-prefix, `planTagResolution`, `extractSvelteScripts` | [`registry.test.ts`](registry.test.ts) |
+| `AGENTS.md` rendering, prefix/subpath-aware install lines, `CLAUDE.md` thin `@AGENTS.md` import | [`generator.test.ts`](generator.test.ts), [`init.format.test.ts`](init.format.test.ts) |
+| End-to-end init: detect→plan→write, no-components warn, mixed-prefix confirm/decline/CI-fail, dedupe warning, migration accept/decline/non-interactive, AST-scan warn/skip | [`init.command.test.ts`](init.command.test.ts) |
+| Legacy list + `isLegacyFormkitPackage`/`formkitTagFor`/`formkitSubpathFor`; dep swap, named/side-effect/Svelte import rewrites, deep-import skip, idempotency | [`formkitMigration.test.ts`](formkitMigration.test.ts), [`migrateFormkit.test.ts`](migrateFormkit.test.ts) |
+| Outdated banner incl. the legacy `⇢ auro-formkit` **Migrate to auro-formkit** block | [`outdated.test.ts`](outdated.test.ts) |
+
+**Manual scope — what automation structurally cannot cover.** The manual pass only
+needs the following; everything else is regression-covered above:
+
+1. **Real-TTY interactive prompts** — the tests force non-interactive (they *must*,
+   since `inquirer` throws on a closed stdin). The `confirm`/`input` prompt UX,
+   default selection, and the majority-prefix confirm can **only** be exercised on a
+   real TTY. This is the central manual item (M1-3, M1-5).
+2. **The formkit migration codemod on real source** — it edits `package.json` and
+   rewrites import specifiers across real `.js/.jsx/.svelte` files, then requires a
+   real `npm install` + re-run to ground formkit. Tests use fixtures; the real repos
+   prove the codemod against actual source shapes and the reinstall loop (M1-5).
+3. **Cross-framework AST scan on real files** — a live run over the real `.jsx`,
+   `.svelte`, and vanilla `.js` confirms the globbing and Svelte `<script>`
+   extraction against actual repo layouts (M1-4).
+4. **Packaging** — `auro init` ships in the same bundle as M0, so the
+   [run-under-test harness](#how-to-run-the-cli-under-test) covers distribution;
+   just confirm `auro init` appears in `auro --help` and runs from the packed/global
+   install.
+
+Individual cases below are annotated **[Regression-covered]**, **[Manual]**, or
+**[Manual smoke]** accordingly.
+
+---
+
+#### M1-1 — Basic scoped grounding — [Regression-covered; real-repo run → Manual smoke]
+
+From a real repo (e.g. **ai-tooling-test-vanilla** after `npm install`).
+
+1. Run: `auro init`
+2. **Expect:**
+   - Spinner: `Detecting installed Auro components...` → succeeds with
+     `Detected N installed component(s) to ground.`
+   - A `Writing grounding files...` spinner succeeds with
+     `Wrote AGENTS.md, CLAUDE.md, and auro.config.json for N component(s).`
+   - `AGENTS.md` exists, is non-empty Markdown, has one API section **only** for
+     installed components (`auro-button` + every `auro-formkit` component), and ends
+     with the Auro coding rules block. **No** component from an uninstalled package
+     appears (strict scoping — not the 60+ catalog).
+   - `CLAUDE.md` exists and is a thin import of the canonical file (contains
+     `@AGENTS.md`).
+   - `auro.config.json` exists and records the resolved prefix default + any
+     per-component overrides.
+   - Exit code `0`.
+3. **Empty-project negative:** from a dir with no Auro deps, `auro init` warns
+   `No installed Auro components found; nothing to ground.` and exits `0` (no files
+   written).
+
+#### M1-2 — Monorepo (`auro-formkit`) enumeration — [Regression-covered; real → Manual smoke]
+
+Any of the three repos installs `auro-formkit` (one package, one aggregated CEM,
+per-component subpath exports, one shared version).
+
+1. Run `auro init`, then inspect `AGENTS.md`.
+2. **Expect:**
+   - **Every** component `auro-formkit` ships is grounded (not just one) — spot-check
+     several tags (`auro-input`, `auro-select`, `auro-combobox`, …).
+   - Each formkit component's install block uses its **subpath** import, e.g.
+     `import "@aurodesignsystem/auro-formkit/auro-input";`, while `auro-button`
+     (standalone) imports as `import "@aurodesignsystem/auro-button";`.
+   - All formkit components report the **same** shared package version.
+   - Exit code `0`.
+
+#### M1-3 — Prefix resolution on a real TTY — [Manual]
+
+The core manual item — exercises the `inquirer` prompt the suite cannot. Use a
+scratch project with components installed but **no** existing registrations and
+**no** persisted `auro.config.json` (delete it between sub-cases to force a fresh
+decision).
+
+1. **Interactive free input (no inferable prefix):** run `auro init` on a real TTY
+   with no `--prefix`.
+   - **Expect:** an `input` prompt —
+     `Prefix for Auro custom-element tags (e.g. myapp-; blank keeps the bare auro-* tags):`.
+     Enter `myapp-`.
+   - Grounded tags in `AGENTS.md` use `myapp-` (e.g. `myapp-button`); the prefix is
+     persisted to `auro.config.json`. Exit `0`.
+2. **Blank answer keeps bare tags:** re-run, submit an **empty** prefix.
+   - **Expect:** tags stay bare `auro-*` and a stderr warning notes the bare-`auro-*`
+     fallback. Exit `0`.
+3. **`--prefix` settles it (no prompt):** `auro init --prefix acme-` — **no** prompt
+   appears; tags become `acme-*`; persisted. Exit `0`.
+4. **Non-interactive / CI without a resolvable prefix fails cleanly:**
+   `CI=1 auro init` (or `auro init --non-interactive`) with an unresolved default.
+   - **Expect:** no prompt; error on stderr
+     `Cannot resolve component tags non-interactively: … Re-run with --prefix <prefix> (e.g. --prefix myapp-).`
+     and exit `1`.
+
+#### M1-4 — Existing custom registrations + cross-framework scan — [Regression-covered; real files → Manual smoke]
+
+Use **ai-tooling-test-react** (has a real `Component.register('legacy-input')` amid
+JSX) and the vanilla/svelte repos (side-effect imports only).
+
+1. **React (has a registration):** run `auro init`.
+   - **Expect:** the scanned tag (`legacy-input`) is honored as a **per-component
+     override**, grounded under its **actual** tag, and **never** rewritten. If a
+     majority prefix can be inferred from existing registrations, it is offered as
+     the default (see M1-3's confirm). Exit `0`.
+2. **Vanilla + Svelte (side-effect imports only):** run `auro init`.
+   - **Expect:** the AST scan finds no registrations and emits **no** false-positive
+     warnings — the dominant side-effect-import pattern is clean. Svelte `<script>`
+     blocks are scanned (template markup/runes never reach the parser). Exit `0`.
+3. **Mixed prefixes (derived):** in a scratch project, seed two existing
+   registrations with different prefixes (e.g. `foo-input`, `bar-select`) and run
+   `auro init` on a TTY.
+   - **Expect:** each existing tag is preserved as its own override; a confirm prompt
+     offers the **majority** prefix as the future default
+     (`Existing registrations use more than one prefix. Use the most common, '<p>', …?`).
+     Non-interactively this path instead requires `--prefix` and fails without it.
+
+#### M1-5 — Legacy standalone → `auro-formkit` migration walkthrough — [Manual]
+
+Uses the **migration scenario** project (a legacy standalone like
+`@aurodesignsystem/auro-input` installed + a source file importing it). This is
+init's sole codemod path — it runs **before** grounding.
+
+1. **Accept (interactive):** run `auro init` on a real TTY.
+   - **Expect:** after detection, a confirm prompt (default **No**):
+     `N legacy standalone package(s) now live in auro-formkit (…). Migrate to auro-formkit now? This edits package.json and rewrites import specifiers.`
+     Answer **Yes**.
+   - A `Migrating to auro-formkit...` spinner succeeds:
+     `Migrated N package(s) to auro-formkit; rewrote M import(s) across K file(s).`
+   - `package.json` now depends on `@aurodesignsystem/auro-formkit` (added at
+     `@latest` when absent, existing version kept); bare import specifiers are
+     rewritten to formkit subpaths (`import "@aurodesignsystem/auro-formkit/auro-input";`).
+   - Any **deep** import (`…/auro-input/dist/x.js`) is **left unchanged** and flagged
+     on stderr for manual follow-up.
+   - The run **stops** (no grounding yet) with:
+     `Next: run npm install, then re-run auro init to regenerate grounding for auro-formkit.`
+   - Then `npm install && auro init` grounds the formkit components (subpath imports),
+     confirming the reinstall loop.
+2. **Decline (interactive):** re-run, answer **No** (the default).
+   - **Expect:** no edits; init proceeds to ground the project **as-is** (the legacy
+     standalone is documented). Exit `0`.
+3. **Non-interactive / CI only advises (never edits):** `CI=1 auro init` (or
+   `--non-interactive`) in the same project.
+   - **Expect:** no prompt, no file edits — only a stderr advisory:
+     `⚠ N legacy standalone package(s) can be migrated to @aurodesignsystem/auro-formkit: … Run auro init interactively to apply the migration.`
+     Grounding then continues normally. Verify `package.json` and sources are
+     **unchanged** (`git diff`).
+
+#### M1-6 — Regeneration on dependency change — [Regression-covered; real → Manual smoke]
+
+From a project already inited once (so `auro.config.json` exists with a settled
+default).
+
+1. Add or remove an Auro dependency (`npm install @aurodesignsystem/auro-<x>` or
+   `npm uninstall …`), then re-run `auro init`.
+2. **Expect:**
+   - The files update to reflect the new installed set (added component appears /
+     removed component drops).
+   - With the default already settled in `auro.config.json`, the run does **not**
+     re-prompt and does **not** CI-fail — regeneration is deterministic. Exit `0`.
+
+#### M1-7 — Legacy-vs-monorepo dedupe warning — [Regression-covered]
+
+Uses the **dedupe scenario** (both `@aurodesignsystem/auro-input` and
+`@aurodesignsystem/auro-formkit` installed).
+
+1. Run `auro init`.
+2. **Expect:**
+   - The overlapping tag (`auro-input`) is grounded **once** (a single API section),
+     and a stderr warning fires:
+     `⚠ Tag <auro-input> is registered by multiple installed packages: … Grounded once — verify which package you intend to use.`
+   - Exit code `0`.
+
+---
+
+### Sign-off checklist (PT-M1 / AB#1628541)
+
+**Automated — one check covers the bulk of the matrix:**
+
+- [ ] `npm test` passes (green run signs off every **[Regression-covered]** case
+      above — detection, scoping, monorepo enumeration, dedupe, prefix precedence,
+      AST scan, migration codemod, `CLAUDE.md` import, bare-default warning)
+
+**Manual pass — only what automation can't reach:**
+
+- [ ] `auro init` appears in `auro --help` and runs from the packed/global install
+- [ ] **M1-3** real-TTY prefix prompts: free input, blank-keeps-bare, `--prefix`
+      (no prompt), CI/non-interactive fail-without-`--prefix`
+- [ ] **M1-5** formkit migration walkthrough on a real project: accept (edits +
+      reinstall + re-ground), decline (ground as-is), CI advisory-only (no edits)
+- [ ] **M1-4** cross-framework scan smoke over the three real repos (React
+      registration honored; vanilla/Svelte side-effect imports clean, no false
+      positives)
+- [ ] **M1-2** monorepo smoke: all `auro-formkit` components grounded with subpath
+      imports + shared version
+- [ ] Environment (SHA, Node, OS, network) recorded for the run
+
+---
+
 ### Milestones pending (to be expanded later)
 
-- **PT-M1…M4 — `auro init`** and downstream tooling: test sections will be added
-  to this document as each milestone lands under AB#1628539.
+- **PT-M2…M4 — `auro init`** downstream tooling and later surfaces: test sections
+  will be added to this document as each milestone lands under AB#1628539.
