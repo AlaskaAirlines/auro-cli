@@ -310,3 +310,98 @@ test("a legacy form component resolves from a locally installed monorepo, filter
     );
   }
 });
+
+test("an explicit --tag on a legacy form component pins the standalone, not the monorepo", async (t) => {
+  const cwd = await tempCwd(t); // empty → nothing installed locally
+  t.mock.method(process, "cwd", () => cwd);
+  t.mock.method(process, "exit", () => {
+    throw new Error("should not exit on success");
+  });
+  const stdout = captureWrite(t, process.stdout);
+  const stderr = captureError(t);
+  // A version pin bypasses the monorepo redirect and fetches the standalone at
+  // that exact version; the request URL proves it targets auro-input, not formkit.
+  const fetchMock = t.mock.method(globalThis, "fetch", async (url: string) => {
+    assert.match(
+      String(url),
+      /auro-input@9\.0\.0/,
+      "fetches the pinned standalone version",
+    );
+    assert.doesNotMatch(
+      String(url),
+      /auro-formkit/,
+      "an explicit --tag is not redirected to the monorepo",
+    );
+    return new Response(JSON.stringify(elementManifest("auro-input")), {
+      status: 200,
+    });
+  });
+
+  await runComponent("input", { tag: "9.0.0" });
+
+  const out = stdout();
+  assert.match(out, /auro-input/, "the pinned standalone renders");
+  assert.match(out, /npm i @aurodesignsystem\/auro-input/);
+  assert.match(out, /import "@aurodesignsystem\/auro-input";/);
+  assert.doesNotMatch(out, /auro-formkit/, "no monorepo package in the output");
+  assert.doesNotMatch(stderr(), /now ships in/, "no redirect note when pinned");
+  assert.equal(fetchMock.mock.callCount(), 1, "only the pinned lookup fetched");
+});
+
+test("--json on a redirected legacy component keeps stdout parseable, note on stderr", async (t) => {
+  const cwd = await tempCwd(t); // empty → redirects to the monorepo
+  t.mock.method(process, "cwd", () => cwd);
+  t.mock.method(process, "exit", () => {
+    throw new Error("should not exit on success");
+  });
+  const stdout = captureWrite(t, process.stdout);
+  const stderr = captureError(t);
+  t.mock.method(
+    globalThis,
+    "fetch",
+    async () =>
+      new Response(
+        JSON.stringify(aggregateManifest("auro-input", "auro-select")),
+        { status: 200 },
+      ),
+  );
+
+  await runComponent("input", { json: true });
+
+  // stdout is a clean JSON array filtered to the one requested tag — the redirect
+  // note must not leak onto it.
+  const parsed = JSON.parse(stdout());
+  assert.ok(Array.isArray(parsed));
+  assert.equal(parsed.length, 1, "the aggregate is filtered to one element");
+  assert.equal(parsed[0].tagName, "auro-input");
+  assert.match(
+    stderr(),
+    /now ships in @aurodesignsystem\/auro-formkit/,
+    "the redirect note goes to stderr, off the machine-parseable stream",
+  );
+});
+
+test("a redirected component whose tag is absent from the aggregate exits 1", async (t) => {
+  const cwd = await tempCwd(t); // empty → redirects to the monorepo
+  t.mock.method(process, "cwd", () => cwd);
+  captureError(t);
+  t.mock.method(process, "exit", (code?: number): never => {
+    throw new ExitError(code);
+  });
+  // The monorepo CEM resolves, but its declarations do not include the requested
+  // tag (e.g. a stale/partial aggregate) — the tag filter leaves nothing to show.
+  t.mock.method(
+    globalThis,
+    "fetch",
+    async () =>
+      new Response(
+        JSON.stringify(aggregateManifest("auro-select", "auro-combobox")),
+        { status: 200 },
+      ),
+  );
+
+  await assert.rejects(runComponent("input", {}), (err: ExitError) => {
+    assert.equal(err.code, 1);
+    return true;
+  });
+});
