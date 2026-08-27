@@ -193,6 +193,55 @@ ls node_modules/@aurodesignsystem/auro-button/custom-elements.json
 
 ---
 
+#### Automated coverage & manual scope
+
+Most of the matrix above is now locked down by the automated suite (run
+`npm test`). Those tests mock `fetch` and use on-disk `node_modules` fixtures,
+so they authoritatively cover **logic, exact messaging, exit codes, stdout vs.
+stderr separation, manifest namespacing, version comparison, and
+path-traversal safety** — deterministically and offline. Re-running those cases
+by hand adds nothing; cite the test in sign-off instead of repeating it.
+
+**Regression-covered by `npm test` — do not test manually:**
+
+| Area | Test file |
+| --- | --- |
+| Name normalization, whitespace/case, `deprecatedTag`, `renderList`, `formatDeclaration` sections | [`formatComponent.test.ts`](formatComponent.test.ts) |
+| Local-first resolution, custom `customElements` path, `..`/traversal safety, unpkg fallback, explicit-version→unpkg, `preferLocal:false`, `fetchLatestVersion` | [`fetchManifest.local.test.ts`](fetchManifest.local.test.ts) |
+| 404-vs-transient classification & messages (timeout, network error, 5xx, unparseable), `partitionOutcomes` | [`fetchManifest.test.ts`](fetchManifest.test.ts) |
+| `auro cem` success, no-manifest total failure, transient-makes-incomplete exit codes | [`cem.command.test.ts`](cem.command.test.ts) |
+| Aggregate namespacing (local refs vs. external), mixed-schema warning, default version | [`mergeManifests.test.ts`](mergeManifests.test.ts) |
+| Outdated detection incl. prerelease edges, `compareVersions`, banner text | [`outdated.test.ts`](outdated.test.ts) |
+| `auro context` → stdout, `--output` → file, `--offline` never fetches, local-outdated warns on stderr, **write-failure exit 1** | [`context.command.test.ts`](context.command.test.ts) |
+| `auro component` → stdout, `--json`, 404 exit 1, transient exit 1, no-elements exit 1, local-outdated warns on stderr | [`component.command.test.ts`](component.command.test.ts) |
+| `renderComponentRows`, pipe-escaping, `buildAuroContext` structure, `clean` helper | [`auroContext.test.ts`](auroContext.test.ts), [`clean.test.ts`](clean.test.ts) |
+
+**Manual scope — what automation structurally cannot cover.** A manual pass
+only needs the following; everything else is regression-covered above:
+
+1. **Packaging & distribution** — the [run-under-test harness](#how-to-run-the-cli-under-test)
+   (`npm pack` → `files` allow-list → `bin` → global install / `npx` →
+   `--version`/`--help` → Node `engines`) and **M0-6**. Unit tests run against
+   source, never the packed tarball, so this is the only check of the published
+   artifact.
+2. **M0-4 `llms.txt`** — lives in the docs site, not this repo.
+3. **One live-network smoke run** per command from the fixture project — confirms
+   the real unpkg/registry shapes still match what the tests mock (real
+   `auro-button` CEM, real `auro-icon` 404, real "latest" for the outdated
+   banner). Run the [status probe](#components-under-test) first.
+4. **TTY/visual rendering** — the outdated banner's colors/bold on a real TTY
+   (and that they drop when redirected), plus spinner UX. Tests assert content
+   and stream, not ANSI/TTY output.
+
+**Marginal — rely on the unit test unless verifying real sockets:** the M0-2.5
+stalled-connection 10s timeout (`nc`/blackhole + `/etc/hosts`) and the M0-3.4
+mid-run transient mix. The logic is unit-tested; the elaborate repro only adds
+value if you specifically want to confirm the real `AbortSignal` against a live
+silent socket. Individual cases below are annotated **[Regression-covered]**,
+**[Manual]**, or **[Marginal]** accordingly.
+
+---
+
 #### M0-1 — `auro context`
 
 Primes an AI assistant with a high-level Auro overview. The Component Reference
@@ -208,7 +257,7 @@ component not on its latest published release is reported to **stderr**.
 > not the CLI repo root (which does not install Auro components). Tests that only
 > exercise the unpkg fallback can run from any empty dir.
 
-##### M0-1.1 Print to stdout (online, no local installs)
+##### M0-1.1 Print to stdout (online, no local installs) — [Regression-covered]
 
 1. From an empty dir (no Auro components in `./node_modules`), run: `auro context`
 2. **Expect:**
@@ -222,7 +271,7 @@ component not on its latest published release is reported to **stderr**.
      `Checking for newer component releases...` spinner does not appear).
    - Exit code `0` (`echo $?`).
 
-##### M0-1.2 Write to a file
+##### M0-1.2 Write to a file — [Regression-covered]
 
 1. Run: `auro context --output AURO_CONTEXT.md`
 2. **Expect:**
@@ -232,7 +281,7 @@ component not on its latest published release is reported to **stderr**.
    - Exit code `0`.
 3. Also verify `-o` short flag: `auro context -o /tmp/auro-context.md`.
 
-##### M0-1.3 Local enrichment + outdated-release check
+##### M0-1.3 Local enrichment + outdated-release check — [Regression-covered; banner colors/TTY → Manual]
 
 Run from the [fixture project](#local-resolution-fixture-project) (has ≥1 Auro
 component installed, at least one intentionally behind its latest release).
@@ -269,7 +318,7 @@ component installed, at least one intentionally behind its latest release).
      `All installed Auro components are on the latest release.` (no banner).
    - Exit code `0`.
 
-##### M0-1.4 Offline mode (`--offline`)
+##### M0-1.4 Offline mode (`--offline`) — [Regression-covered]
 
 1. From the fixture project, run: `auro context --offline`
 2. **Expect:**
@@ -291,7 +340,12 @@ component installed, at least one intentionally behind its latest release).
 3. Sanity-check true offline: disable the network and re-run `auro context
    --offline` — behavior is unchanged (no hangs, no transient errors).
 
-##### M0-1.5 File write failure
+##### M0-1.5 File write failure — [Regression-covered]
+
+> **Regression-covered — skip manually.** `test/context.command.test.ts`
+> ("exits 1 with a write-failure message when the output path is unwritable")
+> drives an unwritable `--output` path and asserts the `Failed to write context`
+> message plus exit code `1`. Run via `npm test`.
 
 1. Run with an unwritable output path, e.g.
    `auro context --output /nonexistent-dir/ctx.md`
@@ -316,7 +370,7 @@ from unpkg and shows `(unpkg)`.
 > `--tag`/version forces an unpkg fetch, and unpkg already serves latest, so
 > neither path warns.
 
-##### M0-2.1 Basic lookup + name normalization (unpkg)
+##### M0-2.1 Basic lookup + name normalization (unpkg) — [Regression-covered; live unpkg → Manual smoke]
 
 Run from a dir with **no** Auro components installed so resolution goes to unpkg.
 All three must resolve to the same component:
@@ -338,7 +392,7 @@ auro component @aurodesignsystem/auro-button
 - Exit code `0`.
 - Also confirm whitespace/case tolerance: `auro component "  Button  "` works.
 
-##### M0-2.2a Local-first resolution
+##### M0-2.2a Local-first resolution — [Regression-covered]
 
 Run from the [fixture project](#local-resolution-fixture-project) with
 `@aurodesignsystem/auro-button` installed.
@@ -353,7 +407,7 @@ Run from the [fixture project](#local-resolution-fixture-project) with
    - Exit code `0`.
 3. Contrast: run the same command from an empty dir → origin is `(unpkg)`.
 
-##### M0-2.2b Outdated local install warning
+##### M0-2.2b Outdated local install warning — [Regression-covered; banner colors/TTY → Manual]
 
 Run from the [fixture project](#local-resolution-fixture-project), which pins
 `@aurodesignsystem/auro-button@12.3.0` (deliberately behind its latest release).
@@ -387,7 +441,7 @@ Run from the [fixture project](#local-resolution-fixture-project), which pins
      unpkg fetch (`(unpkg)`), so no banner appears.
 4. Exit code `0` in all cases (an outdated install is advisory, not an error).
 
-##### M0-2.2 `--json` output
+##### M0-2.2 `--json` output — [Regression-covered]
 
 1. Run: `auro component auro-button --json`
 2. **Expect:**
@@ -397,7 +451,7 @@ Run from the [fixture project](#local-resolution-fixture-project), which pins
    - Each element in the array has `customElement: true` and a `tagName`.
    - Exit code `0`.
 
-##### M0-2.3 `--tag` / version selection (always unpkg)
+##### M0-2.3 `--tag` / version selection (always unpkg) — [Regression-covered]
 
 An explicit `--tag`/version bypasses local resolution and always fetches from
 unpkg (the installed copy may not match the requested ref).
@@ -408,7 +462,7 @@ unpkg (the installed copy may not match the requested ref).
    that version's manifest; success line shows `(unpkg)` — **even when run from
    the fixture project** where a local copy exists; exit code `0`.
 
-##### M0-2.4 Component with no published manifest (genuine 404)
+##### M0-2.4 Component with no published manifest (genuine 404) — [Regression-covered; live auro-icon → Manual smoke]
 
 Use the no-CEM component: **`auro-icon`** (it ships as a package but publishes no
 `custom-elements.json`).
@@ -419,7 +473,7 @@ Use the no-CEM component: **`auro-icon`** (it ships as a package but publishes n
      `No custom-elements.json published for @aurodesignsystem/auro-icon. It may not exist or may not publish a manifest yet.`
    - Exit code `1` (`echo $?`).
 
-##### M0-2.5 Transient failure vs. 404 (distinct messaging)
+##### M0-2.5 Transient failure vs. 404 (distinct messaging) — [Regression-covered; real stalled-socket timeout → Marginal]
 
 Proves a network failure is reported **differently** from a genuine 404 — when
 offline the CLI cannot know whether the manifest is truly absent, so it must
@@ -501,7 +555,7 @@ Custom Elements Manifest.
 > aggregate's `auro-button` modules reflect the **latest** published version,
 > not the older one pinned in the fixture.
 
-##### M0-3.1 Default aggregate build
+##### M0-3.1 Default aggregate build — [Regression-covered; live full-registry aggregate → Manual smoke]
 
 1. Run: `auro cem`
 2. **Expect:**
@@ -518,13 +572,13 @@ Custom Elements Manifest.
      `Skipped <pkg>: no custom-elements.json published`.
    - Exit code `0`.
 
-##### M0-3.2 Custom output path
+##### M0-3.2 Custom output path — [Regression-covered]
 
 1. Run: `auro cem --output dist/custom-elements.aggregate.json`
    (ensure `dist/` exists) and `auro cem -o /tmp/agg.json`.
 2. **Expect:** file written to the given path; success line names that path; exit `0`.
 
-##### M0-3.3 Mixed schema versions warning
+##### M0-3.3 Mixed schema versions warning — [Regression-covered]
 
 The warning fires only when the fetched manifests declare **more than one**
 distinct `schemaVersion`. Because `auro cem` is canonical (it always fetches the
@@ -561,7 +615,7 @@ this from the fixture — the inputs come from the live registry.
    **Expect:** all tests pass — this is the authoritative check for M0-3.3 while
    the live registry is single-schema.
 
-##### M0-3.4 Transient failures make the aggregate incomplete
+##### M0-3.4 Transient failures make the aggregate incomplete — [Marginal]
 
 Proves the command distinguishes a genuine 404 (an expected skip — not every
 package publishes a CEM) from a transient failure (network error, timeout, 5xx,
@@ -597,14 +651,14 @@ locks down both halves of this behavior with a mocked `fetch`:
 
 Run with `npm test`; **expect** all tests pass.
 
-##### M0-3.5 Total failure
+##### M0-3.5 Total failure — [Regression-covered; live offline → Marginal]
 
 1. Run fully offline: `auro cem`
 2. **Expect:** `No component manifests could be fetched.`; exit code `1`.
 
 ---
 
-#### M0-4 — `llms.txt` discoverability
+#### M0-4 — `llms.txt` discoverability — [Manual]
 
 The Auro docs site publishes `public/llms.txt` per the
 [llms.txt spec](https://llmstxt.org/). No CLI command runs this; verify the file
@@ -625,7 +679,7 @@ is present and discoverable.
 
 ---
 
-#### M0-5 — Graceful skip for packages shipping no CEM
+#### M0-5 — Graceful skip for packages shipping no CEM — [Regression-covered; live smoke → Manual]
 
 Confirms the system treats a missing manifest as an expected, handled case —
 never a crash. The no-CEM component under test is **`auro-icon`** (a shipping
@@ -646,7 +700,7 @@ re-confirm via the probe in § Components under test).
 
 ---
 
-#### M0-6 — Release installable / npx-able (zero setup)
+#### M0-6 — Release installable / npx-able (zero setup) — [Manual]
 
 Validates the "done when" bar: the published CLI runs with zero local setup.
 Run **after** PR #302 is merged and a release is cut.
@@ -669,13 +723,24 @@ Run **after** PR #302 is merged and a release is cut.
 
 ### Sign-off checklist (PT-M0 / AB#1628540)
 
-- [ ] M0-1 `auro context` — stdout, `--output`, local enrichment + outdated check, `--offline`, write-failure
-- [ ] M0-2 `auro component` — normalization, local-first vs unpkg origin, outdated-install banner (local only), `--json`, `--tag` (forces unpkg), 404, transient
-- [ ] M0-3 `auro cem` — default build (canonical/latest, ignores local), custom output, incomplete/total failure
-- [ ] M0-4 `llms.txt` present and discoverable
-- [ ] M0-5 Graceful no-CEM skip verified (cem + component + unknown name)
-- [ ] M0-6 Published CLI verified via `npx` and global install
+**Automated — one check covers the bulk of the matrix:**
+
+- [ ] `npm test` passes (green run signs off every **[Regression-covered]** case
+      above — M0-1.1–1.5, M0-2.1–2.5 logic, M0-3.1–3.5 logic, M0-5 logic)
+
+**Manual pass — only what automation can't reach:**
+
+- [ ] Packaging & distribution: `npm pack` `files` allow-list + `bin`, global
+      install / `npx`, `--version`/`--help`, Node `engines` (harness + **M0-6**)
+- [ ] **M0-4** `llms.txt` present and discoverable (docs site)
+- [ ] One live-network smoke run per command from the fixture project
+      (real unpkg CEM, real `auro-icon` 404, real "latest" for the banner)
+- [ ] TTY/visual: outdated banner colors/bold on a real TTY, and that they drop
+      when stderr is redirected (M0-1.3 / M0-2.2b)
 - [ ] Environment (SHA, Node, OS, network) recorded for the run
+
+**Marginal (optional):** M0-2.5 real stalled-socket timeout, M0-3.4 mid-run
+transient mix — run only to confirm real-socket behavior beyond the unit tests.
 
 ---
 
