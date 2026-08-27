@@ -491,9 +491,35 @@ Spec handed to step 6: point `process.cwd()` at a tempCwd staged via
      cover currently-installed components, so the grounding files shrink to the
      remaining set. Add-path + same-deps idempotence was already covered by the
      step-6 command test.
-8. **Tests** — close the fixture-dependent gaps (real detection, monorepo subpaths,
-   dedupe). Most unit suites are already written alongside steps 1–5; this
-   completes the suite (see below).
+8. **Tests. ✅ DONE.** — close the fixture-dependent gaps (real detection, monorepo
+   subpaths, dedupe). Most unit suites were written alongside steps 1–5; this step
+   audited the full suite against the ticket's enumerated test list (below) and
+   confirmed all twelve cases are covered by real assertions, not incidental
+   touches:
+   - **Detection / scoping / aggregated-CEM (1–4):** [detectInstalled.test.ts](../test/detectInstalled.test.ts)
+     (node_modules scan, not-installed + no-manifest exclusion, pinned versions) and
+     [resolver.test.ts](../test/resolver.test.ts) (`resolveInstalled` enumerates every
+     monorepo component with per-component subpath imports + a shared version;
+     an uninstalled catalog package is excluded).
+   - **Dedupe (5):** [resolver.test.ts](../test/resolver.test.ts) (`duplicates` record,
+     first-detected wins) + [init.command.test.ts](../test/init.command.test.ts)
+     (end-to-end "registered by multiple installed packages" warning, grounded once).
+   - **Regeneration / CLAUDE.md / prefix (6–8, 11–12):**
+     [init.command.test.ts](../test/init.command.test.ts) (remove-a-dependency regen,
+     mixed-prefix confirm/decline/CI-fail) + [registry.test.ts](../test/registry.test.ts)
+     (`planTagResolution` precedence, bare-`auro-*` warning) +
+     [init.format.test.ts](../test/init.format.test.ts) (frozen thin `@AGENTS.md`).
+   - **Custom-registration precedence + inference (9–10):**
+     [registry.test.ts](../test/registry.test.ts) (config → scan → default ordering,
+     `inferPrefixFromTag`, majority suggestion) + the end-to-end AST-scan warn/skip
+     test in [init.command.test.ts](../test/init.command.test.ts).
+   - **Gap closed:** the enumerated "installed-version resolution — never `latest`"
+     case (item 2) was only proven *indirectly* (tests required a version captured
+     from a local `package.json` and excluded network-sourced outcomes). Added an
+     explicit test to [detectInstalled.test.ts](../test/detectInstalled.test.ts) —
+     *"detectInstalled pins the installed package.json version, never 'latest'"* —
+     asserting the resolved version equals the installed semver and is never the
+     `latest` dist-tag. Full suite **151/151**, `tsc`/biome clean, `npm run build` OK.
 9. **Manual verification** — extend [test/manual-testing-ai-tooling.md](../test/manual-testing-ai-tooling.md)
    with an init section run against a real project (incl. a formkit install and a
    project with existing custom registrations).

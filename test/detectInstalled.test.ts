@@ -80,6 +80,36 @@ test("detectInstalled scans node_modules and never hits the network", async (t) 
   assert.ok(!byPkg.has(ICON), "a package that isn't installed is excluded");
 });
 
+test("detectInstalled pins the installed package.json version, never 'latest'", async (t) => {
+  const cwd = await tempCwd(t);
+  // The installed package.json carries an exact semver — that is what must be
+  // captured. `latest` is an npm dist-tag, never a resolved installed version.
+  await installLocalPackage(
+    cwd,
+    BUTTON,
+    "12.3.0",
+    elementManifest("auro-button"),
+  );
+  t.mock.method(process, "cwd", () => cwd);
+  t.mock.method(globalThis, "fetch", async () => {
+    throw new Error("detectInstalled must not touch the network");
+  });
+
+  const installed = await detectInstalled([BUTTON]);
+
+  assert.equal(installed.length, 1);
+  assert.equal(
+    installed[0].version,
+    "12.3.0",
+    "the resolved version is the installed semver from package.json",
+  );
+  assert.notEqual(
+    installed[0].version,
+    "latest",
+    "a resolved version is never the npm dist-tag",
+  );
+});
+
 test("detectInstalled excludes a package installed without a manifest", async (t) => {
   const cwd = await tempCwd(t);
   // Installed (package.json present) but ships no custom-elements.json.
