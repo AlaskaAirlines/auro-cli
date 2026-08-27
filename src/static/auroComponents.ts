@@ -5,7 +5,14 @@
  * this list can safely include components ahead of their CEM adoption.
  *
  * Keep this list in sync with the components published under the
- * `@aurodesignsystem/` npm scope.
+ * `@aurodesignsystem/` npm scope. It intentionally includes the **legacy
+ * standalone** form packages (`auro-input`, `auro-select`, `auro-combobox`,
+ * `auro-menu`, `auro-checkbox`, `auro-radio`, `auro-datepicker`, `auro-dropdown`,
+ * `auro-form`) that `auro-formkit` later absorbed: a consumer may still have a
+ * standalone installed alongside `auro-formkit`, and both register the same
+ * `auro-*` tag. `resolveComponents` detects that overlap and grounds the tag once
+ * (warning which packages collide) — so the legacy packages must be candidates for
+ * the overlap to be seen at all.
  */
 export const AURO_COMPONENT_PACKAGES = [
   "@aurodesignsystem/auro-accordion",
@@ -18,20 +25,29 @@ export const AURO_COMPONENT_PACKAGES = [
   "@aurodesignsystem/auro-button",
   "@aurodesignsystem/auro-card",
   "@aurodesignsystem/auro-carousel",
+  "@aurodesignsystem/auro-checkbox",
+  "@aurodesignsystem/auro-combobox",
+  "@aurodesignsystem/auro-datepicker",
   "@aurodesignsystem/auro-datetime",
   "@aurodesignsystem/auro-dialog",
   "@aurodesignsystem/auro-drawer",
+  "@aurodesignsystem/auro-dropdown",
   "@aurodesignsystem/auro-flight",
   "@aurodesignsystem/auro-flightline",
+  "@aurodesignsystem/auro-form",
   "@aurodesignsystem/auro-formkit",
   "@aurodesignsystem/auro-header",
   "@aurodesignsystem/auro-hyperlink",
   "@aurodesignsystem/auro-icon",
+  "@aurodesignsystem/auro-input",
   "@aurodesignsystem/auro-loader",
   "@aurodesignsystem/auro-lockup",
+  "@aurodesignsystem/auro-menu",
   "@aurodesignsystem/auro-nav",
   "@aurodesignsystem/auro-pane",
   "@aurodesignsystem/auro-popover",
+  "@aurodesignsystem/auro-radio",
+  "@aurodesignsystem/auro-select",
   "@aurodesignsystem/auro-sidenav",
   "@aurodesignsystem/auro-skeleton",
   "@aurodesignsystem/auro-slideshow",

@@ -209,6 +209,16 @@ test("warns when a tag is registered by more than one installed package", async 
   assert.match(err, /registered by multiple installed packages/u);
   assert.match(err, /auro-button/u);
   assert.match(err, /auro-card/u);
+
+  // The conflict is grounded once (first-detected package wins), not once per
+  // registering package — the generator emits exactly one API section for it.
+  const agents = await readOutput(cwd, "AGENTS.md");
+  const sections = agents.match(/^### `<myapp-widget>`$/gmu) ?? [];
+  assert.equal(
+    sections.length,
+    1,
+    "the duplicated tag is grounded exactly once in AGENTS.md",
+  );
 });
 
 test("regeneration is idempotent and reuses the persisted default", async (t) => {
