@@ -8,10 +8,34 @@ import {
   ExitError,
   elementManifest,
   installLocalPackage,
+  installRealPackage,
   tempCwd,
 } from "./support.ts";
 
 const PKG = "@aurodesignsystem/auro-button";
+
+/** A monorepo-style aggregate manifest documenting several elements at once. */
+function aggregateManifest(...tagNames: string[]): unknown {
+  return {
+    schemaVersion: "1.0.0",
+    modules: tagNames.map((tagName) => ({
+      kind: "javascript-module",
+      path: `${tagName}.js`,
+      declarations: [
+        {
+          kind: "class",
+          name: tagName
+            .split("-")
+            .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+            .join(""),
+          tagName,
+          customElement: true,
+          description: `The ${tagName} element.`,
+        },
+      ],
+    })),
+  };
+}
 
 test("prints the formatted API to stdout on an unpkg hit", async (t) => {
   const cwd = await tempCwd(t);
@@ -153,4 +177,136 @@ test("a locally installed but outdated component warns on stderr, API on stdout"
     1,
     "only the registry lookup fetched",
   );
+});
+
+test("a legacy form component not installed locally resolves from the monorepo", async (t) => {
+  const cwd = await tempCwd(t); // empty → nothing installed
+  t.mock.method(process, "cwd", () => cwd);
+  t.mock.method(process, "exit", () => {
+    throw new Error("should not exit on success");
+  });
+  const stdout = captureWrite(t, process.stdout);
+  const stderr = captureError(t);
+  // The only network fetch is the monorepo aggregate CEM (which ships several
+  // form elements); serving it also proves the request targets auro-formkit.
+  const fetchMock = t.mock.method(globalThis, "fetch", async (url: string) => {
+    assert.match(
+      String(url),
+      /auro-formkit/,
+      "fetches the monorepo, not the standalone",
+    );
+    return new Response(
+      JSON.stringify(aggregateManifest("auro-input", "auro-select")),
+      { status: 200 },
+    );
+  });
+
+  await runComponent("input", {});
+
+  const out = stdout();
+  assert.match(out, /auro-input/, "the requested element renders");
+  assert.match(
+    out,
+    /import "@aurodesignsystem\/auro-formkit\/auro-input";/,
+    "install snippet imports the formkit subpath",
+  );
+  assert.match(out, /npm i @aurodesignsystem\/auro-formkit\n/);
+  assert.doesNotMatch(
+    out,
+    /auro-select/,
+    "the aggregate CEM is filtered down to the one requested tag",
+  );
+  assert.match(
+    stderr(),
+    /now ships in @aurodesignsystem\/auro-formkit/,
+    "a redirect note explains the monorepo source",
+  );
+  assert.equal(
+    fetchMock.mock.callCount(),
+    1,
+    "only the monorepo manifest fetched",
+  );
+});
+
+test("a legacy form component installed as a standalone is read locally, not redirected", async (t) => {
+  const cwd = await tempCwd(t);
+  await installLocalPackage(
+    cwd,
+    "@aurodesignsystem/auro-input",
+    "9.0.0",
+    elementManifest("auro-input"),
+  );
+  t.mock.method(process, "cwd", () => cwd);
+  t.mock.method(process, "exit", () => {
+    throw new Error("should not exit on success");
+  });
+  const stdout = captureWrite(t, process.stdout);
+  const stderr = captureError(t);
+  // Manifest is read locally; the only fetch is the registry staleness check.
+  const fetchMock = t.mock.method(
+    globalThis,
+    "fetch",
+    async () =>
+      new Response(JSON.stringify({ version: "9.0.0" }), { status: 200 }),
+  );
+
+  await runComponent("input", {});
+
+  const out = stdout();
+  assert.match(
+    out,
+    /npm i @aurodesignsystem\/auro-input/,
+    "an installed standalone is shown as-is",
+  );
+  assert.match(out, /import "@aurodesignsystem\/auro-input";/);
+  assert.doesNotMatch(out, /auro-formkit/, "no monorepo redirect");
+  assert.doesNotMatch(stderr(), /now ships in/, "no redirect note");
+  for (const call of fetchMock.mock.calls) {
+    assert.doesNotMatch(
+      String(call.arguments[0]),
+      /unpkg|auro-formkit/,
+      "no manifest fetch — the local copy was used",
+    );
+  }
+});
+
+test("a legacy form component resolves from a locally installed monorepo, filtered to its tag", async (t) => {
+  const cwd = await tempCwd(t);
+  await installRealPackage(cwd, "auro-formkit"); // 20 elements, no standalone
+  t.mock.method(process, "cwd", () => cwd);
+  t.mock.method(process, "exit", () => {
+    throw new Error("should not exit on success");
+  });
+  const stdout = captureWrite(t, process.stdout);
+  const stderr = captureError(t);
+  // Local read for the manifest; registry latest kept below the installed 6.1.0
+  // so no outdated banner clouds the assertions.
+  const fetchMock = t.mock.method(
+    globalThis,
+    "fetch",
+    async () =>
+      new Response(JSON.stringify({ version: "0.0.0" }), { status: 200 }),
+  );
+
+  await runComponent("input", {});
+
+  const out = stdout();
+  assert.match(
+    out,
+    /auro-input/,
+    "the requested element renders from local formkit",
+  );
+  assert.doesNotMatch(
+    out,
+    /auro-select/,
+    "the 20-element aggregate is filtered to the one requested tag",
+  );
+  assert.match(stderr(), /now ships in @aurodesignsystem\/auro-formkit/);
+  for (const call of fetchMock.mock.calls) {
+    assert.doesNotMatch(
+      String(call.arguments[0]),
+      /unpkg/,
+      "the manifest came from the local install, not unpkg",
+    );
+  }
 });

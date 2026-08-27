@@ -63,10 +63,28 @@ export function renderList(rows: Array<[string, string]>): string {
     .join("\n");
 }
 
+/** Overrides for the `Install:` lines when the import differs from the header package. */
+export interface FormatDeclarationOptions {
+  /** Package to `npm i` (defaults to the header `pkg`). */
+  installPkg?: string;
+  /** Module specifier to `import` (defaults to the header `pkg`). */
+  importSpecifier?: string;
+}
+
 /**
- * Format one custom-element declaration into a readable summary.
+ * Format one custom-element declaration into a readable summary. `pkg` heads the
+ * declaration and drives the `Install:` lines by default; when the element is
+ * fetched from a monorepo that re-exports it under a subpath (e.g. a legacy form
+ * component now served by `@aurodesignsystem/auro-formkit`), pass `installPkg` /
+ * `importSpecifier` so the install snippet points at the package to install and the
+ * exact subpath to import.
  */
-export function formatDeclaration(pkg: string, decl: CemDeclaration): string {
+export function formatDeclaration(
+  pkg: string,
+  decl: CemDeclaration,
+  options: FormatDeclarationOptions = {},
+): string {
+  const { installPkg = pkg, importSpecifier = pkg } = options;
   const lines: string[] = [];
 
   lines.push(`${decl.tagName}  (${pkg})`);
@@ -81,8 +99,8 @@ export function formatDeclaration(pkg: string, decl: CemDeclaration): string {
 
   lines.push("");
   lines.push("Install:");
-  lines.push(`  npm i ${pkg}`);
-  lines.push(`  import "${pkg}";`);
+  lines.push(`  npm i ${installPkg}`);
+  lines.push(`  import "${importSpecifier}";`);
 
   lines.push(...apiBodyLines(decl));
 

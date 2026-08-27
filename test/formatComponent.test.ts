@@ -116,6 +116,26 @@ test("formatDeclaration renders every section with counts and install snippet", 
   assert.match(out, /CSS Custom Properties \(1\):/);
 });
 
+test("formatDeclaration points install/import at an overridden package and subpath", () => {
+  const decl: CemDeclaration = {
+    kind: "class",
+    name: "AuroInput",
+    tagName: "auro-input",
+    customElement: true,
+  };
+
+  // A legacy form component served from the auro-formkit monorepo: install the
+  // monorepo package, import the per-component subpath.
+  const out = formatDeclaration("@aurodesignsystem/auro-formkit", decl, {
+    installPkg: "@aurodesignsystem/auro-formkit",
+    importSpecifier: "@aurodesignsystem/auro-formkit/auro-input",
+  });
+
+  assert.match(out, /auro-input {2}\(@aurodesignsystem\/auro-formkit\)/);
+  assert.match(out, /npm i @aurodesignsystem\/auro-formkit\n/);
+  assert.match(out, /import "@aurodesignsystem\/auro-formkit\/auro-input";/);
+});
+
 test("formatDeclaration omits the CSS sections when empty", () => {
   const decl: CemDeclaration = {
     name: "AuroIcon",
