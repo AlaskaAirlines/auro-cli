@@ -445,12 +445,38 @@ Spec handed to step 6: point `process.cwd()` at a tempCwd staged via
 
 **Needs the fixtures / a merged base:**
 
-6. **Wire `src/commands/init.ts`** — orchestrate detect → resolve → resolve tags →
-   generate → write; add `--prefix`, and an `--offline`-style flag if kept;
-   register in [index.ts](../src/index.ts). First point real detection and
-   monorepo enumeration (task #6) run end-to-end against installed packages.
+6. **Wire `src/commands/init.ts`. ✅ DONE.**
+   - **Delivered:** [init.ts](../src/commands/init.ts) — `runInit(options)` +
+     commander registration (registered in [index.ts](../src/index.ts)),
+     mirroring the `context.ts` conventions (ora spinners, stderr for advisories,
+     `process.exit(1)` on failure). Pipeline: `resolveInstalled()` (default
+     candidate set, local-only) → empty ⇒ warn + exit 0 (never clobbers existing
+     files) → `loadConfig(cwd)` (`RegistryError` on malformed/unsupported-version
+     ⇒ stderr + exit 1) → `scanProject(cwd)` → `planTagResolution` once. **Two-phase
+     prefix resolution:** when `--prefix` is absent *and* the plan reports
+     `needsDefaultPrefix`/`mixedPrefixes`, a **non-interactive** run (`!stdin.isTTY`
+     ∨ `CI` ∨ `--non-interactive`/`--yes`) fails cleanly with an actionable
+     `--prefix` message + non-zero exit, while an **interactive** run prompts
+     (inquirer `confirm` the majority `suggestedDefault`, else `input`) and
+     **re-plans** with the chosen prefix. Then writes `AGENTS.md`/`CLAUDE.md` via
+     `groundingFiles` + persists `saveConfig` (try/catch ⇒ exit 1), and surfaces
+     `plan.warnings` + resolver `duplicates` on stderr. Never touches consumer
+     source or `.gitignore`. No `--offline` flag — detection is already local-only.
+     Options: `--prefix <prefix>`, `--non-interactive`, `--yes`. Tests
+     [init.command.test.ts](../test/init.command.test.ts) (7 offline: real-fixture
+     write of the 21-component `AGENTS.md`+config with `--prefix`, subpath import;
+     nothing-installed warn+no-write; `needsDefaultPrefix` non-interactive exit 1;
+     config-override precedence; malformed-config exit 1; duplicate-tag warning;
+     byte-identical idempotent regeneration reusing the persisted default). Full
+     suite 117/117, `tsc`/biome clean.
+   - **Spec handed to step 7:** regeneration already proven idempotent by the
+     command test; step 7 extends it to the add/**remove**-a-dependency path
+     (re-run after changing installed packages updates the files from the
+     persisted config). The interactive prompt/confirm branch is deferred to the
+     step-9 manual verification (the test runner has no TTY).
 7. **Regeneration** — verify re-run after adding/removing a dep updates files
-   idempotently from persisted config.
+   idempotently from persisted config. (Add-path + same-deps idempotence covered
+   by the step-6 command test; **remove**-a-dependency path still to verify.)
 8. **Tests** — close the fixture-dependent gaps (real detection, monorepo subpaths,
    dedupe). Most unit suites are already written alongside steps 1–5; this
    completes the suite (see below).
