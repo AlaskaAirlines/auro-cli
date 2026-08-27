@@ -135,8 +135,12 @@ export async function runContext(options: ContextOptions): Promise<void> {
       // `enriched` counts component descriptions (one package can export many),
       // while `local.size` counts packages — label each so the two aren't
       // conflated (e.g. a single package exporting 6 components reads as "6").
+      // With nothing installed, enrichment came entirely from unpkg; saying
+      // "0 package(s) from local node_modules" would read as a contradiction.
       spinner.succeed(
-        `Enriched ${enriched} component description(s); ${local.size} package(s) resolved from local node_modules.`,
+        local.size > 0
+          ? `Enriched ${enriched} component description(s); ${local.size} package(s) resolved from local node_modules.`
+          : `Enriched ${enriched} component description(s) from unpkg.`,
       );
     } else if (resolved > 0) {
       // Manifests were fetched but none documented an element description — the

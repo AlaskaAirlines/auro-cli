@@ -262,9 +262,9 @@ component not on its latest published release is reported to **stderr**.
 1. From an empty dir (no Auro components in `./node_modules`), run: `auro context`
 2. **Expect:**
    - Spinner reports `Resolving component manifests...`
-   - On success, spinner shows
-     `Enriched N component description(s); M package(s) resolved from local node_modules.`
-     — here `M` is `0` (nothing installed) and `N` reflects unpkg-enriched rows.
+   - On success, spinner shows `Enriched N component description(s) from unpkg.`
+     — with nothing installed, all `N` enriched rows come from unpkg (the
+     message omits the local-package count rather than reporting `0`).
    - A full Markdown document is written to stdout (component list, package
      names, usage patterns, coding rules, and a Component Reference table).
    - Because nothing is installed, **no** outdated-release check runs (the
