@@ -331,11 +331,33 @@ install (step 6) gates end-to-end verification; the admin step gates on merge.
      installed set (`{ pkg, version, manifest }`) the resolver normalises into
      `ResolvedComponent[]`; `buildAggregateManifest()` is the fetch → merge → partition
      pipeline the resolver wraps for the aggregated-CEM (monorepo) path.
-3. **Build `resolver.ts` logic** — normalise single + aggregated CEM into
-   `ResolvedComponent[]`, derive per-component subpath import paths, capture shared
-   version, flag cross-package duplicate tags. Test against a **synthetic**
+3. ✅ **DONE — Build `resolver.ts` logic** — normalise single + aggregated CEM
+   into `ResolvedComponent[]`, derive per-component subpath import paths, capture
+   shared version, flag cross-package duplicate tags. Test against a **synthetic**
    standalone package and a **synthetic** formkit-style aggregate. (The live
    "detect what's really installed" smoke test is deferred to step 6.)
+   - **Delivered:** [resolver.ts](../src/init/resolver.ts) — the isolated data
+     seam. `resolveComponents(installed)` (pure) walks each package's manifest,
+     emits one `ResolvedComponent` per registered element
+     (`{ pkg, version, tagName, declaration, importPath, isMonorepo }`), and
+     returns a `ResolveResult` with a `duplicates` list of tags registered by more
+     than one installed package. A package is treated as multi-component when its
+     manifest registers >1 element; those import via the subpath export
+     `<pkg>/<tag>` (e.g. `@aurodesignsystem/auro-formkit/auro-input`), standalones
+     from the package root. `tagName` is the **canonical bare `auro-*`** — prefixes
+     are applied later by the generator, never here. `resolveInstalled(packages?)`
+     is the thin async wrapper (delegates to `detectInstalled` → `resolveComponents`).
+     Deliberately walks per-package manifests rather than `mergeManifests` (which
+     the `cem` command uses) so each component keeps its package's pinned version.
+     Tests [resolver.test.ts](../test/resolver.test.ts) (6 offline/synthetic:
+     standalone root import, monorepo enumeration + subpaths + shared version,
+     untagged-base-class exclusion, cross-package duplicate flagging, empty input,
+     and a `resolveInstalled` node_modules integration asserting zero fetch calls).
+     Full suite 86/86, `tsc`/biome clean.
+   - **Spec handed to step 4:** the generator consumes `ResolvedComponent[]` +
+     resolved tags (a `Map<canonical-tag, custom-tag>` from `registry.ts`); it uses
+     each component's `importPath` for the `import` line and `declaration` for the
+     API body, and must surface `duplicates` as a dedupe warning.
 4. **Build `generator.ts`** — render `AGENTS.md`/`CLAUDE.md` from resolved
    components using prefixed tags; make import/registration lines subpath- and
    prefix-aware; structure for future targets. **The generator takes resolved
