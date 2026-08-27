@@ -429,10 +429,19 @@ install (step 6) gates end-to-end verification; the admin step gates on merge.
      surfaces `warnings` (plus the resolver's `duplicates`) to the user. Only a
      plan whose `needsDefaultPrefix` is `false` is persisted.
 
-**Gate — install real component fixtures.** Add a real standalone `auro-*` plus
-`@aurodesignsystem/auro-formkit@6.1.0` to a fixture project / devDeps. Only
-`auro-config` and `auro-library` (neither a component) are installed today, so
-nothing below can be verified end-to-end until this lands.
+**Gate — install real component fixtures. ✅ DONE.** Vendored the real published
+`@aurodesignsystem/auro-button@12.3.2` (standalone, 1 tag) and
+`@aurodesignsystem/auro-formkit@6.1.0` (monorepo, 20 tags) into
+[test/fixtures/packages/](../test/fixtures/packages/) — each package's real
+`package.json` plus its custom-elements.json (losslessly minified: button 18 KB,
+formkit 411 KB). Rather than commit a gitignored `node_modules/`, a new
+`installRealPackage(cwd, name)` helper in [test/support.ts](../test/support.ts)
+copies a fixture into `<cwd>/node_modules/<pkg>` at runtime (offline,
+deterministic), mirroring `installLocalPackage`. Verified end-to-end against
+`resolveInstalled`: 21 components (1 standalone button + 20 monorepo formkit),
+correct `isMonorepo`/subpath-import/shared-version, no false duplicates.
+Spec handed to step 6: point `process.cwd()` at a tempCwd staged via
+`installRealPackage` to drive real detection.
 
 **Needs the fixtures / a merged base:**
 
