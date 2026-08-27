@@ -93,6 +93,83 @@ async function reportOutdated(local: Map<string, string>): Promise<void> {
   console.error(renderOutdatedBanner(outdated));
 }
 
+/** Options accepted by the `context` action. */
+export interface ContextOptions {
+  output?: string;
+  offline?: boolean;
+}
+
+/**
+ * Generate the Auro AI-assistant context document and either write it to
+ * `options.output` or stream it to stdout. With `--offline`, only locally
+ * installed manifests (and the built-in table) are used; online, manifests are
+ * enriched from local node_modules or unpkg and outdated installs are flagged on
+ * stderr. Exits non-zero only when writing the output file fails.
+ */
+export async function runContext(options: ContextOptions): Promise<void> {
+  const online = !options.offline;
+
+  const spinner = ora(
+    online
+      ? "Resolving component manifests..."
+      : "Reading installed component manifests...",
+  ).start();
+  const { rows, enriched, local } = await buildComponentTable(online);
+  const context = buildAuroContext(rows);
+
+  if (online) {
+    // Online success is measured by descriptions enriched from any source
+    // (local or unpkg); a run that resolves nothing falls back to the table.
+    if (enriched > 0) {
+      spinner.succeed(
+        `Enriched ${enriched} component description(s) (${local.size} from local node_modules).`,
+      );
+    } else {
+      spinner.warn(
+        "No manifests available; using the built-in component table.",
+      );
+    }
+  } else {
+    // Offline success is measured by manifests *found* in node_modules, not by
+    // descriptions enriched — an installed manifest can document no element
+    // description (e.g. auro-button@12.3.0) yet is still a valid local read.
+    if (local.size > 0) {
+      spinner.succeed(
+        enriched > 0
+          ? `Read ${local.size} installed component manifest(s) from local node_modules; enriched ${enriched} description(s).`
+          : `Read ${local.size} installed component manifest(s) from local node_modules; none documented a description, using the built-in table.`,
+      );
+    } else {
+      spinner.warn(
+        "No installed component manifests found; using the built-in component table.",
+      );
+    }
+  }
+
+  if (options.output) {
+    const writeSpinner = ora(`Writing context to ${options.output}...`).start();
+    try {
+      const outputPath = path.resolve(process.cwd(), options.output);
+      await fs.writeFile(outputPath, context, "utf-8");
+      writeSpinner.succeed(`Auro context written to ${options.output}`);
+      console.log(
+        "\nPaste this file into your AI coding tool (Claude, Cursor, Copilot, etc.) to prime it on Auro components.",
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      writeSpinner.fail(`Failed to write context: ${message}`);
+      process.exit(1);
+    }
+  } else {
+    process.stdout.write(context);
+  }
+
+  // Advisory only, and needs the network — skip in offline mode.
+  if (online && local.size > 0) {
+    await reportOutdated(local);
+  }
+}
+
 export default program
   .command("context")
   .description(
@@ -107,68 +184,4 @@ export default program
     "Skip network fetches; use locally installed manifests and the built-in table",
     false,
   )
-  .action(async (options) => {
-    const online = !options.offline;
-
-    const spinner = ora(
-      online
-        ? "Resolving component manifests..."
-        : "Reading installed component manifests...",
-    ).start();
-    const { rows, enriched, local } = await buildComponentTable(online);
-    const context = buildAuroContext(rows);
-
-    if (online) {
-      // Online success is measured by descriptions enriched from any source
-      // (local or unpkg); a run that resolves nothing falls back to the table.
-      if (enriched > 0) {
-        spinner.succeed(
-          `Enriched ${enriched} component description(s) (${local.size} from local node_modules).`,
-        );
-      } else {
-        spinner.warn(
-          "No manifests available; using the built-in component table.",
-        );
-      }
-    } else {
-      // Offline success is measured by manifests *found* in node_modules, not by
-      // descriptions enriched — an installed manifest can document no element
-      // description (e.g. auro-button@12.3.0) yet is still a valid local read.
-      if (local.size > 0) {
-        spinner.succeed(
-          enriched > 0
-            ? `Read ${local.size} installed component manifest(s) from local node_modules; enriched ${enriched} description(s).`
-            : `Read ${local.size} installed component manifest(s) from local node_modules; none documented a description, using the built-in table.`,
-        );
-      } else {
-        spinner.warn(
-          "No installed component manifests found; using the built-in component table.",
-        );
-      }
-    }
-
-    if (options.output) {
-      const writeSpinner = ora(
-        `Writing context to ${options.output}...`,
-      ).start();
-      try {
-        const outputPath = path.resolve(process.cwd(), options.output);
-        await fs.writeFile(outputPath, context, "utf-8");
-        writeSpinner.succeed(`Auro context written to ${options.output}`);
-        console.log(
-          "\nPaste this file into your AI coding tool (Claude, Cursor, Copilot, etc.) to prime it on Auro components.",
-        );
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        writeSpinner.fail(`Failed to write context: ${message}`);
-        process.exit(1);
-      }
-    } else {
-      process.stdout.write(context);
-    }
-
-    // Advisory only, and needs the network — skip in offline mode.
-    if (online && local.size > 0) {
-      await reportOutdated(local);
-    }
-  });
+  .action(runContext);
