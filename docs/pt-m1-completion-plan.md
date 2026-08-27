@@ -474,9 +474,23 @@ Spec handed to step 6: point `process.cwd()` at a tempCwd staged via
      (re-run after changing installed packages updates the files from the
      persisted config). The interactive prompt/confirm branch is deferred to the
      step-9 manual verification (the test runner has no TTY).
-7. **Regeneration** — verify re-run after adding/removing a dep updates files
-   idempotently from persisted config. (Add-path + same-deps idempotence covered
-   by the step-6 command test; **remove**-a-dependency path still to verify.)
+7. **Regeneration. ✅ DONE.**
+   - **Delivered:** a `regeneration after removing a dependency` test in
+     [init.command.test.ts](../test/init.command.test.ts) closes the last
+     regeneration gap. It grounds a standalone (`auro-button`) + a monorepo
+     (`auro-formkit`) install with `--prefix myapp-`, `rm`s the monorepo package
+     from `node_modules`, then re-runs **without** `--prefix`: the persisted
+     `auro.config.json` default carries the prefix, so the run neither prompts nor
+     fails. Asserts the removed component's resolved tag (`<myapp-input>`) and its
+     install snippet are gone while the survivor (`<myapp-button>`) stays, the
+     persisted `default` is unchanged (`myapp-`), and a third run against the
+     reduced deps is byte-identical. Full suite 118/118, `tsc`/biome clean.
+   - **Behavior confirmed:** `planTagResolution` seeds `persistOverrides` from the
+     existing config, so a removed component's override lingers harmlessly in the
+     config but has no component to apply to; `resolvedTags`/`groundingFiles` only
+     cover currently-installed components, so the grounding files shrink to the
+     remaining set. Add-path + same-deps idempotence was already covered by the
+     step-6 command test.
 8. **Tests** — close the fixture-dependent gaps (real detection, monorepo subpaths,
    dedupe). Most unit suites are already written alongside steps 1–5; this
    completes the suite (see below).

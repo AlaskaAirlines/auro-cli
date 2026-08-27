@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { test } from "node:test";
@@ -204,4 +204,73 @@ test("regeneration is idempotent and reuses the persisted default", async (t) =>
 
   assert.equal(second, first, "regeneration is byte-identical");
   assert.match(second, /<myapp-button>/u);
+});
+
+test("regeneration after removing a dependency drops it and stays idempotent", async (t) => {
+  const cwd = await tempCwd(t);
+  await installRealPackage(cwd, "auro-button"); // standalone (kept)
+  await installRealPackage(cwd, "auro-formkit"); // monorepo (removed below)
+  t.mock.method(process, "cwd", () => cwd);
+  t.mock.method(process, "exit", () => {
+    throw new Error("should not exit on success");
+  });
+  captureWrite(t, process.stderr);
+  t.mock.method(globalThis, "fetch", async () => {
+    throw new Error("init must not hit the network");
+  });
+
+  // First run grounds both packages and persists the default prefix.
+  await runInit({ prefix: "myapp-" });
+  const withBoth = await readOutput(cwd, "AGENTS.md");
+  assert.match(
+    withBoth,
+    /<myapp-button>/u,
+    "standalone present before removal",
+  );
+  assert.match(
+    withBoth,
+    /<myapp-input>/u,
+    "monorepo component present before removal",
+  );
+
+  // Uninstall the monorepo package, then regenerate WITHOUT --prefix: the
+  // persisted config default carries the prefix, so it neither prompts nor fails.
+  await rm(
+    path.join(cwd, "node_modules", "@aurodesignsystem", "auro-formkit"),
+    {
+      recursive: true,
+      force: true,
+    },
+  );
+  await runInit({});
+  const afterRemoval = await readOutput(cwd, "AGENTS.md");
+
+  assert.match(
+    afterRemoval,
+    /<myapp-button>/u,
+    "remaining component still grounded",
+  );
+  // The removed component's resolved tag only appears when it is actually
+  // grounded, so its absence is the reliable removal signal. (The bare package
+  // name still appears in the frozen coding-rules boilerplate regardless.)
+  assert.doesNotMatch(
+    afterRemoval,
+    /<myapp-input>/u,
+    "removed component's tag is gone",
+  );
+  assert.doesNotMatch(
+    afterRemoval,
+    /import "@aurodesignsystem\/auro-formkit\/auro-input";/u,
+    "removed component's install snippet is gone",
+  );
+
+  // The persisted default survives the removal (its override lingers harmlessly,
+  // but no formkit component remains to apply it to).
+  const config = JSON.parse(await readOutput(cwd, "auro.config.json"));
+  assert.equal(config.init.prefix.default, "myapp-");
+
+  // A third run against the same reduced deps reproduces the document byte-for-byte.
+  await runInit({});
+  const third = await readOutput(cwd, "AGENTS.md");
+  assert.equal(third, afterRemoval, "post-removal regeneration is idempotent");
 });
