@@ -539,9 +539,24 @@ Map the ticket's enumerated test list to suites (node:test via
   and a regression test proving a settled mixed-prefix config regenerates cleanly
   (fails against the old gate, passes with the fix). Interactive branches are reached
   under the non-TTY runner via a `forceInteractive` helper + an `inquirer.prompt` mock.
-- **AST scan false-negatives** (computed/template-literal tags, Auro's
-  auto-versioned dependency tags) must warn, never guess — verify against a real
-  consumer app.
+- ✅ **AST scan false-negatives** (computed/template-literal tags, Auro's
+  auto-versioned dependency tags) must warn, never guess. **Resolved.**
+  Computed/template-literal tags (`` `${p}-x` ``, identifiers, calls) warn+skip in
+  [scanSource](../src/init/registry.ts) — never guessed. Auro's auto-versioned
+  dependency tags (`versioning.generateTag('auro-input', …)` /
+  `customElements.define(<computed>)`) are not `.register()` calls, so they are
+  never matched, grounded, or guessed (no false positive on the versioning
+  internals). A no-arg **default** `register()` (e.g. `AuroButton.register()`,
+  registering `<auro-button>`) is now detected as a distinct signal: instead of a
+  generic "non-literal" warning it emits a targeted **app-vs-grounding mismatch**
+  warning *only* when a prefix/override grounded the component under a custom tag
+  (`Update the register() call to '<myapp-button>' so your app matches AGENTS.md`) —
+  a documented refinement of the frozen "absent → skip + warn" rule (still never
+  resolves a tag from a no-arg call; warns only when actionable). Verified by a
+  real-consumer-app integration test in
+  [init.command.test.ts](../test/init.command.test.ts) exercising all three
+  patterns in one `app.js`, plus unit coverage in
+  [registry.test.ts](../test/registry.test.ts).
 - **Duplicate-tag dedupe** needs a real legacy-vs-monorepo overlap to test; may
   need a synthetic fixture if none is currently published.
 

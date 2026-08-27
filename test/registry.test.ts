@@ -84,6 +84,32 @@ test("scanSource warns rather than throwing on a syntax error", () => {
   assert.ok(Array.isArray(scan.matches) && Array.isArray(scan.warnings));
 });
 
+test("scanSource records a no-arg register() as a default registration, not a warning", () => {
+  const scan = scanSource(
+    "app.ts",
+    `import { AuroButton } from "@aurodesignsystem/auro-button";
+     AuroButton.register();`,
+  );
+  assert.deepEqual(scan.matches, [], "a no-arg call is not a static-tag match");
+  assert.deepEqual(scan.defaultRegistrations, ["AuroButton"]);
+  assert.deepEqual(scan.warnings, [], "the default tag is known, not guessed");
+});
+
+test("scanSource ignores Auro's auto-versioned dependency registration", () => {
+  const scan = scanSource(
+    "combobox.ts",
+    `import { AuroDependencyVersioning } from "@aurodesignsystem/auro-library/scripts/runtime/dependencyTagVersioning.mjs";
+     const versioning = new AuroDependencyVersioning();
+     const inputTag = versioning.generateTag("auro-input", "3.0.0", AuroInput);
+     customElements.define("auro-input-3_0_0", class extends AuroInput {});`,
+  );
+  // generateTag()/customElements.define() are not .register() — never matched,
+  // never guessed, never warned (no false positive on the versioning internals).
+  assert.deepEqual(scan.matches, []);
+  assert.deepEqual(scan.defaultRegistrations, []);
+  assert.deepEqual(scan.warnings, []);
+});
+
 // ---------------------------------------------------------------------------
 // Config IO
 // ---------------------------------------------------------------------------
@@ -303,4 +329,40 @@ test("planTagResolution: a register() that ties to no component is warned and ig
   assert.equal(plan.resolvedTags.get("auro-button"), "myapp-button");
   assert.equal(plan.warnings.length, 1);
   assert.ok(plan.warnings[0].includes("could not tie it to an installed"));
+});
+
+test("planTagResolution: a default register() grounded under a prefix warns about the mismatch", () => {
+  const components = [component("auro-button", "AuroButton")];
+  const scan = {
+    matches: [],
+    defaultRegistrations: ["AuroButton"],
+    warnings: [],
+  };
+
+  const plan = planTagResolution(components, { scan, prefix: "myapp-" });
+  assert.equal(plan.resolvedTags.get("auro-button"), "myapp-button");
+  const warning = plan.warnings.find((w) =>
+    w.includes("AuroButton.register()"),
+  );
+  assert.ok(warning, "the app-vs-grounding mismatch is surfaced");
+  assert.ok(warning?.includes("<auro-button>"), "names the default tag");
+  assert.ok(warning?.includes("<myapp-button>"), "names the grounded tag");
+});
+
+test("planTagResolution: a default register() at the bare canonical tag does not warn", () => {
+  const components = [component("auro-button", "AuroButton")];
+  const scan = {
+    matches: [],
+    defaultRegistrations: ["AuroButton"],
+    warnings: [],
+  };
+
+  // No prefix — the component keeps its bare auro-button tag, so the no-arg
+  // register() already matches the grounding and there is nothing to fix.
+  const plan = planTagResolution(components, { scan, prefix: "" });
+  assert.equal(plan.resolvedTags.get("auro-button"), "auro-button");
+  assert.ok(
+    !plan.warnings.some((w) => w.includes("AuroButton.register()")),
+    "no mismatch warning when the default tag is what we grounded",
+  );
 });
