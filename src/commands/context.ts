@@ -24,6 +24,7 @@ import { checkOutdated, renderOutdatedBanner } from "#utils/outdated.js";
  */
 async function buildComponentTable(allowNetwork: boolean): Promise<{
   rows: string;
+  resolved: number;
   enriched: number;
   local: Map<string, string>;
 }> {
@@ -39,11 +40,16 @@ async function buildComponentTable(allowNetwork: boolean): Promise<{
   );
 
   const local = new Map<string, string>();
+  let resolved = 0;
   let enriched = 0;
   for (const outcome of outcomes) {
     if (!outcome.manifest) {
       continue;
     }
+    // A manifest was fetched (local or unpkg) regardless of whether any of its
+    // declarations document a description — this is what distinguishes "found
+    // nothing" from "found manifests that happen to be undocumented".
+    resolved += 1;
     if (outcome.source === "local" && outcome.version) {
       local.set(outcome.target, outcome.version);
     }
@@ -67,7 +73,12 @@ async function buildComponentTable(allowNetwork: boolean): Promise<{
     }
   }
 
-  return { rows: renderComponentRows([...byTag.values()]), enriched, local };
+  return {
+    rows: renderComponentRows([...byTag.values()]),
+    resolved,
+    enriched,
+    local,
+  };
 }
 
 /**
@@ -114,7 +125,7 @@ export async function runContext(options: ContextOptions): Promise<void> {
       ? "Resolving component manifests..."
       : "Reading installed component manifests...",
   ).start();
-  const { rows, enriched, local } = await buildComponentTable(online);
+  const { rows, resolved, enriched, local } = await buildComponentTable(online);
   const context = buildAuroContext(rows);
 
   if (online) {
@@ -126,6 +137,13 @@ export async function runContext(options: ContextOptions): Promise<void> {
       // conflated (e.g. a single package exporting 6 components reads as "6").
       spinner.succeed(
         `Enriched ${enriched} component description(s); ${local.size} package(s) resolved from local node_modules.`,
+      );
+    } else if (resolved > 0) {
+      // Manifests were fetched but none documented an element description — the
+      // table is complete, just not enriched. Gate this on `resolved`, not
+      // `enriched`, so we don't claim "No manifests available" when some were.
+      spinner.succeed(
+        `Resolved ${resolved} component manifest(s); none documented a description, using the built-in table.`,
       );
     } else {
       spinner.warn(

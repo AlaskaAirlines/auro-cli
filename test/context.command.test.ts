@@ -77,6 +77,39 @@ test("--offline never fetches and still emits a document", async (t) => {
   assert.match(stdout(), /# Auro Design System/);
 });
 
+test("--offline reports an installed manifest that documents no description", async (t) => {
+  const cwd = await tempCwd(t);
+  const pkg = AURO_COMPONENT_PACKAGES[0];
+  // A locally installed manifest that registers an element but carries no
+  // summary/description — the local.size > 0, enriched === 0 branch. Empty
+  // strings override elementManifest's default description.
+  await installLocalPackage(
+    cwd,
+    pkg,
+    "1.0.0",
+    elementManifest("auro-accordion", { description: "", summary: "" }),
+  );
+  t.mock.method(process, "cwd", () => cwd);
+  t.mock.method(process, "exit", () => {
+    throw new Error("should not exit on success");
+  });
+  const stdout = captureWrite(t, process.stdout);
+  // ora writes its spinner frames (including the final succeed line) to stderr.
+  const stderr = captureWrite(t, process.stderr);
+  const fetchMock = t.mock.method(globalThis, "fetch", async () => {
+    throw new Error("offline mode must not hit the network");
+  });
+
+  await runContext({ offline: true });
+
+  assert.equal(fetchMock.mock.callCount(), 0);
+  assert.match(stdout(), /# Auro Design System/, "document still on stdout");
+  // Offline branch reports the count and the "no description" fallback, not the
+  // package name — the point is that it does NOT claim nothing was found.
+  assert.match(stderr(), /Read 1 installed component manifest\(s\)/);
+  assert.match(stderr(), /none documented a description/);
+});
+
 test("a locally installed outdated component warns on stderr, doc on stdout", async (t) => {
   const cwd = await tempCwd(t);
   const pkg = AURO_COMPONENT_PACKAGES[0];
