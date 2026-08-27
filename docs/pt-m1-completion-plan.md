@@ -527,9 +527,18 @@ Map the ticket's enumerated test list to suites (node:test via
   for bus-factor. **Resolved:** the `AGENTS.md` layout + rules block, `CLAUDE.md`
   thin-import, and `auro.config.json` schema are frozen and locked by fixtures/tests
   (build-order step 1). Generation logic (step 4) now builds against a fixed spec.
-- **Mixed-prefix UX** is the most intricate branch (interactive confirm vs CI
-  fail). Prompt library is resolved (reuse `inquirer`); the remaining care is
-  the non-interactive guard and clean CI failure (see Frozen decisions).
+- ✅ **Mixed-prefix UX** is the most intricate branch (interactive confirm vs CI
+  fail). **Resolved.** The decision gate in [init.ts](../src/commands/init.ts) now
+  fires only while the default is **unsettled** (no `--prefix` *and* no persisted
+  config default) — a fix for a latent bug where a committed mixed-prefix config
+  (a legitimate "honor each per-component" setup) re-triggered the prompt/CI-fail on
+  every regeneration, breaking idempotence. The branch is fully unit-covered in
+  [init.command.test.ts](../test/init.command.test.ts): non-interactive CI-fail
+  (exit 1, actionable message, no write); interactive `confirm` adopting the majority
+  default; declining `confirm` → `input` fallback; `--prefix` bypassing the decision;
+  and a regression test proving a settled mixed-prefix config regenerates cleanly
+  (fails against the old gate, passes with the fix). Interactive branches are reached
+  under the non-TTY runner via a `forceInteractive` helper + an `inquirer.prompt` mock.
 - **AST scan false-negatives** (computed/template-literal tags, Auro's
   auto-versioned dependency tags) must warn, never guess — verify against a real
   consumer app.
