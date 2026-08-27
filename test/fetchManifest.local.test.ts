@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { writeFile } from "node:fs/promises";
+import path from "node:path";
 import process from "node:process";
 import { test } from "node:test";
 import {
@@ -39,6 +41,66 @@ test("honors a package's custom customElements manifest path", async (t) => {
 
   assert.equal(result.source, "local");
   assert.equal(result.version, "1.0.0");
+});
+
+test("ignores a customElements field that escapes the package directory", async (t) => {
+  const cwd = await tempCwd(t);
+  // Legit default manifest ships at custom-elements.json...
+  await installLocalPackage(cwd, PKG, "12.3.0", elementManifest("auro-button"));
+  // ...but the package.json points customElements at a file outside the pkg dir.
+  const pkgDir = path.join(cwd, "node_modules", ...PKG.split("/"));
+  await writeFile(
+    path.join(pkgDir, "package.json"),
+    JSON.stringify({
+      name: PKG,
+      version: "12.3.0",
+      customElements: "../../../../evil.json",
+    }),
+  );
+  await writeFile(
+    path.join(cwd, "evil.json"),
+    JSON.stringify(elementManifest("evil-element")),
+  );
+  t.mock.method(process, "cwd", () => cwd);
+  t.mock.method(globalThis, "fetch", async () => {
+    throw new Error("should read the constrained default, not fetch");
+  });
+
+  const result = await fetchManifest(PKG);
+
+  assert.equal(result.source, "local");
+  // The escaping path was refused; the default custom-elements.json was read.
+  const tags = (
+    (result.manifest as { modules?: { declarations?: unknown[] }[] }).modules ??
+    []
+  )
+    .flatMap((m) => m.declarations ?? [])
+    .map((d) => (d as { tagName?: string }).tagName);
+  assert.ok(tags.includes("auro-button"), "read the package's own manifest");
+  assert.ok(!tags.includes("evil-element"), "did not read the escaping path");
+});
+
+test("a package name with .. segments never reads outside node_modules", async (t) => {
+  const cwd = await tempCwd(t);
+  // Plant a readable file above the project tree; the traversing name resolves
+  // toward it, but the guard must refuse before any read is attempted.
+  const secret = path.join(cwd, "secret.json");
+  await writeFile(secret, JSON.stringify(elementManifest("secret-element")));
+  t.mock.method(process, "cwd", () => cwd);
+  const fetchMock = t.mock.method(
+    globalThis,
+    "fetch",
+    async () => new Response(null, { status: 404 }),
+  );
+
+  // node_modules/@evil/../../secret.json would escape the project tree.
+  const result = await fetchManifest("@evil/../../secret.json", {
+    allowNetwork: false,
+  });
+
+  assert.equal(result.manifest, null, "no local read outside node_modules");
+  assert.equal(result.source, undefined);
+  assert.equal(fetchMock.mock.callCount(), 0, "offline, so no network either");
 });
 
 test("falls back to unpkg when installed but shipping no manifest", async (t) => {

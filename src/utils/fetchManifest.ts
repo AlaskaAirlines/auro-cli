@@ -59,6 +59,15 @@ function parseTarget(target: string): { pkg: string; ref?: string } {
 }
 
 /**
+ * Whether `child` resolves to `parent` itself or a path nested inside it —
+ * used to keep local reads confined to the intended directory.
+ */
+function isInside(parent: string, child: string): boolean {
+  const rel = path.relative(parent, child);
+  return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
+}
+
+/**
  * Attempt to read an installed package's manifest from the current directory's
  * `node_modules`. Returns null when the package isn't installed, or is installed
  * but ships no manifest (so the caller can fall back to unpkg). The manifest
@@ -68,7 +77,14 @@ function parseTarget(target: string): { pkg: string; ref?: string } {
 async function readLocalManifest(
   pkg: string,
 ): Promise<ManifestFetchResult | null> {
-  const pkgDir = path.join(process.cwd(), "node_modules", ...pkg.split("/"));
+  const modulesRoot = path.join(process.cwd(), "node_modules");
+  const pkgDir = path.join(modulesRoot, ...pkg.split("/"));
+  // Defense-in-depth: package names come from the curated static list or the
+  // user's own CLI argument (never untrusted network data), but a name with a
+  // `..` segment could still resolve outside node_modules — refuse it.
+  if (!isInside(modulesRoot, pkgDir)) {
+    return null;
+  }
 
   let version: string | undefined;
   let manifestRelPath = "custom-elements.json";
@@ -79,7 +95,13 @@ async function readLocalManifest(
     if (typeof pkgJson.version === "string") {
       version = pkgJson.version;
     }
-    if (typeof pkgJson.customElements === "string") {
+    // The `customElements` field comes from the installed package's own
+    // package.json; constrain it to the package directory so a malformed or
+    // hostile value can't redirect the read at a file outside the package.
+    if (
+      typeof pkgJson.customElements === "string" &&
+      isInside(pkgDir, path.resolve(pkgDir, pkgJson.customElements))
+    ) {
       manifestRelPath = pkgJson.customElements;
     }
   } catch {

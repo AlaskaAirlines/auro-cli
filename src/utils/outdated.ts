@@ -8,6 +8,84 @@ export interface OutdatedComponent {
   latest: string;
 }
 
+const SEMVER =
+  /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/u;
+
+function parseSemver(
+  version: string,
+): { main: [number, number, number]; pre: string[] } | null {
+  const match = SEMVER.exec(version.trim());
+  if (!match) {
+    return null;
+  }
+  return {
+    main: [Number(match[1]), Number(match[2]), Number(match[3])],
+    // Build metadata (after `+`) is ignored for precedence; only the prerelease
+    // identifiers (after `-`) matter.
+    pre: match[4] ? match[4].split(".") : [],
+  };
+}
+
+/**
+ * Compare two version strings by semver precedence. Returns a negative number
+ * when `a` is older than `b`, a positive number when newer, and 0 when equal.
+ * Numeric main segments compare numerically, and a version carrying a
+ * prerelease tag (`13.0.0-beta.1`) ranks *below* the same version without one,
+ * per the semver spec. Returns null when either side isn't valid semver, so a
+ * caller can decline to guess rather than compare non-comparable strings.
+ */
+export function compareVersions(a: string, b: string): number | null {
+  const pa = parseSemver(a);
+  const pb = parseSemver(b);
+  if (!pa || !pb) {
+    return null;
+  }
+
+  for (let i = 0; i < 3; i += 1) {
+    if (pa.main[i] !== pb.main[i]) {
+      return pa.main[i] < pb.main[i] ? -1 : 1;
+    }
+  }
+
+  // Equal main version: a release outranks any prerelease of the same version.
+  if (pa.pre.length === 0 && pb.pre.length === 0) {
+    return 0;
+  }
+  if (pa.pre.length === 0) {
+    return 1;
+  }
+  if (pb.pre.length === 0) {
+    return -1;
+  }
+
+  // Both prereleases: compare identifier by identifier (numeric < alphanumeric,
+  // and a shorter set of identifiers has lower precedence when all else ties).
+  const len = Math.max(pa.pre.length, pb.pre.length);
+  for (let i = 0; i < len; i += 1) {
+    const ai = pa.pre[i];
+    const bi = pb.pre[i];
+    if (ai === undefined) {
+      return -1;
+    }
+    if (bi === undefined) {
+      return 1;
+    }
+    const aNum = /^\d+$/u.test(ai);
+    const bNum = /^\d+$/u.test(bi);
+    if (aNum && bNum) {
+      const diff = Number(ai) - Number(bi);
+      if (diff !== 0) {
+        return diff < 0 ? -1 : 1;
+      }
+    } else if (aNum !== bNum) {
+      return aNum ? -1 : 1;
+    } else if (ai !== bi) {
+      return ai < bi ? -1 : 1;
+    }
+  }
+  return 0;
+}
+
 /**
  * Compare each installed package against its latest published release and return
  * the ones that are behind. Best-effort and network-dependent — a package whose
@@ -24,7 +102,15 @@ export async function checkOutdated(
   const outdated: OutdatedComponent[] = [];
   entries.forEach(([pkg, version], index) => {
     const newest = latest[index];
-    if (newest && newest !== version) {
+    if (!newest) {
+      return;
+    }
+    // Report only when the installed version is *strictly older* than latest.
+    // A version that is equal, ahead (a prerelease / `@next` / linked workspace
+    // copy such as 13.0.0-beta vs a 12.3.0 latest), or non-comparable is treated
+    // as current, so the banner never advises `install @latest` as a downgrade.
+    const cmp = compareVersions(version, newest);
+    if (cmp !== null && cmp < 0) {
       outdated.push({ pkg, installed: version, latest: newest });
     }
   });

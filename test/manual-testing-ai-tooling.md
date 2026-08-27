@@ -214,8 +214,8 @@ component not on its latest published release is reported to **stderr**.
 2. **Expect:**
    - Spinner reports `Resolving component manifests...`
    - On success, spinner shows
-     `Enriched N component description(s) (M from local node_modules).` — here
-     `M` is `0` (nothing installed) and `N` reflects unpkg-enriched rows.
+     `Enriched N component description(s); M package(s) resolved from local node_modules.`
+     — here `M` is `0` (nothing installed) and `N` reflects unpkg-enriched rows.
    - A full Markdown document is written to stdout (component list, package
      names, usage patterns, coding rules, and a Component Reference table).
    - Because nothing is installed, **no** outdated-release check runs (the
@@ -240,8 +240,9 @@ component installed, at least one intentionally behind its latest release).
 1. Run: `auro context --output /tmp/ctx-local.md`
 2. **Expect:**
    - Spinner succeeds with
-     `Enriched N component description(s) (M from local node_modules).` where
-     `M` ≥ the number of Auro components installed in the fixture.
+     `Enriched N component description(s); M package(s) resolved from local node_modules.`
+     where `M` equals the number of Auro packages installed in the fixture and
+     `N` (component descriptions) may be larger when a package exports several.
    - **After** the document is written, a second spinner runs
      `Checking for newer component releases...` and then, if anything is behind,
      prints a bordered, bold banner to **stderr** — not a flat list:
