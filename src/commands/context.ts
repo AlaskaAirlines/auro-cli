@@ -10,6 +10,7 @@ import {
   STATIC_COMPONENTS,
 } from "#static/auroContext.js";
 import { clean, type Manifest } from "#utils/cem.js";
+import { installedFromOutcomes } from "#utils/detectInstalled.js";
 import { fetchManifest } from "#utils/fetchManifest.js";
 import { checkOutdated, renderOutdatedBanner } from "#utils/outdated.js";
 
@@ -39,7 +40,14 @@ async function buildComponentTable(allowNetwork: boolean): Promise<{
     AURO_COMPONENT_PACKAGES.map((pkg) => fetchManifest(pkg, { allowNetwork })),
   );
 
-  const local = new Map<string, string>();
+  // The installed-version map is the shared "detect installed" concern — derive
+  // it from the same outcomes so the rule lives in one place (detectInstalled).
+  const local = new Map<string, string>(
+    installedFromOutcomes(outcomes).map((component) => [
+      component.pkg,
+      component.version,
+    ]),
+  );
   let resolved = 0;
   let enriched = 0;
   for (const outcome of outcomes) {
@@ -50,9 +58,6 @@ async function buildComponentTable(allowNetwork: boolean): Promise<{
     // declarations document a description — this is what distinguishes "found
     // nothing" from "found manifests that happen to be undocumented".
     resolved += 1;
-    if (outcome.source === "local" && outcome.version) {
-      local.set(outcome.target, outcome.version);
-    }
     // Only real registered elements — a declaration can be customElement: true
     // yet be an internal base class with no tagName.
     const declarations = ((outcome.manifest as Manifest).modules ?? [])
