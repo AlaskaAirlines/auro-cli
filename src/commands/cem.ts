@@ -74,6 +74,9 @@ export async function runCem(options: CemOptions): Promise<void> {
   const { skipped, transientFailures } = partitionOutcomes(outcomes);
 
   for (const outcome of skipped) {
+    // Transient failures are a subset of `skipped` but are reported as errors
+    // below — don't also log them as deliberate "Skipped" (no CEM published).
+    if (outcome.transient) continue;
     Logger.info(`Skipped ${outcome.target}: ${outcome.reason}`);
   }
 
