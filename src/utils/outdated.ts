@@ -150,7 +150,9 @@ export function renderOutdatedBanner(outdated: OutdatedComponent[]): string {
   // Border width tracks the widest visible line (ignoring color codes), capped
   // so a long update command doesn't blow out the terminal.
   const visibleWidths = [
-    heading.length,
+    // `⚠` (U+26A0) renders as two terminal columns but `.length` counts it as
+    // one, so add 1 or the border falls a column short of the heading.
+    heading.length + 1,
     ...outdated.map(
       (o) => 2 + pkgWidth + 2 + installedWidth + 3 + o.latest.length,
     ),

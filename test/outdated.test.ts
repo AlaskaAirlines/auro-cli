@@ -154,3 +154,9 @@ test("renderOutdatedBanner lists each component and the update command", () => {
     chalk.level = prevLevel;
   }
 });
+
+test("renderOutdatedBanner returns an empty string for an empty list", () => {
+  // Pins the self-guard against `Math.max(...[]) === -Infinity`; without it the
+  // width math would garble the banner for a (future) empty-list caller.
+  assert.equal(renderOutdatedBanner([]), "");
+});
