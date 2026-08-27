@@ -303,12 +303,34 @@ install (step 6) gates end-to-end verification; the admin step gates on merge.
      `formatDeclaration` output in a fenced block and pins the `Install:` lines to
      emit the **resolved tag + subpath import + `register('<tag>')`** — the concrete
      shape `formatDeclaration` must take on when it becomes prefix/subpath-aware.
-2. **Extract the trapped surfaces** (handoff gaps 1 & 3): `detectInstalled()` (out
-   of [context.ts](../src/commands/context.ts) `buildComponentTable`) and
-   `buildAggregateManifest()` (out of [cem.ts](../src/commands/cem.ts) `runCem`),
-   with unit tests against synthetic manifests. Mechanical and low-risk; unblocks
-   everything. Note this refactors files still open in PR #302 — expect rebase
-   churn on `context.ts`/`cem.ts`/`fetchManifest.ts` until it merges.
+2. ✅ **DONE — Extract the trapped surfaces** (handoff gaps 1 & 3):
+   `detectInstalled()` (out of [context.ts](../src/commands/context.ts)
+   `buildComponentTable`) and `buildAggregateManifest()` (out of
+   [cem.ts](../src/commands/cem.ts) `runCem`), with unit tests against synthetic
+   manifests. Mechanical and low-risk; unblocks everything. Note this refactors
+   files still open in PR #302 — expect rebase churn on
+   `context.ts`/`cem.ts`/`fetchManifest.ts` until it merges.
+   - **Delivered:** two reusable utils —
+     [detectInstalled.ts](../src/utils/detectInstalled.ts) (`detectInstalled()`
+     local-only `node_modules` scan → `InstalledComponent[]` with pinned version +
+     manifest, never hits the network; plus a pure `installedFromOutcomes()` helper
+     so the "detect installed" rule lives in one place) and
+     [aggregateManifest.ts](../src/utils/aggregateManifest.ts)
+     (`buildAggregateManifest()` fetch → merge → partition; never fails on its own —
+     empty sources still returns a valid empty manifest, the caller owns error
+     policy). Behavior-preserving refactors of
+     [cem.ts](../src/commands/cem.ts) (destructures `buildAggregateManifest(...,
+     { preferLocal: false })`) and [context.ts](../src/commands/context.ts) (derives
+     its `local` version map from `installedFromOutcomes`, no second fetch pass).
+     Unit tests [detectInstalled.test.ts](../test/detectInstalled.test.ts) +
+     [aggregateManifest.test.ts](../test/aggregateManifest.test.ts) (6 offline/
+     synthetic: pure-filter cases, node_modules scan asserting zero fetch calls,
+     missing-manifest exclusion, offline merge, transient-failure surfacing,
+     empty-result well-formedness). Full suite 80/80, `tsc`/biome clean.
+   - **Spec handed to step 3:** `detectInstalled()` returns the version-pinned
+     installed set (`{ pkg, version, manifest }`) the resolver normalises into
+     `ResolvedComponent[]`; `buildAggregateManifest()` is the fetch → merge → partition
+     pipeline the resolver wraps for the aggregated-CEM (monorepo) path.
 3. **Build `resolver.ts` logic** — normalise single + aggregated CEM into
    `ResolvedComponent[]`, derive per-component subpath import paths, capture shared
    version, flag cross-package duplicate tags. Test against a **synthetic**

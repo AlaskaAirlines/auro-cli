@@ -5,9 +5,7 @@ import { Logger } from "@aurodesignsystem/auro-library/scripts/utils/logger.mjs"
 import { program } from "commander";
 import ora from "ora";
 import { AURO_COMPONENT_PACKAGES } from "#static/auroComponents.js";
-import type { Manifest } from "#utils/cem.js";
-import { fetchManifest, partitionOutcomes } from "#utils/fetchManifest.js";
-import { type ManifestSource, mergeManifests } from "#utils/mergeManifests.js";
+import { buildAggregateManifest } from "#utils/aggregateManifest.js";
 
 /** Options accepted by the `cem` action. */
 export interface CemOptions {
@@ -27,29 +25,19 @@ export async function runCem(options: CemOptions): Promise<void> {
 
   // Aggregate the canonical latest published manifests, not whatever happens
   // to be installed locally, so the index doesn't mix versions per machine.
-  const outcomes = await Promise.all(
-    AURO_COMPONENT_PACKAGES.map((pkg) =>
-      fetchManifest(pkg, { preferLocal: false }),
-    ),
-  );
-
-  const sources: ManifestSource[] = [];
-  for (const outcome of outcomes) {
-    if (outcome.manifest) {
-      sources.push({
-        pkg: outcome.target,
-        manifest: outcome.manifest as Manifest,
-      });
-    }
-  }
+  const {
+    manifest: aggregate,
+    sources,
+    skipped,
+    transientFailures,
+  } = await buildAggregateManifest(AURO_COMPONENT_PACKAGES, {
+    preferLocal: false,
+  });
 
   if (sources.length === 0) {
     spinner.fail("No component manifests could be fetched.");
     process.exit(1);
   }
-
-  spinner.text = "Merging manifests...";
-  const aggregate = mergeManifests(sources);
 
   const outputPath = path.resolve(process.cwd(), options.output);
   try {
@@ -71,8 +59,6 @@ export async function runCem(options: CemOptions): Promise<void> {
   // Report skips after the spinner so output isn't garbled. Genuine 404s are
   // expected (not every component publishes a CEM yet); transient failures
   // mean the aggregate is incomplete and are treated as an error.
-  const { skipped, transientFailures } = partitionOutcomes(outcomes);
-
   for (const outcome of skipped) {
     // Transient failures are a subset of `skipped` but are reported as errors
     // below — don't also log them as deliberate "Skipped" (no CEM published).
