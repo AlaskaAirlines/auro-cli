@@ -391,10 +391,43 @@ install (step 6) gates end-to-end verification; the admin step gates on merge.
      `auro-*` tag, valued by the project's custom/prefixed registration. An absent
      key means "no custom registration" (bare tag stands), so the registry only
      needs to emit entries for tags it actually resolves a prefix/override for.
-5. **Build `registry.ts`** — config load/save, AST scan (against synthetic
-   consumer-source strings via the already-installed TS compiler API), prefix
-   inference, mixed-prefix resolution (majority-suggest + confirm; `--prefix`/fail
-   in CI), bare-`auro-*` warning.
+5. ✅ **DONE — Build `registry.ts`** — config load/save, AST scan (against
+   synthetic consumer-source strings via the already-installed TS compiler API),
+   prefix inference, mixed-prefix resolution (majority-suggest + confirm;
+   `--prefix`/fail in CI), bare-`auro-*` warning.
+   - **Delivered:** [registry.ts](../src/init/registry.ts) — a **pure planner**
+     plus two thin IO wrappers, producing the `resolvedTags`
+     `Map<canonical-tag, custom-tag>` the generator consumes. Config IO:
+     `loadConfig(cwd)` (null when absent; `RegistryError` on malformed/
+     unsupported-version JSON — the format-freeze contract), `saveConfig(cwd,
+     config)` (pretty JSON + trailing newline), `emptyConfig()`. Read-only AST
+     scan: `scanSource(path, src)` uses `ts.createSourceFile` (syntactic, no
+     type-checker; `scriptKind` from extension so `.jsx`/`.tsx` parse) to capture
+     `<Class>.register('<literal>')` calls (string or no-substitution template),
+     **warning and skipping** any non-literal tag (`${...}`, identifier, call,
+     spread, absent) and any per-file parse failure — never guesses;
+     `scanProject(cwd)` globs the project's own sources (excludes `node_modules`/
+     `dist`/`build`/`coverage`). Prefix inference: `inferPrefixFromTag` +
+     `suggestDefaultPrefix` (majority, ignoring bare `auro-`/empty). The heart,
+     `planTagResolution(components, { config?, scan?, prefix? })`, applies the
+     frozen **config → scan → default-prefix** precedence, persists detected
+     registrations as overrides, flags `needsDefaultPrefix`/`suggestedDefault`/
+     `mixedPrefixes`, and warns on bare `auro-*` defaults and unattributable
+     registrations. The interactive prompt/confirm + non-interactive TTY/CI guard
+     were deliberately **kept out** (step 6's command consumes the plan) so this
+     stays fully synthetic-testable. Tests [registry.test.ts](../test/registry.test.ts)
+     (18 offline/synthetic: scan capture across `.ts`/`.jsx` + template literal,
+     non-literal + syntax-error tolerance, config round-trip/null/malformed/version,
+     prefix inference + majority, and the full precedence/bare/mixed/`needsDefault`/
+     unreconciled planner matrix). Full suite 110/110, `tsc`/biome clean.
+   - **Spec handed to step 6:** the command wires **detect → resolve →
+     `planTagResolution` → generate → write**. It calls `planTagResolution` once;
+     if `needsDefaultPrefix`, it resolves a prefix (inquirer prompt/confirm the
+     `suggestedDefault` when interactive; else `--prefix`; else fail cleanly in CI
+     per the non-interactive guard) and **re-calls** with that `prefix` for the
+     authoritative `resolvedTags` + `config`; then persists via `saveConfig` and
+     surfaces `warnings` (plus the resolver's `duplicates`) to the user. Only a
+     plan whose `needsDefaultPrefix` is `false` is persisted.
 
 **Gate — install real component fixtures.** Add a real standalone `auro-*` plus
 `@aurodesignsystem/auro-formkit@6.1.0` to a fixture project / devDeps. Only
