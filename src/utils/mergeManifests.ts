@@ -60,7 +60,12 @@ export function mergeManifests(
   for (const { pkg, manifest } of sources) {
     for (const module of manifest.modules ?? []) {
       const namespaced = namespaceReferences(module, pkg) as CemModule;
-      namespaced.path = `${pkg}/${module.path}`;
+      // Only namespace a real path. A spec-violating module that omits `path`
+      // would otherwise be stored as the literal "@scope/pkg/undefined"; leave
+      // its (absent) path untouched rather than fabricating a bogus one.
+      if (typeof module.path === "string") {
+        namespaced.path = `${pkg}/${module.path}`;
+      }
       modules.push(namespaced);
     }
   }

@@ -34,6 +34,19 @@ test("namespaces every module path with its owning package", () => {
   );
 });
 
+test("leaves a module path absent rather than fabricating a namespaced 'undefined'", () => {
+  const merged = mergeManifests([
+    {
+      pkg: "@aurodesignsystem/auro-button",
+      // Spec-violating module with no `path`.
+      manifest: { modules: [{}] } as Manifest,
+    },
+  ]);
+
+  assert.equal(merged.modules?.length, 1);
+  assert.equal(merged.modules?.[0].path, undefined);
+});
+
 test("namespaces local module references but leaves external ones untouched", () => {
   const withRefs = namespaceReferences(
     {

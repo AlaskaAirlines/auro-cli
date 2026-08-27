@@ -121,8 +121,11 @@ export async function runContext(options: ContextOptions): Promise<void> {
     // Online success is measured by descriptions enriched from any source
     // (local or unpkg); a run that resolves nothing falls back to the table.
     if (enriched > 0) {
+      // `enriched` counts component descriptions (one package can export many),
+      // while `local.size` counts packages — label each so the two aren't
+      // conflated (e.g. a single package exporting 6 components reads as "6").
       spinner.succeed(
-        `Enriched ${enriched} component description(s) (${local.size} from local node_modules).`,
+        `Enriched ${enriched} component description(s); ${local.size} package(s) resolved from local node_modules.`,
       );
     } else {
       spinner.warn(

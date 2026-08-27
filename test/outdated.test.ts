@@ -3,6 +3,7 @@ import { test } from "node:test";
 import chalk from "chalk";
 import {
   checkOutdated,
+  compareVersions,
   type OutdatedComponent,
   renderOutdatedBanner,
 } from "../src/utils/outdated.ts";
@@ -32,6 +33,59 @@ test("checkOutdated reports only packages behind the latest release", async (t) 
     installed: "12.3.0",
     latest: "13.0.0",
   });
+});
+
+test("checkOutdated does not report an installed prerelease ahead of latest", async (t) => {
+  t.mock.method(
+    globalThis,
+    "fetch",
+    async () =>
+      new Response(JSON.stringify({ version: "12.3.0" }), { status: 200 }),
+  );
+
+  // A locally linked / @next build can be ahead of the published latest. It
+  // must not be flagged (advising `@latest` would be downgrade advice).
+  const outdated = await checkOutdated(
+    new Map([["@aurodesignsystem/auro-button", "13.0.0-beta.1"]]),
+  );
+
+  assert.deepEqual(
+    outdated,
+    [],
+    "an installed version ahead of latest is treated as current",
+  );
+});
+
+test("checkOutdated reports a prerelease that is behind the latest release", async (t) => {
+  t.mock.method(
+    globalThis,
+    "fetch",
+    async () =>
+      new Response(JSON.stringify({ version: "13.0.0" }), { status: 200 }),
+  );
+
+  const outdated = await checkOutdated(
+    new Map([["@aurodesignsystem/auro-button", "13.0.0-beta.1"]]),
+  );
+
+  assert.equal(outdated.length, 1);
+  assert.equal(outdated[0].latest, "13.0.0");
+});
+
+test("compareVersions orders releases, prereleases, and non-semver", () => {
+  assert.ok((compareVersions("12.3.0", "13.0.0") ?? 0) < 0, "older < newer");
+  assert.ok((compareVersions("13.0.0", "12.3.0") ?? 0) > 0, "newer > older");
+  assert.equal(compareVersions("12.3.0", "12.3.0"), 0, "equal");
+  // A prerelease ranks below the same release version.
+  assert.ok((compareVersions("13.0.0-beta.1", "13.0.0") ?? 0) < 0);
+  assert.ok((compareVersions("13.0.0", "13.0.0-beta.1") ?? 0) > 0);
+  // Prerelease precedence: numeric < alphanumeric, and fewer identifiers lower.
+  assert.ok((compareVersions("13.0.0-beta.1", "13.0.0-beta.2") ?? 0) < 0);
+  assert.ok((compareVersions("13.0.0-alpha", "13.0.0-beta") ?? 0) < 0);
+  assert.ok((compareVersions("13.0.0-beta", "13.0.0-beta.1") ?? 0) < 0);
+  // Non-semver input is non-comparable.
+  assert.equal(compareVersions("latest", "13.0.0"), null);
+  assert.equal(compareVersions("13.0.0", ""), null);
 });
 
 test("checkOutdated treats an unresolvable latest as current", async (t) => {
