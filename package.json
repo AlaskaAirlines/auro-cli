@@ -36,6 +36,7 @@
   "imports": {
     "#configs/*": "./src/configs/*",
     "#commands/*": "./src/commands/*",
+    "#init/*": "./src/init/*",
     "#scripts/*": "./src/scripts/*",
     "#static/*": "./src/static/*",
     "#utils/*": "./src/utils/*"
