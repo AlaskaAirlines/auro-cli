@@ -182,6 +182,34 @@ export async function fetchManifest(
   }
 }
 
+/** A set of fetch outcomes split by how their failures should be treated. */
+export interface OutcomePartition {
+  /** Every outcome that yielded no manifest — genuine 404s and transient
+   *  failures alike (all are absent from the aggregate). */
+  skipped: ManifestFetchResult[];
+  /** The subset of skips that failed transiently. Their absence means a manifest
+   *  that *should* be present is missing, so any aggregate built from the
+   *  remaining sources is incomplete and the run should be treated as failed. */
+  transientFailures: ManifestFetchResult[];
+}
+
+/**
+ * Partition fetch outcomes into those that produced no manifest and, within
+ * those, the ones that failed transiently. A genuine 404 is an expected skip
+ * (not every package publishes a CEM), whereas a transient failure (network
+ * error, timeout, 5xx, unparseable body) means an expected manifest is missing —
+ * distinguishing the two lets a caller skip the former but fail on the latter.
+ */
+export function partitionOutcomes(
+  outcomes: ManifestFetchResult[],
+): OutcomePartition {
+  const skipped = outcomes.filter((outcome) => !outcome.manifest);
+  return {
+    skipped,
+    transientFailures: skipped.filter((outcome) => outcome.transient),
+  };
+}
+
 /**
  * Fetch the latest published version of a package from the npm registry.
  * Returns null on any failure — staleness reporting is best-effort and must
