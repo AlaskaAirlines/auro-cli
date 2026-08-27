@@ -155,7 +155,9 @@ export async function runContext(options: ContextOptions): Promise<void> {
       const outputPath = path.resolve(process.cwd(), options.output);
       await fs.writeFile(outputPath, context, "utf-8");
       writeSpinner.succeed(`Auro context written to ${options.output}`);
-      console.log(
+      // Advisory only — keep it on stderr so `--output FILE` callers that capture
+      // stdout don't get this line mixed into their capture.
+      console.error(
         "\nPaste this file into your AI coding tool (Claude, Cursor, Copilot, etc.) to prime it on Auro components.",
       );
     } catch (error) {

@@ -40,8 +40,9 @@ test("--output writes the document to a file with a confirmation", async (t) => 
   t.mock.method(process, "exit", () => {
     throw new Error("should not exit on success");
   });
-  // console.log carries the "paste this file" confirmation.
-  const log = t.mock.method(console, "log", () => {});
+  // console.error carries the "paste this file" confirmation — advisory output
+  // is kept off stdout so `--output FILE` captures stay clean.
+  const log = t.mock.method(console, "error", () => {});
   t.mock.method(globalThis, "fetch", async (url: string) => {
     const pkg = AURO_COMPONENT_PACKAGES.find((p) => String(url).includes(p));
     const tag = pkg ? (pkg.split("/").pop() ?? "auro-x") : "auro-x";

@@ -125,6 +125,13 @@ export async function checkOutdated(
  * regardless. Meant for stderr so it never pollutes command output on stdout.
  */
 export function renderOutdatedBanner(outdated: OutdatedComponent[]): string {
+  // Self-guard: with no components the width math (`Math.max(...[])`) would
+  // yield -Infinity and garble the banner. Callers already skip the empty case,
+  // but returning "" keeps this safe for any future caller.
+  if (outdated.length === 0) {
+    return "";
+  }
+
   const heading = `⚠  ${outdated.length} Auro component(s) are NOT on the latest release`;
   const pkgWidth = Math.max(...outdated.map((o) => o.pkg.length));
   const installedWidth = Math.max(...outdated.map((o) => o.installed.length));
