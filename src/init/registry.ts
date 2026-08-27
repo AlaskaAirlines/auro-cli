@@ -33,6 +33,25 @@ import type { ResolvedComponent } from "#init/resolver.js";
 
 const AURO_PREFIX = "auro-";
 
+/**
+ * The consumer source files both the AST scan and the formkit migration walk: JS/TS
+ * in every common extension plus Svelte single-file components. Shared so the two
+ * stay in lockstep — anything the scanner reads is a file the migration may rewrite.
+ */
+export const SOURCE_GLOB = "**/*.{js,jsx,ts,tsx,mjs,cjs,svelte}";
+
+/**
+ * Directories excluded from {@link SOURCE_GLOB} — dependencies and build output,
+ * whose Auro `static register` defaults would be false positives (scan) and are not
+ * the consumer's own source to rewrite (migration).
+ */
+export const SOURCE_GLOB_IGNORE = [
+  "**/node_modules/**",
+  "**/dist/**",
+  "**/build/**",
+  "**/coverage/**",
+];
+
 /** A registry-layer failure with a caller-presentable message. */
 export class RegistryError extends Error {
   constructor(message: string) {
@@ -293,16 +312,11 @@ export function extractSvelteScripts(source: string): SvelteScript[] {
  * markup never reaches the parser. A read failure on one file warns and continues.
  */
 export function scanProject(cwd: string): RegistrationScan {
-  const files = globSync("**/*.{js,jsx,ts,tsx,mjs,cjs,svelte}", {
+  const files = globSync(SOURCE_GLOB, {
     cwd,
     absolute: true,
     nodir: true,
-    ignore: [
-      "**/node_modules/**",
-      "**/dist/**",
-      "**/build/**",
-      "**/coverage/**",
-    ],
+    ignore: SOURCE_GLOB_IGNORE,
   });
 
   const matches: RegistrationMatch[] = [];

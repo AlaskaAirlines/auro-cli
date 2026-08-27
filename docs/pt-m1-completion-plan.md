@@ -594,6 +594,30 @@ Map the ticket's enumerated test list to suites (node:test via
   literal `</script>` inside a string ends a block early (lexical extraction, no
   Svelte compiler).
 
+- ✅ **Legacy standalone → auro-formkit migration** — Resolved. Nine form components
+  ship both as legacy standalone packages (`@aurodesignsystem/auro-input`, `-select`,
+  `-combobox`, `-menu`, `-checkbox`, `-radio`, `-datepicker`, `-dropdown`, `-form`)
+  and inside `auro-formkit`; `auro-button` is a true standalone and is **excluded**.
+  A single source of truth ([`formkitMigration.ts`](../src/static/formkitMigration.ts))
+  owns the legacy list and the `@aurodesignsystem/auro-<x>` → `…/auro-formkit/auro-<x>`
+  mapping. Two surfaces: **(1)** `auro init` detects legacy standalones declared in
+  `package.json` and, on an interactive TTY, offers an **opt-in confirm** (default
+  *No*) to migrate — [`migrateToFormkit`](../src/init/migrateFormkit.ts) rewrites the
+  `package.json` dep (adds `auro-formkit@latest` when absent, keeps an existing
+  version) and the bare import specifiers across the project's source (JS/TS/JSX/
+  Svelte, reusing the scanner's `SOURCE_GLOB`), then stops so the user reinstalls and
+  re-runs to ground formkit. A non-interactive/CI run **never edits** — it only
+  advises. This is the sole codemod exception to init's "documents, never codemods"
+  stance, recorded in the [init.ts](../src/commands/init.ts) header. **(2)** the
+  outdated banner ([`renderOutdatedBanner`](../src/utils/outdated.ts)) marks a legacy
+  standalone `⇢ auro-formkit`, excludes it from the misleading `npm install @latest`
+  command, and lists it under a distinct **"Migrate to auro-formkit"** block.
+  Conservative: a deep import (`…/auro-input/dist/x.js`) is left untouched and
+  reported for manual follow-up. Covered by `formkitMigration`/`migrateFormkit` unit
+  tests (dep swap, named/side-effect/Svelte rewrites, deep-import skip, idempotency),
+  three `init.command` integration tests (accept → migrate + defer grounding, decline
+  → ground as-is, non-interactive → advisory only), and `outdated` banner tests.
+
 ## Done when
 
 Running `auro init` in a project with known Auro deps produces `AGENTS.md` (+ a

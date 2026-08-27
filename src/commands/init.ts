@@ -11,9 +11,15 @@
  * planner deliberately excludes: the interactive prefix prompt/confirm and the
  * non-interactive TTY/CI guard.
  *
- * It never writes to consumer source (v1 documents, never codemods) and never
- * touches `.gitignore` — `auro.config.json` is a committed artifact so
+ * It never touches `.gitignore` — `auro.config.json` is a committed artifact so
  * regeneration is deterministic across a team and in CI.
+ *
+ * **One opt-in codemod exception.** `init` otherwise documents, never rewrites,
+ * consumer source. The sole exception is the legacy-standalone → `auro-formkit`
+ * migration: when a project depends on a deprecated standalone form package, an
+ * interactive run offers to migrate it (edit `package.json`, rewrite import
+ * specifiers). This is gated behind an explicit TTY confirm and fully skipped in a
+ * non-interactive/CI run (which only advises). See `migrateFormkit.ts`.
  */
 
 import fs from "node:fs/promises";
@@ -25,6 +31,11 @@ import ora from "ora";
 import { CONFIG_FILENAME } from "#init/config.js";
 import { groundingFiles } from "#init/generator.js";
 import { AGENTS_FILENAME, CLAUDE_FILENAME } from "#init/layout.js";
+import {
+  detectLegacyFormkit,
+  type LegacyDependency,
+  migrateToFormkit,
+} from "#init/migrateFormkit.js";
 import {
   loadConfig,
   planTagResolution,
@@ -97,6 +108,70 @@ async function promptDefaultPrefix(plan: TagResolutionPlan): Promise<string> {
 }
 
 /**
+ * Offer to migrate legacy standalone form packages (now shipped by `auro-formkit`)
+ * to formkit. Returns `true` when a migration was applied — the caller then stops
+ * this run, because the standalone is still in `node_modules` and grounding it now
+ * would document the very imports the codemod just rewrote; the user reinstalls and
+ * re-runs to ground formkit. Returns `false` when there is nothing to migrate, the
+ * user declines, or the run is non-interactive (which only advises), so the caller
+ * continues with normal grounding.
+ */
+async function offerFormkitMigration(
+  cwd: string,
+  options: InitOptions,
+): Promise<boolean> {
+  let legacy: LegacyDependency[];
+  try {
+    legacy = detectLegacyFormkit(cwd);
+  } catch (error) {
+    // A malformed package.json is surfaced but must not abort grounding.
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`⚠ Skipping formkit migration check: ${message}`);
+    return false;
+  }
+  if (legacy.length === 0) {
+    return false;
+  }
+
+  const names = legacy.map((l) => l.pkg).join(", ");
+  if (isNonInteractive(options)) {
+    console.error(
+      `⚠ ${legacy.length} legacy standalone package(s) can be migrated to @aurodesignsystem/auro-formkit: ${names}. Run \`auro init\` interactively to apply the migration.`,
+    );
+    return false;
+  }
+
+  const { migrate } = await inquirer.prompt<{ migrate: boolean }>([
+    {
+      type: "confirm",
+      name: "migrate",
+      message: `${legacy.length} legacy standalone package(s) now live in auro-formkit (${names}). Migrate to auro-formkit now? This edits package.json and rewrites import specifiers.`,
+      default: false,
+    },
+  ]);
+  if (!migrate) {
+    return false;
+  }
+
+  const spinner = ora("Migrating to auro-formkit...").start();
+  const report = migrateToFormkit(cwd, legacy);
+  spinner.succeed(
+    `Migrated ${report.packagesMigrated.length} package(s) to auro-formkit; rewrote ${report.rewriteCount} import(s) across ${report.filesChanged.length} file(s).`,
+  );
+
+  // Deep imports can't be remapped 1:1 to a formkit subpath — flag for follow-up.
+  for (const { file, specifier } of report.deepImports) {
+    console.error(
+      `⚠ ${file}: left deep import '${specifier}' unchanged — update it to an @aurodesignsystem/auro-formkit subpath by hand.`,
+    );
+  }
+  console.error(
+    "Next: run `npm install`, then re-run `auro init` to regenerate grounding for auro-formkit.",
+  );
+  return true;
+}
+
+/**
  * Generate and write the grounding files for the installed Auro components. See
  * the module header for the detect → plan → generate → write pipeline. Exits
  * non-zero on a malformed config, an unresolvable prefix in a non-interactive
@@ -118,6 +193,13 @@ export async function runInit(options: InitOptions): Promise<void> {
   spinner.succeed(
     `Detected ${components.length} installed component(s) to ground.`,
   );
+
+  // Before grounding, offer to migrate any legacy standalone form package onto
+  // auro-formkit. When a migration is applied, stop: the project must be
+  // reinstalled and re-run so grounding reflects the formkit imports (see helper).
+  if (await offerFormkitMigration(cwd, options)) {
+    return;
+  }
 
   // The persisted config is the source of truth for how tags were resolved last
   // run; a malformed or newer-version file is an explicit, actionable failure.
