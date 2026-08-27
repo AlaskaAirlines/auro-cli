@@ -1,13 +1,17 @@
 import assert from "node:assert/strict";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { test } from "node:test";
 import type { AuroConfig } from "../src/init/config.ts";
 import {
   emptyConfig,
+  extractSvelteScripts,
   inferPrefixFromTag,
   loadConfig,
   planTagResolution,
   RegistryError,
   saveConfig,
+  scanProject,
   scanSource,
   suggestDefaultPrefix,
 } from "../src/init/registry.ts";
@@ -105,6 +109,160 @@ test("scanSource ignores Auro's auto-versioned dependency registration", () => {
   );
   // generateTag()/customElements.define() are not .register() — never matched,
   // never guessed, never warned (no false positive on the versioning internals).
+  assert.deepEqual(scan.matches, []);
+  assert.deepEqual(scan.defaultRegistrations, []);
+  assert.deepEqual(scan.warnings, []);
+});
+
+// ---------------------------------------------------------------------------
+// Svelte <script> extraction + cross-framework project scan
+// ---------------------------------------------------------------------------
+
+test("extractSvelteScripts returns instance and module blocks with their language", () => {
+  const scripts = extractSvelteScripts(
+    `<script context="module" lang="ts">
+       let shared: number = 0;
+     </script>
+     <script>
+       import "@aurodesignsystem/auro-button";
+     </script>
+     <main><auro-button>Go</auro-button></main>
+     <style>main { color: red; }</style>`,
+  );
+  assert.equal(scripts.length, 2, "both script blocks are extracted");
+  assert.ok(scripts[0].content.includes("let shared"));
+  assert.ok(scripts[1].content.includes("auro-button"));
+  assert.ok(
+    scripts.some((s) => s.content.includes("let shared")),
+    "the module block's body is captured",
+  );
+});
+
+test("extractSvelteScripts returns nothing for a component with no <script>", () => {
+  assert.deepEqual(
+    extractSvelteScripts("<main><auro-button>Go</auro-button></main>"),
+    [],
+  );
+});
+
+/** Write `rel` under `cwd` (creating parents) — a source file for scanProject. */
+async function writeSource(
+  cwd: string,
+  rel: string,
+  source: string,
+): Promise<void> {
+  const abs = path.join(cwd, rel);
+  await mkdir(path.dirname(abs), { recursive: true });
+  await writeFile(abs, source);
+}
+
+test("scanProject detects a register() inside a Svelte <script> block", async (t) => {
+  const cwd = await tempCwd(t);
+  await writeSource(
+    cwd,
+    "src/App.svelte",
+    `<script>
+       import { AuroInput } from "@aurodesignsystem/auro-formkit/auro-input";
+       AuroInput.register("legacy-input");
+     </script>
+     <auro-input></auro-input>
+     {#if true}<p>markup the parser must never see</p>{/if}`,
+  );
+  const scan = scanProject(cwd);
+  assert.deepEqual(scan.matches, [
+    { className: "AuroInput", tag: "legacy-input" },
+  ]);
+  assert.deepEqual(
+    scan.warnings,
+    [],
+    "template markup produced no parse error",
+  );
+});
+
+test("scanProject reads a Svelte <script lang=ts> block as TypeScript", async (t) => {
+  const cwd = await tempCwd(t);
+  await writeSource(
+    cwd,
+    "src/App.svelte",
+    `<script lang="ts">
+       const tag: string = "legacy-button";
+       AuroButton.register(tag as string);
+     </script>
+     <auro-button></auro-button>`,
+  );
+  const scan = scanProject(cwd);
+  // The TS-only 'as string' assertion parses cleanly (proving TS kind), and the
+  // identifier tag is warned/skipped — never guessed.
+  assert.deepEqual(scan.matches, []);
+  assert.equal(scan.warnings.length, 1);
+  assert.ok(scan.warnings[0].includes("non-literal"));
+});
+
+test("scanProject scans a real-app Svelte component with side-effect imports without false positives", async (t) => {
+  const cwd = await tempCwd(t);
+  // Mirrors ai-tooling-test-svelte: registration is via side-effect import, the
+  // markup uses runes ($state) and event handlers, and nothing calls register().
+  await writeSource(
+    cwd,
+    "src/main.js",
+    `import "@aurodesignsystem/auro-button";
+     import "@aurodesignsystem/auro-formkit/auro-form";
+     import "@aurodesignsystem/auro-formkit/auro-input";`,
+  );
+  await writeSource(
+    cwd,
+    "src/App.svelte",
+    `<script>
+       let submitted = $state(null);
+       function handleSubmit(event) { submitted = event.detail ?? null; }
+     </script>
+     <auro-form onsubmit={handleSubmit}>
+       <auro-input required><span slot="label">First name</span></auro-input>
+       <auro-button type="submit">Submit</auro-button>
+     </auro-form>`,
+  );
+  const scan = scanProject(cwd);
+  assert.deepEqual(
+    scan.matches,
+    [],
+    "side-effect imports are not registrations",
+  );
+  assert.deepEqual(scan.defaultRegistrations, []);
+  assert.deepEqual(
+    scan.warnings,
+    [],
+    "runes and markup caused no parse errors",
+  );
+});
+
+test("scanProject detects a register() in a React .jsx file amid JSX markup", async (t) => {
+  const cwd = await tempCwd(t);
+  await writeSource(
+    cwd,
+    "src/register.jsx",
+    `import { AuroInput } from "@aurodesignsystem/auro-formkit/auro-input";
+     AuroInput.register("legacy-input");
+     export const El = () => <auro-input class="x">{"hi"}</auro-input>;`,
+  );
+  const scan = scanProject(cwd);
+  assert.deepEqual(scan.matches, [
+    { className: "AuroInput", tag: "legacy-input" },
+  ]);
+  assert.deepEqual(scan.warnings, [], "JSX markup did not break the parse");
+});
+
+test("scanProject on a vanilla side-effect-import entry finds no registrations", async (t) => {
+  const cwd = await tempCwd(t);
+  // Mirrors ai-tooling-test-vanilla src/main.js.
+  await writeSource(
+    cwd,
+    "src/main.js",
+    `import "@aurodesignsystem/auro-button";
+     import "@aurodesignsystem/auro-formkit/auro-form";
+     const form = document.querySelector("auro-form");
+     form.addEventListener("submit", (e) => console.log(e.detail));`,
+  );
+  const scan = scanProject(cwd);
   assert.deepEqual(scan.matches, []);
   assert.deepEqual(scan.defaultRegistrations, []);
   assert.deepEqual(scan.warnings, []);
