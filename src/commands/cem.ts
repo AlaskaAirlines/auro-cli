@@ -6,7 +6,7 @@ import { program } from "commander";
 import ora from "ora";
 import { AURO_COMPONENT_PACKAGES } from "#static/auroComponents.js";
 import type { Manifest } from "#utils/cem.js";
-import { fetchManifest } from "#utils/fetchManifest.js";
+import { fetchManifest, partitionOutcomes } from "#utils/fetchManifest.js";
 import { type ManifestSource, mergeManifests } from "#utils/mergeManifests.js";
 
 export default program
@@ -70,8 +70,7 @@ export default program
     // Report skips after the spinner so output isn't garbled. Genuine 404s are
     // expected (not every component publishes a CEM yet); transient failures
     // mean the aggregate is incomplete and are treated as an error.
-    const skipped = outcomes.filter((outcome) => !outcome.manifest);
-    const transientFailures = skipped.filter((outcome) => outcome.transient);
+    const { skipped, transientFailures } = partitionOutcomes(outcomes);
 
     for (const outcome of skipped) {
       Logger.info(`Skipped ${outcome.target}: ${outcome.reason}`);
