@@ -3,11 +3,13 @@ import { readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { test } from "node:test";
+import inquirer from "inquirer";
 import { runInit } from "../src/commands/init.ts";
 import {
   captureWrite,
   ExitError,
   elementManifest,
+  forceInteractive,
   installLocalPackage,
   installRealPackage,
   tempCwd,
@@ -16,6 +18,33 @@ import {
 /** Read a grounding file the command wrote into the fixture cwd. */
 async function readOutput(cwd: string, name: string): Promise<string> {
   return readFile(path.join(cwd, name), "utf-8");
+}
+
+/**
+ * Install two synthetic standalone Auro packages whose consumer source registers
+ * them under two *different* prefixes (`legacy-button`, `brand-card`) — a
+ * first-run mixed-prefix project with no `auro.config.json`. The class names in
+ * the written source match each `elementManifest`'s PascalCase declaration name,
+ * so the AST scan ties them to the installed components. Majority is `legacy-`
+ * (first-seen among two singletons).
+ */
+async function installMixedScanProject(cwd: string): Promise<void> {
+  await installLocalPackage(
+    cwd,
+    "@aurodesignsystem/auro-button",
+    "1.0.0",
+    elementManifest("auro-button"),
+  );
+  await installLocalPackage(
+    cwd,
+    "@aurodesignsystem/auro-card",
+    "2.0.0",
+    elementManifest("auro-card"),
+  );
+  await writeFile(
+    path.join(cwd, "app.js"),
+    "AuroButton.register('legacy-button');\nAuroCard.register('brand-card');\n",
+  );
 }
 
 test("writes AGENTS.md, CLAUDE.md and config for the real installed components", async (t) => {
@@ -273,4 +302,176 @@ test("regeneration after removing a dependency drops it and stays idempotent", a
   await runInit({});
   const third = await readOutput(cwd, "AGENTS.md");
   assert.equal(third, afterRemoval, "post-removal regeneration is idempotent");
+});
+
+test("mixed existing prefixes fail cleanly (exit 1) in a non-interactive run", async (t) => {
+  const cwd = await tempCwd(t);
+  await installMixedScanProject(cwd); // no config, no --prefix
+  t.mock.method(process, "cwd", () => cwd);
+  t.mock.method(process, "exit", (code?: number): never => {
+    throw new ExitError(code);
+  });
+  const stderr = captureWrite(t, process.stderr);
+  t.mock.method(globalThis, "fetch", async () => {
+    throw new Error("init must not hit the network");
+  });
+
+  // The runner has no TTY → non-interactive. A mixed-prefix conflict with no
+  // settled default cannot be resolved without a prompt, so init must fail.
+  await assert.rejects(runInit({}), (err: ExitError) => {
+    assert.equal(err.code, 1);
+    return true;
+  });
+  const err = stderr();
+  assert.match(err, /inconsistent prefixes/u);
+  assert.match(err, /Re-run with --prefix/u);
+  await assert.rejects(readOutput(cwd, "AGENTS.md"), /ENOENT/u);
+});
+
+test("mixed prefixes: interactive confirm adopts the majority as the default", async (t) => {
+  const cwd = await tempCwd(t);
+  await installMixedScanProject(cwd);
+  t.mock.method(process, "cwd", () => cwd);
+  t.mock.method(process, "exit", () => {
+    throw new Error("should not exit on success");
+  });
+  captureWrite(t, process.stderr);
+  t.mock.method(globalThis, "fetch", async () => {
+    throw new Error("init must not hit the network");
+  });
+  forceInteractive(t);
+  // Accept the suggested majority (`legacy-`) at the confirm prompt.
+  t.mock.method(inquirer, "prompt", async () => ({ accept: true }));
+
+  await runInit({});
+
+  const agents = await readOutput(cwd, "AGENTS.md");
+  // Per-component scan overrides are honored regardless of the chosen default.
+  assert.match(agents, /<legacy-button>/u, "button keeps its registered tag");
+  assert.match(agents, /<brand-card>/u, "card keeps its registered tag");
+  const config = JSON.parse(await readOutput(cwd, "auro.config.json"));
+  assert.equal(
+    config.init.prefix.default,
+    "legacy-",
+    "majority adopted as default",
+  );
+});
+
+test("mixed prefixes: declining the confirm falls back to an entered prefix", async (t) => {
+  const cwd = await tempCwd(t);
+  await installMixedScanProject(cwd);
+  t.mock.method(process, "cwd", () => cwd);
+  t.mock.method(process, "exit", () => {
+    throw new Error("should not exit on success");
+  });
+  captureWrite(t, process.stderr);
+  t.mock.method(globalThis, "fetch", async () => {
+    throw new Error("init must not hit the network");
+  });
+  forceInteractive(t);
+  // Decline the majority confirm, then type a fresh default at the input prompt.
+  t.mock.method(
+    inquirer,
+    "prompt",
+    async (questions: Array<{ type?: string }>) =>
+      questions[0]?.type === "confirm"
+        ? { accept: false }
+        : { prefix: "custom-" },
+  );
+
+  await runInit({});
+
+  const agents = await readOutput(cwd, "AGENTS.md");
+  // The entered default governs only unregistered components; the two scanned
+  // registrations still win per-component.
+  assert.match(agents, /<legacy-button>/u);
+  assert.match(agents, /<brand-card>/u);
+  const config = JSON.parse(await readOutput(cwd, "auro.config.json"));
+  assert.equal(
+    config.init.prefix.default,
+    "custom-",
+    "entered prefix is persisted",
+  );
+});
+
+test("mixed prefixes: an explicit --prefix bypasses the prompt and CI fail", async (t) => {
+  const cwd = await tempCwd(t);
+  await installMixedScanProject(cwd); // non-interactive runner, but --prefix settles it
+  t.mock.method(process, "cwd", () => cwd);
+  t.mock.method(process, "exit", () => {
+    throw new Error("should not exit when --prefix is given");
+  });
+  captureWrite(t, process.stderr);
+  t.mock.method(globalThis, "fetch", async () => {
+    throw new Error("init must not hit the network");
+  });
+  // No inquirer mock: if the command tried to prompt, the real prompt would hang
+  // or throw — proving --prefix short-circuits the decision entirely.
+
+  await runInit({ prefix: "myapp-" });
+
+  const agents = await readOutput(cwd, "AGENTS.md");
+  assert.match(
+    agents,
+    /<legacy-button>/u,
+    "scanned tags still win over the default",
+  );
+  assert.match(agents, /<brand-card>/u);
+  const config = JSON.parse(await readOutput(cwd, "auro.config.json"));
+  assert.equal(config.init.prefix.default, "myapp-");
+});
+
+test("a committed mixed-prefix config regenerates cleanly without prompting or failing", async (t) => {
+  const cwd = await tempCwd(t);
+  // Two installed components pinned to two different prefixes in a *settled*
+  // config (default already chosen). No source scan needed.
+  await installLocalPackage(
+    cwd,
+    "@aurodesignsystem/auro-button",
+    "1.0.0",
+    elementManifest("auro-button"),
+  );
+  await installLocalPackage(
+    cwd,
+    "@aurodesignsystem/auro-card",
+    "2.0.0",
+    elementManifest("auro-card"),
+  );
+  await writeFile(
+    path.join(cwd, "auro.config.json"),
+    JSON.stringify({
+      version: 1,
+      init: {
+        prefix: {
+          default: "myapp-",
+          overrides: {
+            "auro-button": "legacy-button",
+            "auro-card": "brand-card",
+          },
+        },
+      },
+    }),
+  );
+  t.mock.method(process, "cwd", () => cwd);
+  // A settled default means the non-interactive runner must NOT fail: regeneration
+  // of a mixed-prefix project has to stay deterministic.
+  t.mock.method(process, "exit", () => {
+    throw new Error("mixed but settled config must not exit");
+  });
+  captureWrite(t, process.stderr);
+  t.mock.method(globalThis, "fetch", async () => {
+    throw new Error("init must not hit the network");
+  });
+
+  await runInit({});
+
+  const agents = await readOutput(cwd, "AGENTS.md");
+  assert.match(agents, /<legacy-button>/u);
+  assert.match(agents, /<brand-card>/u);
+  const config = JSON.parse(await readOutput(cwd, "auro.config.json"));
+  assert.equal(
+    config.init.prefix.default,
+    "myapp-",
+    "settled default is preserved",
+  );
 });

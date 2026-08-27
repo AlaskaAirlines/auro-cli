@@ -61,6 +61,33 @@ export function captureError(t: TestContext): () => string {
       .join("\n");
 }
 
+/**
+ * Force the current run to look interactive so command code reaches its
+ * `inquirer` branch under the (non-TTY) test runner: set `process.stdin.isTTY`
+ * true and clear `process.env.CI`, both restored after the test. Pair with a
+ * mock of `inquirer.prompt` so no real prompt is issued.
+ */
+export function forceInteractive(t: TestContext): void {
+  const origIsTTY = process.stdin.isTTY;
+  const origCI = process.env.CI;
+  Object.defineProperty(process.stdin, "isTTY", {
+    value: true,
+    configurable: true,
+  });
+  delete process.env.CI;
+  t.after(() => {
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: origIsTTY,
+      configurable: true,
+    });
+    if (origCI === undefined) {
+      delete process.env.CI;
+    } else {
+      process.env.CI = origCI;
+    }
+  });
+}
+
 /** Create a fresh temp directory to act as a fake project cwd, auto-removed. */
 export async function tempCwd(t: TestContext): Promise<string> {
   const dir = await mkdtemp(path.join(tmpdir(), "auro-cli-test-"));

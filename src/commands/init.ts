@@ -147,10 +147,16 @@ export async function runInit(options: InitOptions): Promise<void> {
 
   // Two-phase resolution: when some components still need a default prefix, or
   // existing registrations imply conflicting prefixes, resolve one and re-plan.
-  // An explicit --prefix has already settled it (needsDefaultPrefix is false).
+  //
+  // The decision (confirm majority / prompt / CI-fail) is only needed while the
+  // default is UNSETTLED — no --prefix and no persisted config default. A settled
+  // default already governs unregistered components, so mixed per-component
+  // overrides are simply honored and regeneration stays deterministic (no
+  // re-prompt, no CI-fail on every run of a committed mixed-prefix project).
+  const defaultSettled =
+    options.prefix !== undefined || config?.init.prefix.default !== undefined;
   const needsDecision =
-    options.prefix === undefined &&
-    (plan.needsDefaultPrefix || plan.mixedPrefixes);
+    !defaultSettled && (plan.needsDefaultPrefix || plan.mixedPrefixes);
   if (needsDecision) {
     if (isNonInteractive(options)) {
       const reason = plan.needsDefaultPrefix
