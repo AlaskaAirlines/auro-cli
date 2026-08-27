@@ -88,6 +88,12 @@ function registeredElements(manifest: Manifest): CemDeclaration[] {
  * (`<pkg>/<tag>`, e.g. `@aurodesignsystem/auro-formkit/auro-input`), while a
  * standalone package imports from its root. The subpath segment is the component's
  * canonical bare `auro-*` tag, which matches Auro's per-component export names.
+ *
+ * A tag registered by more than one installed package (the legacy standalone vs
+ * `auro-formkit` monorepo overlap) is **grounded once** — the first-detected
+ * package wins — and every colliding package is recorded in `duplicates` so the
+ * command warns which packages the tag came from. Detection order follows the
+ * installed order, so the winner is deterministic.
  */
 export function resolveComponents(
   installed: readonly InstalledComponent[],
@@ -96,6 +102,8 @@ export function resolveComponents(
   // tag -> the packages that register it, insertion-ordered, for duplicate
   // detection. A package appears at most once per tag.
   const owningPackages = new Map<string, string[]>();
+  // Tags already emitted to `components`, so a duplicate tag is grounded once.
+  const grounded = new Set<string>();
 
   for (const { pkg, version, manifest } of installed) {
     const elements = registeredElements(manifest);
@@ -104,15 +112,9 @@ export function resolveComponents(
     const isMonorepo = elements.length > 1;
     for (const declaration of elements) {
       const tagName = declaration.tagName as string;
-      components.push({
-        pkg,
-        version,
-        tagName,
-        declaration,
-        importPath: isMonorepo ? `${pkg}/${tagName}` : pkg,
-        isMonorepo,
-      });
 
+      // Record every package that registers this tag (for the dedupe warning),
+      // before deciding whether to ground it.
       const owners = owningPackages.get(tagName);
       if (owners) {
         if (!owners.includes(pkg)) {
@@ -121,6 +123,22 @@ export function resolveComponents(
       } else {
         owningPackages.set(tagName, [pkg]);
       }
+
+      // Ground each canonical tag exactly once: the first package to register it
+      // wins. A later package's registration is flagged as a duplicate (above),
+      // never grounded a second time.
+      if (grounded.has(tagName)) {
+        continue;
+      }
+      grounded.add(tagName);
+      components.push({
+        pkg,
+        version,
+        tagName,
+        declaration,
+        importPath: isMonorepo ? `${pkg}/${tagName}` : pkg,
+        isMonorepo,
+      });
     }
   }
 

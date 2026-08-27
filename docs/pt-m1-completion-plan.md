@@ -557,8 +557,21 @@ Map the ticket's enumerated test list to suites (node:test via
   [init.command.test.ts](../test/init.command.test.ts) exercising all three
   patterns in one `app.js`, plus unit coverage in
   [registry.test.ts](../test/registry.test.ts).
-- **Duplicate-tag dedupe** needs a real legacy-vs-monorepo overlap to test; may
-  need a synthetic fixture if none is currently published.
+- ✅ **Duplicate-tag dedupe** — Resolved. `resolveComponents`
+  ([resolver.ts](../src/init/resolver.ts)) now grounds each canonical tag **once**
+  (first-detected package wins) while still recording every colliding package in
+  `duplicates`, so a tag registered by both a legacy standalone and the
+  `auro-formkit` monorepo (e.g. `@aurodesignsystem/auro-input` vs
+  `@aurodesignsystem/auro-formkit`) yields a single grounded entry plus the
+  existing "registered by multiple installed packages" warning — matching init's
+  "Grounded once — verify which package you intend to use" contract end-to-end.
+  The real legacy-standalone form packages
+  (`auro-input`/`-select`/`-combobox`/`-menu`/`-checkbox`/`-radio`/`-datepicker`/`-dropdown`/`-form`)
+  were added to [auroComponents.ts](../src/static/auroComponents.ts) so the overlap
+  is detectable. Covered by a grounded-once assertion in
+  [resolver.test.ts](../test/resolver.test.ts) and an "exactly one API section"
+  assertion on `AGENTS.md` in
+  [init.command.test.ts](../test/init.command.test.ts).
 
 ## Done when
 

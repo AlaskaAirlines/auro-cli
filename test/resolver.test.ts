@@ -143,17 +143,32 @@ test("resolveComponents ignores internal base classes that carry no tag", () => 
   );
 });
 
-test("resolveComponents flags a tag registered by more than one installed package", () => {
+test("resolveComponents grounds a duplicated tag once, first-detected package wins", () => {
   const { components, duplicates } = resolveComponents([
     installed(INPUT_STANDALONE, "9.0.0", manifestWith(["auro-input"])),
     installed(FORMKIT, "6.1.0", manifestWith(["auro-input", "auro-select"])),
   ]);
 
-  assert.equal(components.length, 3, "every registration is still emitted");
+  assert.deepEqual(
+    components.map((c) => c.tagName),
+    ["auro-input", "auro-select"],
+    "auro-input is grounded exactly once, not once per registering package",
+  );
+  const input = components.find((c) => c.tagName === "auro-input");
+  assert.equal(
+    input?.pkg,
+    INPUT_STANDALONE,
+    "the first-detected package (the standalone) wins the grounding",
+  );
+  assert.equal(
+    input?.importPath,
+    INPUT_STANDALONE,
+    "the winner keeps its own import shape — the standalone imports from the root",
+  );
   assert.deepEqual(
     duplicates,
     [{ tagName: "auro-input", packages: [INPUT_STANDALONE, FORMKIT] }],
-    "auro-input is flagged across the standalone and the monorepo",
+    "both colliding packages are still recorded so the command can warn",
   );
 });
 
