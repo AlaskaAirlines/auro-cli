@@ -3,11 +3,19 @@
  * only picks up `*.test.ts`), so it can be imported freely.
  */
 
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import {
+  copyFile,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import process from "node:process";
 import type { TestContext } from "node:test";
+import { fileURLToPath } from "node:url";
 
 /**
  * Sentinel thrown by the mocked `process.exit` so a test can assert the command
@@ -86,6 +94,44 @@ export async function installLocalPackage(
   const manifestPath = path.join(pkgDir, manifestRel);
   await mkdir(path.dirname(manifestPath), { recursive: true });
   await writeFile(manifestPath, JSON.stringify(manifest));
+}
+
+/** Directory holding the vendored real-package fixtures (`packages/<name>/`). */
+const FIXTURE_PACKAGES = fileURLToPath(
+  new URL("./fixtures/packages", import.meta.url),
+);
+
+/**
+ * Copy a vendored **real** Auro package fixture into `<cwd>/node_modules/<pkg>`,
+ * mirroring a genuine local install. Unlike {@link installLocalPackage} (which
+ * synthesises a minimal manifest), this stages the real published `package.json`
+ * and its full custom-elements.json from `test/fixtures/packages/<name>/`, so
+ * detection/resolution run against the exact shapes shipped on npm — offline and
+ * deterministic. `name` is the fixture directory (e.g. `auro-button`,
+ * `auro-formkit`); the destination package is taken from the fixture's own
+ * `package.json` `name`, and the manifest is copied to the path its
+ * `customElements` field points at.
+ */
+export async function installRealPackage(
+  cwd: string,
+  name: string,
+): Promise<void> {
+  const srcDir = path.join(FIXTURE_PACKAGES, name);
+  const pkgJson = JSON.parse(
+    await readFile(path.join(srcDir, "package.json"), "utf-8"),
+  ) as { name: string; customElements?: string };
+
+  const destDir = path.join(cwd, "node_modules", ...pkgJson.name.split("/"));
+  await mkdir(destDir, { recursive: true });
+  await copyFile(
+    path.join(srcDir, "package.json"),
+    path.join(destDir, "package.json"),
+  );
+
+  const manifestRel = pkgJson.customElements ?? "custom-elements.json";
+  const manifestDest = path.join(destDir, manifestRel);
+  await mkdir(path.dirname(manifestDest), { recursive: true });
+  await copyFile(path.join(srcDir, manifestRel), manifestDest);
 }
 
 /** A minimal manifest documenting a single registered custom element. */
