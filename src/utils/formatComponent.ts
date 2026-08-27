@@ -84,6 +84,23 @@ export function formatDeclaration(pkg: string, decl: CemDeclaration): string {
   lines.push(`  npm i ${pkg}`);
   lines.push(`  import "${pkg}";`);
 
+  lines.push(...apiBodyLines(decl));
+
+  return lines.join("\n");
+}
+
+/**
+ * Render the API sections of a declaration — Attributes, Properties & Methods,
+ * Slots, Events, and (when present) CSS Parts / CSS Custom Properties — as a list
+ * of lines, led by a blank separator. Shared by {@link formatDeclaration} (the
+ * `component` command's full render) and `auro init`'s per-component grounding
+ * sections, which wrap this same body under their own resolved-tag header and
+ * prefix/subpath-aware install lines. Returns lines (not a joined string) so a
+ * caller can splice them into a larger `lines` array.
+ */
+export function apiBodyLines(decl: CemDeclaration): string[] {
+  const lines: string[] = [];
+
   const attributes = decl.attributes ?? [];
   lines.push("");
   lines.push(`Attributes (${attributes.length}):`);
@@ -170,5 +187,5 @@ export function formatDeclaration(pkg: string, decl: CemDeclaration): string {
     lines.push(renderList(cssProps.map((p) => [p.name, clean(p.description)])));
   }
 
-  return lines.join("\n");
+  return lines;
 }

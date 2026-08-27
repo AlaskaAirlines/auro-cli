@@ -358,13 +358,39 @@ install (step 6) gates end-to-end verification; the admin step gates on merge.
      resolved tags (a `Map<canonical-tag, custom-tag>` from `registry.ts`); it uses
      each component's `importPath` for the `import` line and `declaration` for the
      API body, and must surface `duplicates` as a dedupe warning.
-4. **Build `generator.ts`** — render `AGENTS.md`/`CLAUDE.md` from resolved
-   components using prefixed tags; make import/registration lines subpath- and
-   prefix-aware; structure for future targets. **The generator takes resolved
-   tags as an input parameter — it does not compute prefixes itself** (that's
-   `registry.ts`, step 5). This is why it can be built and tested here, before
-   registry exists, using fixture tags; at runtime the command wires it as
+4. ✅ **DONE — Build `generator.ts`** — render `AGENTS.md`/`CLAUDE.md` from
+   resolved components using prefixed tags; make import/registration lines
+   subpath- and prefix-aware; structure for future targets. **The generator takes
+   resolved tags as an input parameter — it does not compute prefixes itself**
+   (that's `registry.ts`, step 5). This is why it can be built and tested here,
+   before registry exists, using fixture tags; at runtime the command wires it as
    detect → resolve → resolve-tags (registry) → generate (step 7).
+   - **Delivered:** [generator.ts](../src/init/generator.ts) — pure,
+     side-effect-free string builders. `generateAgentsMd(components, resolvedTags?)`
+     assembles the frozen scaffolding ([layout.ts](../src/init/layout.ts)/
+     [rules.ts](../src/init/rules.ts)) around an Installed Components table plus one
+     fenced API section per component; `generateClaudeMd()` renders the thin
+     `@AGENTS.md` import; `groundingFiles(...)` returns both as
+     `{ filename, contents }[]` so the command (step 6) writes them uniformly and
+     future targets (task #11) are additive. `resolvedTags` is a
+     `Map<canonical-tag, custom-tag>` **input** — an absent entry falls back to the
+     bare `auro-*` tag; the generator never derives prefixes. Each block's install
+     lines use the component's `importPath` (package root vs. monorepo subpath) and
+     `register('<resolved-tag>')`. To avoid duplicating ~80 lines of API rendering,
+     [formatComponent.ts](../src/utils/formatComponent.ts) was refactored to extract
+     `apiBodyLines(decl)` (Attributes → Properties & Methods → Slots → Events → CSS
+     Parts/Custom Properties); `formatDeclaration` now calls it and stays
+     **byte-identical** (the `component` command's tests are unchanged). Tests
+     [generator.test.ts](../test/generator.test.ts) (6: the **golden byte-for-byte
+     `AGENTS.md`** reproduction deferred from step 1 — a standalone prefixed button +
+     a formkit monorepo subpath input; `CLAUDE.md` fixture; `groundingFiles` order/
+     contents; bare-tag fallback; monorepo subpath import + register; empty-doc
+     validity). Full suite 92/92, `tsc`/biome clean.
+   - **Spec handed to step 5:** `registry.ts` produces the `resolvedTags`
+     `Map<canonical-tag, custom-tag>` the generator consumes — keyed by the bare
+     `auro-*` tag, valued by the project's custom/prefixed registration. An absent
+     key means "no custom registration" (bare tag stands), so the registry only
+     needs to emit entries for tags it actually resolves a prefix/override for.
 5. **Build `registry.ts`** — config load/save, AST scan (against synthetic
    consumer-source strings via the already-installed TS compiler API), prefix
    inference, mixed-prefix resolution (majority-suggest + confirm; `--prefix`/fail
