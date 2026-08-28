@@ -39,6 +39,18 @@ export const BUTTON: ResolvedComponent = {
         description: "Stretches to full width.",
         type: { text: "boolean" },
       },
+      {
+        // A reflected, string-literal-union attribute — proves value
+        // completion/validation survives across all three targets (the class
+        // -indexed form would collapse this to `any`). fieldName + description
+        // keep it past the private-reflection guard as a documented public attr.
+        name: "variant",
+        fieldName: "variant",
+        description: "Visual style variant.",
+        type: {
+          text: '"primary" | "secondary" | "tertiary" | "ghost" | "flat"',
+        },
+      },
     ],
     slots: [{ name: "", description: "Button label content." }],
     events: [{ name: "click", description: "Fired on activation." }],

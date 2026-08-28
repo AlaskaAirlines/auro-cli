@@ -5,8 +5,14 @@
  *
  * The Svelte tool has no per-tag rename hook (no `tagFormatter`), so — like the
  * HTML target — the resolved tags are baked in by pre-swapping the manifest
- * ({@link buildManifest} with `resolvedTags`). `componentTypePath` still points
- * each emitted class import at the component's installed `importPath`. Unlike the
+ * ({@link buildManifest} with `resolvedTags`). We deliberately do NOT pass
+ * `componentTypePath`: the tool types each attribute as `Component['field']` only
+ * when that hook is set, else it inlines the CEM's own `type.text` — and the
+ * class-indexed form resolves to `any` because the shipped Auro packages ship
+ * unresolvable class declarations (auro-button's `dist/index.d.ts` imports from a
+ * non-published `src/`; auro-formkit subpaths carry no `types` condition). Inlining
+ * the CEM type keeps real string-literal unions (`variant` →
+ * `"primary" | "secondary" | …`) so values actually complete/validate. Unlike the
  * other two tools this one returns `void` and only writes a file, so we point it
  * at a scratch dir and read the result back.
  *
@@ -24,7 +30,6 @@ import {
   buildManifest,
   type EditorArtifact,
   ensureTrailingNewline,
-  importPathsByClass,
   withTempDir,
 } from "#init/editors/manifest.js";
 import type { ResolvedComponent } from "#init/resolver.js";
@@ -86,14 +91,15 @@ export function buildSvelteTypes(
   resolvedTags: ReadonlyMap<string, string>,
 ): EditorArtifact {
   const manifest = buildManifest(components, resolvedTags);
-  const importPaths = importPathsByClass(components);
 
   const contents = withTempDir((outdir) => {
     generateSvelteTypes(manifest, {
       outdir,
       fileName: SVELTE_TYPES_FILENAME,
       hideLogs: true,
-      componentTypePath: (name) => importPaths.get(name) ?? name,
+      // No `componentTypePath`: inline the CEM's `type.text` (real unions) instead
+      // of `Component['field']`, which resolves to `any` against the packages'
+      // unresolvable class .d.ts. See the module header for the full rationale.
     });
     return readFileSync(join(outdir, SVELTE_TYPES_FILENAME), "utf-8");
   });

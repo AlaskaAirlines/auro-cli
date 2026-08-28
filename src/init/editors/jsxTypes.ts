@@ -7,9 +7,16 @@
  * `auro-*` tags here, unlike the HTML/Svelte pre-swap path):
  *  - `tagFormatter` renames each canonical tag to the tag the consumer registers,
  *    so the augmented `JSX.IntrinsicElements` / `react/jsx-runtime` keys match.
- *  - `componentTypePath` points each emitted `import type { AuroButton }` at the
- *    component's installed `importPath` (package root or monorepo subpath), not
- *    the CEM's internal source path.
+ *  - `componentTypePath` routes the emitted class/event/reference `import type`
+ *    specifiers at the component's installed `importPath` (package root or monorepo
+ *    subpath), not the CEM's internal source path.
+ *
+ * Prop types come from `useCemTypes: true`, which inlines each attribute's CEM
+ * `type.text` (real string-literal unions like `variant` →
+ * `"primary" | "secondary" | …`). Without it the tool would type props as
+ * `Component['prop']`, which resolves to `any` because the shipped Auro packages
+ * ship unresolvable class declarations — so values would never complete/validate.
+ * The class import the tool still emits is then unused but harmless.
  *
  * `generateJsxTypes` both writes a file to `outdir` and returns the source; we
  * discard the write (scratch dir) and keep the returned string.
@@ -51,6 +58,9 @@ export function buildJsxTypes(
         fileName: JSX_TYPES_FILENAME,
         tagFormatter: (tagName) => resolvedTags.get(tagName) ?? tagName,
         componentTypePath: (name) => importPaths.get(name) ?? name,
+        // Inline CEM `type.text` for props instead of `Component['prop']`, which
+        // resolves to `any` against the packages' unresolvable class .d.ts.
+        useCemTypes: true,
       },
     ),
   );

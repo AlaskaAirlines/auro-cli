@@ -123,23 +123,70 @@ test("a component with no resolved tag falls back to its bare auro-* tag", () =>
 });
 
 // ---------------------------------------------------------------------------
-// Class-import seam: JSX/Svelte import each class from its installed importPath
+// Type source: JSX imports each class from its installed importPath (for events
+// / named references); Svelte inlines CEM types with no package import at all.
+// Both target the CEM's `type.text` for prop VALUES — never `Component['prop']`,
+// which resolves to `any` against the packages' unresolvable class .d.ts.
 // ---------------------------------------------------------------------------
 
-test("JSX and Svelte import each class from its resolved importPath", () => {
+test("JSX routes class imports through the resolved importPath", () => {
+  const jsx = buildJsxTypes(COMPONENTS, RESOLVED_TAGS).contents;
+  // Standalone → package root; monorepo → per-component subpath export.
+  assert.match(
+    jsx,
+    /import type \{ AuroButton \} from "@aurodesignsystem\/auro-button"/u,
+  );
+  assert.match(
+    jsx,
+    /import type \{ AuroInput \} from "@aurodesignsystem\/auro-formkit\/auro-input"/u,
+  );
+});
+
+test("Svelte inlines CEM types and emits no package class import", () => {
+  const svelte = buildSvelteTypes(COMPONENTS, RESOLVED_TAGS).contents;
+  // With no componentTypePath the Svelte tool inlines `type.text` instead of
+  // `Component['field']` — so there is no `import type { Auro… } from "…"` line
+  // and nothing depends on the packages' (broken) shipped class declarations.
+  assert.doesNotMatch(
+    svelte,
+    /import type \{[^}]*\} from "@aurodesignsystem\//u,
+    "Svelte artifact must not import any component class",
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Value completion/validation: a string-literal union survives to every target
+// as a real union (not `any`), so editors complete + validate attribute values.
+// ---------------------------------------------------------------------------
+
+test("a string-literal union attribute is inlined as a real union in every target", () => {
+  const union =
+    /"primary"\s*\|\s*"secondary"\s*\|\s*"tertiary"\s*\|\s*"ghost"\s*\|\s*"flat"/u;
   const jsx = buildJsxTypes(COMPONENTS, RESOLVED_TAGS).contents;
   const svelte = buildSvelteTypes(COMPONENTS, RESOLVED_TAGS).contents;
-  for (const out of [jsx, svelte]) {
-    // Standalone → package root; monorepo → per-component subpath export.
-    assert.match(
-      out,
-      /import type \{ AuroButton \} from "@aurodesignsystem\/auro-button"/u,
-    );
-    assert.match(
-      out,
-      /import type \{ AuroInput \} from "@aurodesignsystem\/auro-formkit\/auro-input"/u,
-    );
-  }
+  assert.match(jsx, union, "JSX inlines the union, not AuroButton['variant']");
+  assert.match(svelte, union, "Svelte inlines the union, not any");
+  // Neither target should degrade a typed attribute to the class-indexed form.
+  assert.doesNotMatch(jsx, /AuroButton\['variant'\]/u);
+  assert.doesNotMatch(svelte, /AuroButton\["variant"\]/u);
+
+  // HTML custom-data exposes the same union as value completions.
+  const data = JSON.parse(
+    buildHtmlCustomData(COMPONENTS, RESOLVED_TAGS).contents,
+  ) as {
+    tags: {
+      name: string;
+      attributes?: { name: string; values?: { name: string }[] }[];
+    }[];
+  };
+  const variant = data.tags
+    .find((t) => t.name === "myapp-button")
+    ?.attributes?.find((a) => a.name === "variant");
+  assert.deepEqual(
+    variant?.values?.map((v) => v.name),
+    ["primary", "secondary", "tertiary", "ghost", "flat"],
+    "HTML custom-data lists the union members as value completions",
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -161,8 +208,8 @@ test("HTML custom-data carries attributes and hover docs for slots + events", ()
   assert.ok(button, "button tag present");
   assert.deepEqual(
     button?.attributes?.map((a) => a.name),
-    ["disabled", "fluid"],
-    "both attributes emitted",
+    ["disabled", "fluid", "variant"],
+    "all public attributes emitted",
   );
   // Slots + events surface in the hover description, not as separate keys.
   assert.match(button?.description ?? "", /Slots/u);

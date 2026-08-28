@@ -173,6 +173,32 @@ the real installed package (e.g. `@aurodesignsystem/auro-button`). Verify the em
 `.d.ts` type-checks in a consumer with the packages installed (part of the golden
 fixture + a `tsc` smoke).
 
+> **DECISION UPDATE (resolved) — attribute/prop VALUE types come from the CEM's
+> `type.text`, not `Component['field']`.** The original seam typed each attribute by
+> indexing the imported class (`AuroButton['variant']`). That silently degraded every
+> attribute to `any`, because the shipped Auro packages ship **unresolvable class
+> `.d.ts`**: `@aurodesignsystem/auro-button/dist/index.d.ts` imports `AuroButton` from
+> a non-published `src/auro-button.js`, and `@aurodesignsystem/auro-formkit` subpath
+> exports carry **no `types` condition** at all. With the class unresolvable,
+> `Class['field']` is `any` and no value ever completes or validates. Fix (auro-cli
+> only): **inline the CEM's own `type.text`**, which carries the real string-literal
+> unions (`variant` → `"primary" | "secondary" | "tertiary" | "ghost" | "flat"`). The
+> two libs expose this through different knobs (verified in their `dist/index.js`):
+>
+> - **Svelte** (`custom-element-svelte-integration`): emits `Component['field']` only
+>   when `componentTypePath` is set → **drop `componentTypePath`**. This also drops all
+>   package class-import lines, so the Svelte artifact has **zero package imports** and
+>   no resolution dependency.
+> - **JSX** (`@wc-toolkit/jsx-types`): gated on **`useCemTypes: true`** (not
+>   `componentTypePath`) → **add `useCemTypes: true`, keep `componentTypePath`** so
+>   import-path routing for events/named references stays correct.
+>
+> **Residual caveat (upstream, not solved here):** the JSX tool still emits an
+> *unavoidable* `import type { AuroInput } from "@aurodesignsystem/auro-formkit/auro-input"`.
+> That specifier won't resolve until formkit publishes a `types` export condition — a
+> pre-existing upstream gap, independent of this value-typing fix. It is now unused
+> (prop values come from `useCemTypes`), so it is harmless to the value contract.
+
 ## Task breakdown
 
 > **Requirements-coverage matrix, not the build sequence.** Use
