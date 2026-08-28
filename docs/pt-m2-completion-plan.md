@@ -419,8 +419,20 @@ fixtures + the new dependencies, matching PT-M1's front-loading.
      detected signal; answers given *against* those defaults (decline the detected VS Code
      target, opt into the undetected JSX one) drive what's written and persist as concrete
      booleans. Covers the `resolveEditorTargets` prompt branch end-to-end.
-   - Verify gate green — **224 tests** (204 → +19 detect +1 interactive), `tsc --noEmit`,
-     scoped biome, build.
+   - **A second audit pass closed three more gaps** (in
+     [init.command.test.ts](../test/init.command.test.ts) and
+     [init.editors.builders.test.ts](../test/init.editors.builders.test.ts)): (a) the
+     **tsconfig-merge warning path** in [write.ts](../src/init/editors/write.ts) — `--jsx`
+     against a tsconfig whose `include` is unmergeable surfaces the warning on stderr and
+     still writes the artifact, leaving the tsconfig untouched (the symmetric settings.json
+     path was already covered); (b) the **delimiter-balance guard** in
+     [manifest.ts](../src/init/editors/manifest.ts) — through the JSX builder, a balanced
+     arrow type (`=>` read as text) and a nested generic are preserved while a *mismatched*
+     bracket pair is dropped, pinning the subtle `hasBalancedDelimiters` logic beyond the one
+     truncation case; (c) **flag-precedence conflict** — an explicit `--no-vscode` overrides a
+     persisted `vscode:true` and re-persists, pinning the frozen flag → persisted ordering.
+   - Verify gate green — **227 tests** (204 → +19 detect +1 interactive +3 second-pass),
+     `tsc --noEmit`, scoped biome, build.
 6. **Manual verification.** Extend
    [test/manual-testing-ai-tooling.md](../test/manual-testing-ai-tooling.md) with a
    **PT-M2 / AB#1628542** section proving the live editor experience across the three
