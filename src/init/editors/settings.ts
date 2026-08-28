@@ -96,6 +96,19 @@ function applyValueEdit(
 }
 
 /**
+ * Surgically remove the property at `path` from `source`, preserving surrounding
+ * comments and formatting. `modify(..., undefined, ...)` emits the delete edit;
+ * `applyEdits` splices it in without a parse-then-stringify round-trip. The
+ * inverse of {@link applyValueEdit}, used by the un-merge helpers below.
+ */
+function applyKeyDeletion(source: string, path: string[]): string {
+  const edits = modify(source, path, undefined, {
+    formattingOptions: FORMATTING,
+  });
+  return applyEdits(source, edits);
+}
+
+/**
  * Register the HTML custom-data file in `.vscode/settings.json` under
  * `html.customData`, appending non-destructively:
  *  - absent → create the key as a one-element array;
@@ -203,4 +216,85 @@ export function mergeTsconfigInclude(
 
   // Branch 3: neither key — the default glob already covers the non-dotted dir.
   return { contents: existing, changed: false };
+}
+
+/**
+ * Reverse {@link mergeVsCodeSettings}: remove the HTML custom-data entry from
+ * `.vscode/settings.json` `html.customData`, the un-merge `auro init --reset`
+ * applies. Non-destructive and idempotent — only our own entry is touched:
+ *  - an array containing `entry` → drop it; if that empties the array, delete
+ *    the whole key (so no dangling `"html.customData": []` is left behind);
+ *  - a bare string equal to `entry` → delete the key;
+ *  - `entry` absent, key absent, or the value is some other type → no-op (there
+ *    is nothing of ours to remove);
+ *  - unparseable file → refuse and warn, same contract as the merge.
+ */
+export function unmergeVsCodeSettings(
+  existing: string,
+  entry: string = HTML_CUSTOM_DATA_SETTINGS_ENTRY,
+): MergeResult {
+  const parsed = parseObject(existing, ".vscode/settings.json");
+  if ("warning" in parsed) {
+    return { contents: existing, changed: false, warning: parsed.warning };
+  }
+
+  const current = parsed.data[HTML_CUSTOM_DATA_SETTINGS_KEY];
+
+  if (typeof current === "string") {
+    if (current !== entry) {
+      return { contents: existing, changed: false };
+    }
+    const contents = applyKeyDeletion(existing, [
+      HTML_CUSTOM_DATA_SETTINGS_KEY,
+    ]);
+    return { contents, changed: true };
+  }
+
+  if (Array.isArray(current)) {
+    if (!current.includes(entry)) {
+      return { contents: existing, changed: false };
+    }
+    const remaining = (current as string[]).filter((v) => v !== entry);
+    const contents =
+      remaining.length === 0
+        ? applyKeyDeletion(existing, [HTML_CUSTOM_DATA_SETTINGS_KEY])
+        : applyValueEdit(existing, [HTML_CUSTOM_DATA_SETTINGS_KEY], remaining);
+    return { contents, changed: true };
+  }
+
+  // Absent or an unexpected type — nothing of ours to remove.
+  return { contents: existing, changed: false };
+}
+
+/**
+ * Reverse {@link mergeTsconfigInclude}: remove the framework-types entry from a
+ * `tsconfig.json`/`jsconfig.json` `include` array, the un-merge
+ * `auro init --reset` applies. Non-destructive and idempotent:
+ *  - an `include` array containing `entry` → drop it; if that empties the array,
+ *    delete the `include` key entirely (restoring the default-glob branch the
+ *    merge relied on when it created a single-entry include);
+ *  - `include` not an array, absent, or without `entry` → no-op;
+ *  - unparseable file → refuse and warn.
+ */
+export function unmergeTsconfigInclude(
+  existing: string,
+  entry: string = TSCONFIG_INCLUDE_ENTRY,
+  configName = "tsconfig.json",
+): MergeResult {
+  const parsed = parseObject(existing, configName);
+  if ("warning" in parsed) {
+    return { contents: existing, changed: false, warning: parsed.warning };
+  }
+
+  const include = parsed.data[TSCONFIG_INCLUDE_KEY];
+  if (!Array.isArray(include) || !include.includes(entry)) {
+    return { contents: existing, changed: false };
+  }
+
+  const remaining = (include as string[]).filter((v) => v !== entry);
+  const contents =
+    remaining.length === 0
+      ? applyKeyDeletion(existing, [TSCONFIG_INCLUDE_KEY])
+      : applyValueEdit(existing, [TSCONFIG_INCLUDE_KEY], remaining);
+  return { contents, changed: true };
 }
