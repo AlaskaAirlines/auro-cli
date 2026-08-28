@@ -1,0 +1,342 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { test } from "node:test";
+import { fileURLToPath } from "node:url";
+import { parse as parseJsonc } from "jsonc-parser";
+import { buildHtmlCustomData } from "../src/init/editors/htmlCustomData.ts";
+import { buildJsxTypes } from "../src/init/editors/jsxTypes.ts";
+import {
+  HTML_CUSTOM_DATA_PATH,
+  JSX_TYPES_PATH,
+  SVELTE_TYPES_PATH,
+} from "../src/init/editors/layout.ts";
+import {
+  mergeTsconfigInclude,
+  mergeVsCodeSettings,
+} from "../src/init/editors/settings.ts";
+import { buildSvelteTypes } from "../src/init/editors/svelteTypes.ts";
+import type { ResolvedComponent } from "../src/init/resolver.ts";
+import { BUTTON, COMPONENTS, INPUT, RESOLVED_TAGS } from "./support.editors.ts";
+
+/**
+ * Build-order step 2: the three pure per-target builders and the two config
+ * merges. The byte-exact golden tests below are the ones the step-1 format freeze
+ * deferred ("the builders don't exist yet") — they pin real community-tool output
+ * over the SAME synthetic components the PT-M1 AGENTS.md fixture uses, so the
+ * editor artifacts and grounding docs stay on one consistent resolved manifest.
+ */
+
+const fixture = (name: string): string =>
+  readFileSync(
+    fileURLToPath(new URL(`./fixtures/init/editors/${name}`, import.meta.url)),
+    "utf-8",
+  );
+
+const basename = (path: string): string => path.split("/").pop() as string;
+
+// ---------------------------------------------------------------------------
+// Byte-exact golden output (builders are the source of truth for the fixtures)
+// ---------------------------------------------------------------------------
+
+test("buildHtmlCustomData reproduces the golden HTML custom-data byte-for-byte", () => {
+  const artifact = buildHtmlCustomData(COMPONENTS, RESOLVED_TAGS);
+  assert.equal(artifact.filename, HTML_CUSTOM_DATA_PATH);
+  assert.equal(artifact.contents, fixture(basename(HTML_CUSTOM_DATA_PATH)));
+});
+
+test("buildJsxTypes reproduces the golden JSX types byte-for-byte", () => {
+  const artifact = buildJsxTypes(COMPONENTS, RESOLVED_TAGS);
+  assert.equal(artifact.filename, JSX_TYPES_PATH);
+  assert.equal(artifact.contents, fixture(basename(JSX_TYPES_PATH)));
+});
+
+test("buildSvelteTypes reproduces the golden Svelte types byte-for-byte", () => {
+  const artifact = buildSvelteTypes(COMPONENTS, RESOLVED_TAGS);
+  assert.equal(artifact.filename, SVELTE_TYPES_PATH);
+  assert.equal(artifact.contents, fixture(basename(SVELTE_TYPES_PATH)));
+});
+
+test("every builder emits a single trailing newline", () => {
+  for (const artifact of [
+    buildHtmlCustomData(COMPONENTS, RESOLVED_TAGS),
+    buildJsxTypes(COMPONENTS, RESOLVED_TAGS),
+    buildSvelteTypes(COMPONENTS, RESOLVED_TAGS),
+  ]) {
+    assert.equal(artifact.contents.endsWith("\n"), true);
+    assert.equal(artifact.contents.endsWith("\n\n"), false);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Tag-swap seam: default prefix, arbitrary override, bare fallback
+// ---------------------------------------------------------------------------
+
+test("HTML custom-data keys on the resolved tag, across all three targets", () => {
+  // Default-prefix (myapp-) and per-component override (legacy-input) both land.
+  const html = buildHtmlCustomData(COMPONENTS, RESOLVED_TAGS).contents;
+  const jsx = buildJsxTypes(COMPONENTS, RESOLVED_TAGS).contents;
+  const svelte = buildSvelteTypes(COMPONENTS, RESOLVED_TAGS).contents;
+  for (const out of [html, jsx, svelte]) {
+    assert.match(out, /myapp-button/u);
+    assert.match(out, /legacy-input/u);
+    assert.doesNotMatch(out, /"auro-button"/u, "bare tag not registered");
+  }
+});
+
+test("an arbitrary override tag flows through every builder", () => {
+  const override = new Map([["auro-button", "x-anything"]]);
+  const html = buildHtmlCustomData([BUTTON], override).contents;
+  const jsx = buildJsxTypes([BUTTON], override).contents;
+  const svelte = buildSvelteTypes([BUTTON], override).contents;
+  for (const out of [html, jsx, svelte]) {
+    assert.match(out, /x-anything/u, "arbitrary custom tag honored");
+  }
+});
+
+test("a component with no resolved tag falls back to its bare auro-* tag", () => {
+  const empty = new Map<string, string>();
+  const html = buildHtmlCustomData([BUTTON], empty).contents;
+  const jsx = buildJsxTypes([BUTTON], empty).contents;
+  const svelte = buildSvelteTypes([BUTTON], empty).contents;
+  for (const out of [html, jsx, svelte]) {
+    assert.match(out, /auro-button/u, "bare tag used when unresolved");
+    assert.doesNotMatch(out, /myapp-button/u);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Class-import seam: JSX/Svelte import each class from its installed importPath
+// ---------------------------------------------------------------------------
+
+test("JSX and Svelte import each class from its resolved importPath", () => {
+  const jsx = buildJsxTypes(COMPONENTS, RESOLVED_TAGS).contents;
+  const svelte = buildSvelteTypes(COMPONENTS, RESOLVED_TAGS).contents;
+  for (const out of [jsx, svelte]) {
+    // Standalone → package root; monorepo → per-component subpath export.
+    assert.match(
+      out,
+      /import type \{ AuroButton \} from "@aurodesignsystem\/auro-button"/u,
+    );
+    assert.match(
+      out,
+      /import type \{ AuroInput \} from "@aurodesignsystem\/auro-formkit\/auro-input"/u,
+    );
+  }
+});
+
+// ---------------------------------------------------------------------------
+// HTML hover payload carries attributes, slots, and events
+// ---------------------------------------------------------------------------
+
+test("HTML custom-data carries attributes and hover docs for slots + events", () => {
+  const data = JSON.parse(
+    buildHtmlCustomData(COMPONENTS, RESOLVED_TAGS).contents,
+  ) as {
+    tags: {
+      name: string;
+      description?: string;
+      attributes?: { name: string }[];
+    }[];
+  };
+
+  const button = data.tags.find((t) => t.name === "myapp-button");
+  assert.ok(button, "button tag present");
+  assert.deepEqual(
+    button?.attributes?.map((a) => a.name),
+    ["disabled", "fluid"],
+    "both attributes emitted",
+  );
+  // Slots + events surface in the hover description, not as separate keys.
+  assert.match(button?.description ?? "", /Slots/u);
+  assert.match(
+    button?.description ?? "",
+    /click/u,
+    "event named in hover docs",
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Determinism
+// ---------------------------------------------------------------------------
+
+test("builders are deterministic across repeated invocations", () => {
+  assert.equal(
+    buildJsxTypes(COMPONENTS, RESOLVED_TAGS).contents,
+    buildJsxTypes(COMPONENTS, RESOLVED_TAGS).contents,
+  );
+  assert.equal(
+    buildSvelteTypes(COMPONENTS, RESOLVED_TAGS).contents,
+    buildSvelteTypes(COMPONENTS, RESOLVED_TAGS).contents,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// mergeVsCodeSettings — non-destructive, comment-preserving, idempotent
+// ---------------------------------------------------------------------------
+
+const ENTRY = "./.vscode/auro.html-custom-data.json";
+
+const settingsCustomData = (raw: string): unknown =>
+  (parseJsonc(raw) as Record<string, unknown>)["html.customData"];
+
+test("mergeVsCodeSettings creates the key in an empty object", () => {
+  const { contents, changed } = mergeVsCodeSettings("{}", ENTRY);
+  assert.equal(changed, true);
+  assert.deepEqual(settingsCustomData(contents), [ENTRY]);
+});
+
+test("mergeVsCodeSettings treats an empty file as an empty object", () => {
+  const { contents, changed } = mergeVsCodeSettings("", ENTRY);
+  assert.equal(changed, true);
+  assert.deepEqual(settingsCustomData(contents), [ENTRY]);
+});
+
+test("mergeVsCodeSettings adds the key while preserving comments + unrelated keys", () => {
+  const raw = fixture("settings/unrelated-keys.json");
+  const { contents, changed } = mergeVsCodeSettings(raw, ENTRY);
+  assert.equal(changed, true);
+  assert.match(contents, /\/\/ Team formatting prefs/u, "comment preserved");
+  const parsed = parseJsonc(contents) as Record<string, unknown>;
+  assert.equal(parsed["editor.tabSize"], 2, "unrelated key preserved");
+  assert.equal(parsed["editor.formatOnSave"], true);
+  assert.deepEqual(parsed["html.customData"], [ENTRY]);
+});
+
+test("mergeVsCodeSettings appends to a pre-existing array without clobbering", () => {
+  const raw = fixture("settings/preexisting-custom-data.json");
+  const { contents, changed } = mergeVsCodeSettings(raw, ENTRY);
+  assert.equal(changed, true);
+  assert.deepEqual(settingsCustomData(contents), [
+    "./.vscode/team.html-custom-data.json",
+    ENTRY,
+  ]);
+});
+
+test("mergeVsCodeSettings normalizes a bare string value to an array", () => {
+  const { contents, changed } = mergeVsCodeSettings(
+    '{ "html.customData": "./team.json" }',
+    ENTRY,
+  );
+  assert.equal(changed, true);
+  assert.deepEqual(settingsCustomData(contents), ["./team.json", ENTRY]);
+});
+
+test("mergeVsCodeSettings is idempotent — a second run is a no-op", () => {
+  const once = mergeVsCodeSettings(fixture("settings/empty.json"), ENTRY);
+  const twice = mergeVsCodeSettings(once.contents, ENTRY);
+  assert.equal(twice.changed, false);
+  assert.equal(twice.contents, once.contents);
+});
+
+test("mergeVsCodeSettings is a no-op when the entry is already the sole string", () => {
+  const source = `{ "html.customData": "${ENTRY}" }`;
+  const { contents, changed } = mergeVsCodeSettings(source, ENTRY);
+  assert.equal(changed, false);
+  assert.equal(contents, source);
+});
+
+test("mergeVsCodeSettings refuses to touch an unparseable file", () => {
+  const source = "{ this is not json ";
+  const { contents, changed, warning } = mergeVsCodeSettings(source, ENTRY);
+  assert.equal(changed, false);
+  assert.equal(contents, source, "left byte-identical");
+  assert.match(warning ?? "", /not valid JSON/u);
+});
+
+test("mergeVsCodeSettings warns when html.customData is an unexpected type", () => {
+  const { changed, warning } = mergeVsCodeSettings(
+    '{ "html.customData": 42 }',
+    ENTRY,
+  );
+  assert.equal(changed, false);
+  assert.match(warning ?? "", /not a string or array/u);
+});
+
+// ---------------------------------------------------------------------------
+// mergeTsconfigInclude — the four-branch decision tree
+// ---------------------------------------------------------------------------
+
+const tsconfigInclude = (raw: string): unknown =>
+  (parseJsonc(raw) as Record<string, unknown>).include;
+
+test("mergeTsconfigInclude branch 1: appends to an existing include array", () => {
+  const { contents, changed } = mergeTsconfigInclude(
+    fixture("tsconfig/has-include.json"),
+  );
+  assert.equal(changed, true);
+  assert.deepEqual(tsconfigInclude(contents), ["src", "auro-types"]);
+  assert.match(contents, /Branch 1/u, "comment preserved");
+});
+
+test("mergeTsconfigInclude branch 2: appends when both files and include are set", () => {
+  const { contents, changed } = mergeTsconfigInclude(
+    fixture("tsconfig/files-and-include.json"),
+  );
+  assert.equal(changed, true);
+  assert.deepEqual(tsconfigInclude(contents), ["src/**/*.ts", "auro-types"]);
+  const parsed = parseJsonc(contents) as { files?: unknown };
+  assert.deepEqual(parsed.files, ["src/main.ts"], "files left untouched");
+});
+
+test("mergeTsconfigInclude branch 3: adds include when only files is set", () => {
+  const { contents, changed } = mergeTsconfigInclude(
+    fixture("tsconfig/files-only.json"),
+  );
+  assert.equal(changed, true);
+  assert.deepEqual(tsconfigInclude(contents), ["auro-types"]);
+  const parsed = parseJsonc(contents) as { files?: unknown };
+  assert.deepEqual(
+    parsed.files,
+    ["src/main.ts"],
+    "files preserved (they combine)",
+  );
+});
+
+test("mergeTsconfigInclude branch 4: no-op when neither files nor include is set", () => {
+  const raw = fixture("tsconfig/neither.json");
+  const { contents, changed, warning } = mergeTsconfigInclude(raw);
+  assert.equal(
+    changed,
+    false,
+    "default glob already covers the non-dotted dir",
+  );
+  assert.equal(warning, undefined, "not a warning — a legitimate no-op");
+  assert.equal(contents, raw, "left byte-identical");
+});
+
+test("mergeTsconfigInclude is idempotent — a second run is a no-op", () => {
+  const once = mergeTsconfigInclude(fixture("tsconfig/has-include.json"));
+  const twice = mergeTsconfigInclude(once.contents);
+  assert.equal(twice.changed, false);
+  assert.equal(twice.contents, once.contents);
+});
+
+test("mergeTsconfigInclude warns when include is present but not an array", () => {
+  const { changed, warning } = mergeTsconfigInclude('{ "include": "src" }');
+  assert.equal(changed, false);
+  assert.match(warning ?? "", /not an array/u);
+});
+
+test("mergeTsconfigInclude refuses to touch an unparseable file", () => {
+  const source = "{ broken";
+  const { contents, changed, warning } = mergeTsconfigInclude(source);
+  assert.equal(changed, false);
+  assert.equal(contents, source);
+  assert.match(warning ?? "", /not valid JSON/u);
+});
+
+// ---------------------------------------------------------------------------
+// A component set is not mutated by any builder (pure inputs)
+// ---------------------------------------------------------------------------
+
+test("builders do not mutate the caller's component declarations", () => {
+  const snapshot: ResolvedComponent = structuredClone(INPUT);
+  buildHtmlCustomData([INPUT], RESOLVED_TAGS);
+  buildJsxTypes([INPUT], RESOLVED_TAGS);
+  buildSvelteTypes([INPUT], RESOLVED_TAGS);
+  assert.deepEqual(
+    INPUT,
+    snapshot,
+    "input declaration unchanged (tag not swapped in place)",
+  );
+});
