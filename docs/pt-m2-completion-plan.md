@@ -704,6 +704,15 @@ offline/deterministic; `fetch` unused since detection is local):
   SolidJS, JetBrains) is **out of scope** for PT-M2 and is a natural follow-up — the
   same cem-tools family has `custom-element-vuejs-integration`,
   `custom-element-jet-brains-integration`, etc., over the identical resolver seam.
+- ❓ **Should `.vscode/auro.code-snippets` be excluded from the consumer's
+  `.gitignore`?** Open. Many projects gitignore `.vscode/` wholesale, which would keep the
+  generated CSS `::part()` snippets out of version control — so each contributor would have
+  to re-run `auro init` to get them locally rather than sharing one committed artifact.
+  Decide whether `auro init` should (a) leave `.gitignore` untouched (consistent with the
+  **"Never auto-gitignore `.vscode/`"** frozen decision), (b) add a negation entry
+  (`!.vscode/auro.code-snippets`) so the artifact is tracked even under a blanket
+  `.vscode/` ignore, or (c) just document the tradeoff and let the consumer decide. Applies
+  equally to the other `.vscode/` artifacts (`auro.html-custom-data.json`, `settings.json`).
 
 ## Done when
 
