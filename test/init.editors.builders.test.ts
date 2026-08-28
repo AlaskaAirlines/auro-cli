@@ -385,6 +385,77 @@ test("builders tolerate a nameless member and a malformed event type", () => {
   assert.match(jsx, /onauroButton-idAdded/u, "the defective event still binds");
 });
 
+// ---------------------------------------------------------------------------
+// Private-reflection hardening — the CEM analyzer emits an attribute for a
+// reflected property regardless of the property's `privacy`, so an internal
+// `@private onHover` still surfaces `data-hover` as a public, description-less
+// attribute that would leak into autocomplete. buildManifest drops such
+// attributes (private/omitted backing member + no description) while keeping
+// documented reflections and public attributes.
+// ---------------------------------------------------------------------------
+
+/** A button whose CEM mixes a private-reflection leak with legit attributes. */
+function componentWithPrivateReflection(): ResolvedComponent {
+  const component = structuredClone(BUTTON);
+  const declaration = component.declaration as {
+    attributes?: unknown[];
+    members?: unknown[];
+  };
+  declaration.members = [
+    // The internal hover flag: reflected to `data-hover`, marked @private.
+    { kind: "field", name: "onHover", privacy: "private" },
+    // A documented a11y reflection the component exposes on purpose.
+    { kind: "field", name: "ariaPressed", privacy: "private" },
+  ];
+  declaration.attributes = [
+    // Public, documented — always kept.
+    {
+      name: "disabled",
+      description: "Disables the button.",
+      type: { text: "boolean" },
+    },
+    // Reflects a @private member, no description → dropped.
+    { name: "data-hover", fieldName: "onHover" },
+    // Reflects an *omitted* member (no such member documented), no description →
+    // dropped (the property was pruned as @private upstream).
+    { name: "data-active", fieldName: "onActive" },
+    // Reflects a @private member but IS documented → kept (deliberate a11y API).
+    {
+      name: "aria-pressed",
+      fieldName: "ariaPressed",
+      description: "Whether the toggle is pressed.",
+    },
+  ];
+  return component;
+}
+
+test("builders drop private-reflected description-less attributes but keep documented ones", () => {
+  const components = [componentWithPrivateReflection()];
+  const html = buildHtmlCustomData(components, RESOLVED_TAGS).contents;
+  const jsx = buildJsxTypes(components, RESOLVED_TAGS).contents;
+  const svelte = buildSvelteTypes(components, RESOLVED_TAGS).contents;
+
+  for (const out of [html, jsx, svelte]) {
+    assert.match(out, /myapp-button/u, "the component is still emitted");
+    assert.doesNotMatch(
+      out,
+      /data-hover/u,
+      "the private reflection is dropped",
+    );
+    assert.doesNotMatch(
+      out,
+      /data-active/u,
+      "the omitted-member reflection is dropped",
+    );
+    assert.match(out, /disabled/u, "the documented public attribute is kept");
+    assert.match(
+      out,
+      /aria-pressed/u,
+      "the documented private reflection is deliberately kept",
+    );
+  }
+});
+
 test("the delimiter-balance guard keeps well-formed types and drops only broken ones", () => {
   const component = structuredClone(BUTTON);
   (component.declaration as { events?: unknown[] }).events = [

@@ -482,6 +482,44 @@ offline/deterministic; `fetch` unused since detection is local):
 
 ## Risks / open questions
 
+- ✅ **Private-reflected attributes leak into autocomplete (CLI-side manifest hardening).**
+  **Resolved.** Surfaced while improving the **auro-button** CEM: a component's internal
+  properties can be marked `@private` (dropped from the emitted **fields/members**), yet the
+  analyzer still emits their **reflected attributes** as **public, description-less
+  `attributes`** — e.g. `onHover`/`onActive` → `data-hover` / `data-active`. Those then
+  surfaced in HTML attribute autocomplete (and the JSX/Svelte prop types) as things a
+  consumer might set, which they never should.
+  - **Root cause (verified upstream):** neither `@private` nor `@ignore` on the source
+    suppresses them, because the CEM analyzer derives the attribute entry from the
+    `@property({ attribute: "…" , reflect: true })` **`attribute:` option independently of
+    the property's privacy.** So it can't be fixed from within auro-button — it needs a
+    post-analysis filter, i.e. **auro-cli's job, not the component's.** (Also tracked on the
+    auro-button side as a note/row on tracker **#653**.)
+  - **Fix (shipped):** extended the `buildManifest` hardening in
+    [manifest.ts](../src/init/editors/manifest.ts) — which already prunes nameless members
+    and unbalanced `type.text` (step 4) — with `isPrivateReflection`: an attribute is dropped
+    (before the three builders run) when its backing member (`fieldName`) is **private/
+    protected or absent from the pruned member list** *and* the attribute has **no
+    description**. The no-description guard deliberately **keeps documented reflections a
+    component exposes on purpose** (e.g. a11y `role` / `aria-*` attributes carrying real
+    descriptions); an attribute with no `fieldName` has no backing member to judge and is
+    always kept.
+  - **Predicate chosen (of three considered):** *private/absent backing **+** undescribed* —
+    over the narrower `data-*`-name match (too brittle) and the broader "any private-backed"
+    (dropped ~45 attrs incl. documented a11y ones). Across all published Auro CEMs this drops
+    ~20 attributes: the reported `data-hover`/`data-active` plus undescribed internal-state
+    reflections (`hasFocus`, `hasValue`, `showPassword`, `isPopoverVisible`, `sliderStyles`,
+    …). **Note — a real behavior consequence:** auro-button's `buttonHref`/`buttonRel`/
+    `buttonTarget` are also private-backed *and* undescribed in the published CEM, so they are
+    dropped too; if any of those is a genuine consumer attribute, the upstream remedy is to
+    give it a description (and ideally make its member public) — the CLI faithfully honors the
+    declared privacy rather than guessing.
+  - **Coverage:** `builders drop private-reflected description-less attributes but keep
+    documented ones` in
+    [init.editors.builders.test.ts](../test/init.editors.builders.test.ts) — asserts across
+    all three targets that a `@private`-backed and an omitted-member reflection are dropped
+    while a documented public attribute and a *documented* private reflection are kept. Gate
+    green — **228 tests**, `tsc --noEmit`, scoped biome, build.
 - ✅ **Slots/events aren't first-class in VS Code HTML custom-data.** **Resolved
   empirically** — for a slot/event-rich component (`auro-input`: 54 attrs / 7 slots / 3
   events / 133 members in the raw CEM), the emitted tag carries **53 first-class
