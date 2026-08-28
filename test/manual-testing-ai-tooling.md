@@ -761,13 +761,21 @@ Reference: [docs/pt-m1-completion-plan.md](../docs/pt-m1-completion-plan.md),
 
 #### Command under test
 
-`auro init` — one command, three options:
+`auro init` — one command, four options:
 
 | Option | Effect |
 | --- | --- |
 | `--prefix <prefix>` | Default custom-element tag prefix (e.g. `myapp-`) for components with no existing registration. **Settles** the default, so no prompt is needed. |
 | `--non-interactive` | Never prompt; take the prefix from `--prefix` or fail cleanly. **Implied by a non-TTY stdin or a set `CI` env var.** |
 | `--yes` | Alias for `--non-interactive`. |
+| `--offline` | Skip the best-effort outdated-release check (init's one network touch). Keeps the run fully network-free for CI/air-gapped use. |
+
+After writing its files, `init` runs the **same best-effort outdated-release check
+as `auro context`/`auro component`** — a bordered banner on stderr for any installed
+package behind its latest release (including the legacy `⇢ auro-formkit` **Migrate**
+block). It's online by default and advisory (a network failure never fails the run);
+`--offline` skips it. Banner content is regression-covered by [`outdated.test.ts`](outdated.test.ts)
+and the init call path by [`init.command.test.ts`](init.command.test.ts).
 
 Outputs, written to the project root:
 

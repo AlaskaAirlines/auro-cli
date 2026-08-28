@@ -14,6 +14,11 @@
  * It never touches `.gitignore` — `auro.config.json` is a committed artifact so
  * regeneration is deterministic across a team and in CI.
  *
+ * After writing, `init` runs the same best-effort **outdated-release check** as
+ * `auro context`/`auro component` (a bordered banner on stderr for any installed
+ * package behind its latest release). This is the one network touch in an otherwise
+ * offline command; `--offline` skips it and keeps the run fully network-free.
+ *
  * **One opt-in codemod exception.** `init` otherwise documents, never rewrites,
  * consumer source. The sole exception is the legacy-standalone → `auro-formkit`
  * migration: when a project depends on a deprecated standalone form package, an
@@ -54,7 +59,8 @@ import {
   scanProject,
   type TagResolutionPlan,
 } from "#init/registry.js";
-import { resolveInstalled } from "#init/resolver.js";
+import { type ResolvedComponent, resolveInstalled } from "#init/resolver.js";
+import { checkOutdated, renderOutdatedBanner } from "#utils/outdated.js";
 
 /** Options accepted by the `init` action. */
 export interface InitOptions {
@@ -74,6 +80,12 @@ export interface InitOptions {
   jsx?: boolean;
   svelte?: boolean;
   cssSnippets?: boolean;
+  /**
+   * Skip the best-effort network check for newer component releases. `init` is
+   * otherwise offline; the release-check is its one network touch, so `--offline`
+   * keeps the whole run network-free (useful in CI or air-gapped environments).
+   */
+  offline?: boolean;
 }
 
 /**
@@ -284,6 +296,32 @@ async function offerFormkitMigration(
 }
 
 /**
+ * Compare each resolved component's installed version against the latest published
+ * release and, for any that are behind, print the shared outdated banner on stderr
+ * (advisory — stdout stays clean). Best-effort and network-dependent: a package
+ * whose latest can't be resolved is treated as current (`checkOutdated`), so a flaky
+ * or absent network simply yields no banner and never fails `init`. Mirrors
+ * `auro context`'s `reportOutdated`; the pkg→version map is derived from the
+ * components init already resolved (a monorepo pkg repeats with one shared version,
+ * de-duped by the Map).
+ */
+async function reportOutdated(components: ResolvedComponent[]): Promise<void> {
+  const installed = new Map(components.map((c) => [c.pkg, c.version]));
+  const spinner = ora("Checking for newer component releases...").start();
+  const outdated = await checkOutdated(installed);
+
+  if (outdated.length === 0) {
+    spinner.succeed("All installed Auro components are on the latest release.");
+    return;
+  }
+
+  // Stop the spinner without its own icon/line — the banner below carries the
+  // warning, and a leftover spinner line would dilute it.
+  spinner.stop();
+  console.error(renderOutdatedBanner(outdated));
+}
+
+/**
  * Generate and write the grounding files for the installed Auro components. See
  * the module header for the detect → plan → generate → write pipeline. Exits
  * non-zero on a malformed config, an unresolvable prefix in a non-interactive
@@ -424,6 +462,13 @@ export async function runInit(options: InitOptions): Promise<void> {
       `⚠ Tag <${duplicate.tagName}> is registered by multiple installed packages: ${duplicate.packages.join(", ")}. Grounded once — verify which package you intend to use.`,
     );
   }
+
+  // Advisory, network-dependent — mirror `auro context`. Warn last so it's the
+  // final thing on screen, not scrolled off by the write summary and warnings.
+  // `--offline` skips it, keeping the run fully network-free.
+  if (!options.offline) {
+    await reportOutdated(components);
+  }
 }
 
 export default program
@@ -441,6 +486,11 @@ export default program
     false,
   )
   .option("--yes", "Alias for --non-interactive", false)
+  .option(
+    "--offline",
+    "Skip the network check for newer component releases",
+    false,
+  )
   .option(
     "--vscode",
     "Generate VS Code HTML custom-data IntelliSense (use --no-vscode to skip; default: auto-detect)",
