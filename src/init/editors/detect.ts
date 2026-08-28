@@ -27,12 +27,19 @@ export interface EditorSelection {
   jsx: boolean;
   /** Svelte type declarations (`auro-types/auro-svelte.d.ts`). */
   svelte: boolean;
+  /** VS Code CSS `::part()` snippets (`.vscode/auro.code-snippets`). */
+  cssSnippets: boolean;
 }
 
-/** The three editor targets, in the order `init` resolves and reports them. */
-export const EDITOR_TARGETS = ["vscode", "jsx", "svelte"] as const;
+/** The editor targets, in the order `init` resolves and reports them. */
+export const EDITOR_TARGETS = [
+  "vscode",
+  "jsx",
+  "svelte",
+  "cssSnippets",
+] as const;
 
-/** One editor target key (`"vscode" | "jsx" | "svelte"`). */
+/** One editor target key (`"vscode" | "jsx" | "svelte" | "cssSnippets"`). */
 export type EditorTarget = (typeof EDITOR_TARGETS)[number];
 
 /** True when `<cwd>/<rel>` exists and is a directory. */
@@ -79,6 +86,16 @@ export function detectVsCode(cwd: string): boolean {
 }
 
 /**
+ * CSS `::part()` snippets target signal: the project keeps a `.vscode/`
+ * directory, so it uses VS Code, which auto-discovers the `.code-snippets` file
+ * we write there. Same signal as {@link detectVsCode} — the snippets are a VS
+ * Code feature — kept as its own named probe so the target reads independently.
+ */
+export function detectCssSnippets(cwd: string): boolean {
+  return isDir(cwd, VSCODE_DIR);
+}
+
+/**
  * JSX/React target signal: the TypeScript config turns on JSX
  * (`compilerOptions.jsx` is set) **or** `react` is a (dev)dependency. Either means
  * the project authors `.tsx`/`.jsx` and would benefit from the JSX `.d.ts`.
@@ -119,11 +136,12 @@ export function detectSvelte(cwd: string): boolean {
   );
 }
 
-/** Run all three target probes against `cwd` and return the detected defaults. */
+/** Run every target probe against `cwd` and return the detected defaults. */
 export function detectEditorSignals(cwd: string): EditorSelection {
   return {
     vscode: detectVsCode(cwd),
     jsx: detectJsx(cwd),
     svelte: detectSvelte(cwd),
+    cssSnippets: detectCssSnippets(cwd),
   };
 }

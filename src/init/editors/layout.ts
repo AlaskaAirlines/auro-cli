@@ -51,6 +51,27 @@ export const HTML_CUSTOM_DATA_SETTINGS_ENTRY = `./${VSCODE_DIR}/${HTML_CUSTOM_DA
 export const HTML_CUSTOM_DATA_PATH = `${VSCODE_DIR}/${HTML_CUSTOM_DATA_FILENAME}`;
 
 // ---------------------------------------------------------------------------
+// VS Code CSS `::part()` snippets (CSS language-service target)
+// ---------------------------------------------------------------------------
+
+/**
+ * Auro-namespaced VS Code snippets artifact. The `.code-snippets` extension is
+ * what makes VS Code **auto-discover** it under {@link VSCODE_DIR} — unlike the
+ * HTML custom-data file, no `settings.json` entry registers it, so this target
+ * has no `_SETTINGS_KEY`/`_ENTRY` sibling. The `auro.` prefix keeps it from
+ * colliding with a team's own project snippets.
+ */
+export const CSS_SNIPPETS_FILENAME = "auro.code-snippets";
+
+/**
+ * The CSS snippets artifact's path **relative to the project root** — the
+ * `filename` its builder returns and `init` writes. Derived from the dir +
+ * filename (forward slashes) so it always lands in the auto-discovered
+ * {@link VSCODE_DIR}. There is deliberately no settings entry to keep in sync.
+ */
+export const CSS_SNIPPETS_PATH = `${VSCODE_DIR}/${CSS_SNIPPETS_FILENAME}`;
+
+// ---------------------------------------------------------------------------
 // Framework TypeScript types (TS + Svelte language-server targets)
 // ---------------------------------------------------------------------------
 

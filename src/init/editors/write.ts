@@ -20,6 +20,7 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
+import { buildCssSnippets } from "#init/editors/cssSnippets.js";
 import type { EditorSelection } from "#init/editors/detect.js";
 import { buildHtmlCustomData } from "#init/editors/htmlCustomData.js";
 import { buildJsxTypes } from "#init/editors/jsxTypes.js";
@@ -132,6 +133,17 @@ export async function writeEditorArtifacts(
     written.push(
       await writeArtifact(cwd, buildSvelteTypes(components, resolvedTags)),
     );
+  }
+
+  // CSS `::part()` snippets are write-only: VS Code auto-discovers the
+  // `.code-snippets` file, so there is no settings/tsconfig merge. The builder
+  // returns null when no installed component exposes any cssParts — nothing to
+  // write then, so the artifact (and `.vscode/`) is never created for it.
+  if (selection.cssSnippets) {
+    const artifact = buildCssSnippets(components, resolvedTags);
+    if (artifact) {
+      written.push(await writeArtifact(cwd, artifact));
+    }
   }
 
   // A single config wiring covers both TS-consuming targets. Prefer tsconfig.json;

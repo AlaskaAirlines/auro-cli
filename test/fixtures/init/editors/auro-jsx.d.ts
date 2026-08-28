@@ -167,6 +167,16 @@ export type AuroInputSolidJsProps = {
  * Areas where markup can be added to the component.
  * 
  * - `(default)`: Button label content.
+ * 
+ * ## CSS Parts
+ * 
+ * Custom selectors for styling elements within the component.
+ * 
+ * - `button`: The native button element.
+ * - `contentWrapper`: Wraps the slotted label.
+ * - `link`: The anchor when rendered as a link.
+ * - `loader`: The loading indicator.
+ * - `text`: The button label text.
   */
     "myapp-button": Partial<AuroButtonProps & BaseProps<AuroButton> & BaseEvents>;
 
@@ -214,6 +224,16 @@ export type AuroInputSolidJsProps = {
  * Areas where markup can be added to the component.
  * 
  * - `(default)`: Button label content.
+ * 
+ * ## CSS Parts
+ * 
+ * Custom selectors for styling elements within the component.
+ * 
+ * - `button`: The native button element.
+ * - `contentWrapper`: Wraps the slotted label.
+ * - `link`: The anchor when rendered as a link.
+ * - `loader`: The loading indicator.
+ * - `text`: The button label text.
   */
     "myapp-button": Partial<AuroButtonProps & AuroButtonSolidJsProps & BaseProps<AuroButton> & BaseEvents>;
 

@@ -66,6 +66,13 @@ export type CustomElements = {
    *
    * ### **Slots:**
    *  - _default_ - Button label content.
+   *
+   * ### **CSS Parts:**
+   *  - **button** - The native button element.
+   * - **contentWrapper** - Wraps the slotted label.
+   * - **link** - The anchor when rendered as a link.
+   * - **loader** - The loading indicator.
+   * - **text** - The button label text.
    */
   "myapp-button": Partial<AuroButtonProps & BaseProps & BaseEvents>;
 
