@@ -350,17 +350,31 @@ fixtures + the new dependencies, matching PT-M1's front-loading.
      override + bare fallback; attributes present; slots/events in the HTML hover
      description; JSX class-import specifiers resolved; both merges across
      empty/unrelated/pre-existing/duplicate).
-3. **Wire `src/commands/init.ts`.**
-   - After tags settle and within the existing write block: resolve each target (flags
-     → persisted config → detection → prompt-if-TTY), and when enabled write the
-     artifact(s) and merge `settings.json` / `tsconfig.json`. Persist `editors.*` into
-     `plan.config` before `saveConfig`. Add the three flag pairs; extend the success
-     message.
-   - Integration tests ([init.command.test.ts](../test/init.command.test.ts)):
-     `--vscode`/`--jsx`/`--svelte` each write their artifact and wiring with tags
-     reflecting `--prefix`/overrides; `--no-*` writes neither; a pre-existing unrelated
-     `settings.json`/`tsconfig.json` is preserved; an unparseable one warns + still
-     writes the artifact.
+3. **Wire `src/commands/init.ts`.** ✅ **DONE** (AB#1628542, uncommitted):
+   - New pure detection module [detect.ts](../src/init/editors/detect.ts)
+     (`detectEditorSignals` — `.vscode/` dir → VS Code; `compilerOptions.jsx` or a `react`
+     dep → JSX; a `svelte` dep or `svelte.config.*` → Svelte) and orchestration module
+     [write.ts](../src/init/editors/write.ts) (`writeEditorArtifacts` — build + `mkdir` +
+     write each enabled artifact, merge `settings.json`, merge `tsconfig.json` once when
+     JSX **or** Svelte is on and only if a `tsconfig.json` exists; a skipped merge degrades
+     to a warning carrying the manual one-liner and the artifact is still written).
+   - `runInit` resolves each target via `resolveEditorTargets` under the frozen precedence
+     **flag → persisted config → detection → prompt-if-TTY** (unsettled targets batch into
+     one confirm round on a TTY; non-interactive/CI takes the detected default, never
+     prompts/fails), persists all three booleans into `plan.config.init.editors` before
+     `saveConfig`, writes the artifacts inside the existing write block, and extends the
+     success message with the editor artifacts it wrote. Added the `--vscode`/`--jsx`/
+     `--svelte` (+ `--no-*`) tri-state flag pairs.
+   - Integration tests ([init.command.test.ts](../test/init.command.test.ts), +9 cases →
+     26 in the suite): each flag writes its artifact + wiring with the resolved (prefixed)
+     tag; `--no-*` writes nothing even with every signal present; a detected signal enables
+     its target on a non-interactive run; a persisted choice is honored without a flag; a
+     pre-existing tsconfig `include` is appended non-destructively; unrelated
+     `settings.json` keys/comments are preserved and the entry is not duplicated across
+     runs; an unparseable `settings.json` warns (with the manual line) + still writes the
+     artifact. Verify gate green — 201 tests, `tsc --noEmit`, scoped biome, build; plus an
+     offline end-to-end smoke (all three artifacts, non-destructive tsconfig merge,
+     idempotent re-run).
 4. **JSX type-check smoke + idempotent regeneration.** In a fixture consumer with the
    packages installed, `tsc --noEmit` accepts the emitted `.d.ts` (imports resolve). A
    second run per target reproduces byte-identical artifacts and does **not** duplicate

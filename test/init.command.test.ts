@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
-import { test } from "node:test";
+import { type TestContext, test } from "node:test";
 import inquirer from "inquirer";
 import { runInit } from "../src/commands/init.ts";
 import {
@@ -664,4 +664,252 @@ test("legacy standalone: a non-interactive run only advises, never migrates", as
   // Grounding still proceeds.
   const agents = await readOutput(cwd, "AGENTS.md");
   assert.match(agents, /<myapp-input>/u);
+});
+
+// ---------------------------------------------------------------------------
+// PT-M2: editor-IntelliSense targets (--vscode / --jsx / --svelte + wiring)
+// ---------------------------------------------------------------------------
+
+/** Standard mocks for a non-interactive editor-target run against a temp cwd. */
+function stubEditorRun(t: TestContext, cwd: string): void {
+  t.mock.method(process, "cwd", () => cwd);
+  t.mock.method(process, "exit", () => {
+    throw new Error("should not exit on success");
+  });
+  t.mock.method(globalThis, "fetch", async () => {
+    throw new Error("init must not hit the network");
+  });
+}
+
+test("--vscode writes the HTML custom-data artifact and wires settings.json", async (t) => {
+  const cwd = await tempCwd(t);
+  await installRealPackage(cwd, "auro-button");
+  stubEditorRun(t, cwd);
+  captureWrite(t, process.stderr);
+
+  await runInit({ prefix: "myapp-", vscode: true });
+
+  // The artifact is keyed on the resolved (prefixed) tag, not the bare auro-* tag.
+  const customData = await readOutput(
+    cwd,
+    ".vscode/auro.html-custom-data.json",
+  );
+  assert.match(customData, /myapp-button/u);
+  assert.doesNotMatch(customData, /"auro-button"/u);
+
+  // settings.json is created and registers the project-root-relative entry.
+  const settings = JSON.parse(await readOutput(cwd, ".vscode/settings.json"));
+  assert.deepEqual(settings["html.customData"], [
+    "./.vscode/auro.html-custom-data.json",
+  ]);
+
+  // Only the VS Code target is on; jsx/svelte default off (no signal) and persist.
+  const config = JSON.parse(await readOutput(cwd, "auro.config.json"));
+  assert.deepEqual(config.init.editors, {
+    vscode: true,
+    jsx: false,
+    svelte: false,
+  });
+  // The disabled targets create nothing.
+  await assert.rejects(readOutput(cwd, "auro-types/auro-jsx.d.ts"), /ENOENT/u);
+});
+
+test("--jsx writes the JSX types with resolved tags and installed import paths", async (t) => {
+  const cwd = await tempCwd(t);
+  await installRealPackage(cwd, "auro-button");
+  stubEditorRun(t, cwd);
+  captureWrite(t, process.stderr);
+
+  await runInit({ prefix: "myapp-", jsx: true });
+
+  const jsx = await readOutput(cwd, "auro-types/auro-jsx.d.ts");
+  assert.match(jsx, /myapp-button/u, "tag is the resolved custom tag");
+  assert.match(
+    jsx,
+    /import type \{ AuroButton \} from "@aurodesignsystem\/auro-button"/u,
+    "class import points at the installed package",
+  );
+  // No tsconfig.json exists, so nothing is wired (default glob covers auro-types/).
+  await assert.rejects(readOutput(cwd, "tsconfig.json"), /ENOENT/u);
+  await assert.rejects(
+    readOutput(cwd, ".vscode/auro.html-custom-data.json"),
+    /ENOENT/u,
+  );
+
+  const config = JSON.parse(await readOutput(cwd, "auro.config.json"));
+  assert.equal(config.init.editors.jsx, true);
+  assert.equal(config.init.editors.vscode, false);
+});
+
+test("--jsx appends auro-types to an existing tsconfig include", async (t) => {
+  const cwd = await tempCwd(t);
+  await installRealPackage(cwd, "auro-button");
+  await writeFile(
+    path.join(cwd, "tsconfig.json"),
+    JSON.stringify(
+      { compilerOptions: { strict: true }, include: ["src"] },
+      null,
+      2,
+    ),
+  );
+  stubEditorRun(t, cwd);
+  captureWrite(t, process.stderr);
+
+  await runInit({ prefix: "myapp-", jsx: true });
+
+  const tsconfig = JSON.parse(await readOutput(cwd, "tsconfig.json"));
+  assert.deepEqual(tsconfig.include, ["src", "auro-types"], "entry appended");
+  assert.equal(
+    tsconfig.compilerOptions.strict,
+    true,
+    "pre-existing options preserved",
+  );
+});
+
+test("--svelte writes the Svelte types artifact", async (t) => {
+  const cwd = await tempCwd(t);
+  await installRealPackage(cwd, "auro-button");
+  stubEditorRun(t, cwd);
+  captureWrite(t, process.stderr);
+
+  await runInit({ prefix: "myapp-", svelte: true });
+
+  const svelte = await readOutput(cwd, "auro-types/auro-svelte.d.ts");
+  assert.match(svelte, /myapp-button/u);
+  const config = JSON.parse(await readOutput(cwd, "auro.config.json"));
+  assert.equal(config.init.editors.svelte, true);
+});
+
+test("--no-* flags write no editor artifacts even when signals are present", async (t) => {
+  const cwd = await tempCwd(t);
+  await installRealPackage(cwd, "auro-button");
+  // Present every detection signal: a .vscode/ dir, a jsx tsconfig, a svelte dep.
+  await mkdir(path.join(cwd, ".vscode"), { recursive: true });
+  await writeFile(
+    path.join(cwd, "tsconfig.json"),
+    JSON.stringify({ compilerOptions: { jsx: "react-jsx" } }, null, 2),
+  );
+  await writeFile(
+    path.join(cwd, "package.json"),
+    JSON.stringify({ devDependencies: { svelte: "^4.0.0" } }, null, 2),
+  );
+  stubEditorRun(t, cwd);
+  captureWrite(t, process.stderr);
+
+  await runInit({
+    prefix: "myapp-",
+    vscode: false,
+    jsx: false,
+    svelte: false,
+  });
+
+  await assert.rejects(
+    readOutput(cwd, ".vscode/auro.html-custom-data.json"),
+    /ENOENT/u,
+  );
+  await assert.rejects(readOutput(cwd, "auro-types/auro-jsx.d.ts"), /ENOENT/u);
+  await assert.rejects(
+    readOutput(cwd, "auro-types/auro-svelte.d.ts"),
+    /ENOENT/u,
+  );
+  const config = JSON.parse(await readOutput(cwd, "auro.config.json"));
+  assert.deepEqual(config.init.editors, {
+    vscode: false,
+    jsx: false,
+    svelte: false,
+  });
+});
+
+test("a detected signal enables its target on a non-interactive run", async (t) => {
+  const cwd = await tempCwd(t);
+  await installRealPackage(cwd, "auro-button");
+  await mkdir(path.join(cwd, ".vscode"), { recursive: true }); // VS Code signal
+  stubEditorRun(t, cwd);
+  captureWrite(t, process.stderr);
+
+  // No flags, no persisted config: the non-interactive run takes the detected
+  // default (VS Code on, the other two off) and records all three.
+  await runInit({ prefix: "myapp-" });
+
+  await readOutput(cwd, ".vscode/auro.html-custom-data.json"); // exists
+  const config = JSON.parse(await readOutput(cwd, "auro.config.json"));
+  assert.deepEqual(config.init.editors, {
+    vscode: true,
+    jsx: false,
+    svelte: false,
+  });
+});
+
+test("a persisted editor choice is honored without a flag", async (t) => {
+  const cwd = await tempCwd(t);
+  await installRealPackage(cwd, "auro-button");
+  await writeFile(
+    path.join(cwd, "auro.config.json"),
+    JSON.stringify({
+      version: 1,
+      init: {
+        prefix: { default: "myapp-", overrides: {} },
+        editors: { vscode: true, jsx: false, svelte: false },
+      },
+    }),
+  );
+  stubEditorRun(t, cwd);
+  captureWrite(t, process.stderr);
+
+  await runInit({});
+
+  await readOutput(cwd, ".vscode/auro.html-custom-data.json"); // vscode:true honored
+  await assert.rejects(readOutput(cwd, "auro-types/auro-jsx.d.ts"), /ENOENT/u);
+});
+
+test("--vscode preserves unrelated settings and is idempotent across runs", async (t) => {
+  const cwd = await tempCwd(t);
+  await installRealPackage(cwd, "auro-button");
+  await mkdir(path.join(cwd, ".vscode"), { recursive: true });
+  await writeFile(
+    path.join(cwd, ".vscode", "settings.json"),
+    '{\n  // team defaults\n  "editor.tabSize": 2\n}\n',
+  );
+  stubEditorRun(t, cwd);
+  captureWrite(t, process.stderr);
+
+  await runInit({ prefix: "myapp-", vscode: true });
+  await runInit({ prefix: "myapp-", vscode: true }); // second run must not duplicate
+
+  // The merge is comment-preserving (JSONC), so assert on the raw text.
+  const settingsRaw = await readOutput(cwd, ".vscode/settings.json");
+  assert.match(settingsRaw, /team defaults/u, "comment preserved");
+  assert.match(settingsRaw, /"editor\.tabSize": 2/u, "unrelated key preserved");
+  const entryCount = (settingsRaw.match(/auro\.html-custom-data\.json/gu) ?? [])
+    .length;
+  assert.equal(entryCount, 1, "the entry appears exactly once across two runs");
+});
+
+test("--vscode still writes the artifact when settings.json is unparseable, and warns", async (t) => {
+  const cwd = await tempCwd(t);
+  await installRealPackage(cwd, "auro-button");
+  await mkdir(path.join(cwd, ".vscode"), { recursive: true });
+  await writeFile(
+    path.join(cwd, ".vscode", "settings.json"),
+    "{ not valid json",
+  );
+  stubEditorRun(t, cwd);
+  const stderr = captureWrite(t, process.stderr);
+
+  await runInit({ prefix: "myapp-", vscode: true });
+
+  // The artifact is written regardless; only the merge is skipped.
+  const customData = await readOutput(
+    cwd,
+    ".vscode/auro.html-custom-data.json",
+  );
+  assert.match(customData, /myapp-button/u);
+  // The malformed settings file is left byte-for-byte untouched.
+  assert.equal(
+    await readOutput(cwd, ".vscode/settings.json"),
+    "{ not valid json",
+  );
+  const err = stderr();
+  assert.match(err, /settings\.json is not valid JSON/u);
+  assert.match(err, /by hand/u, "the manual wiring line is surfaced");
 });
