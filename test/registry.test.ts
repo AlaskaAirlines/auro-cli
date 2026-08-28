@@ -420,8 +420,9 @@ test("planTagResolution: a bare default keeps auro-* tags and warns", () => {
 
   const plan = planTagResolution(components, { prefix: "" });
   assert.equal(plan.resolvedTags.get("auro-button"), "auro-button");
-  assert.equal(plan.warnings.length, 1);
-  assert.ok(plan.warnings[0].includes("bare 'auro-*'"));
+  assert.equal(plan.warnings.length, 0);
+  assert.equal(plan.noPrefixWarnings.length, 1);
+  assert.ok(plan.noPrefixWarnings[0].includes("bare 'auro-*'"));
 });
 
 test("planTagResolution: mixed inferred prefixes suggest the majority and preserve overrides", () => {

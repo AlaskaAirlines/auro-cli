@@ -493,6 +493,19 @@ export async function runInit(options: InitOptions): Promise<void> {
     );
   }
 
+  // Bare `auro-*` groundings — self-consistent but collision-prone. Less severe
+  // than a reconciliation mismatch, so a yellow banner rather than red, but still
+  // promoted above the plain-line noise so a missing prefix is hard to overlook.
+  if (plan.noPrefixWarnings.length > 0) {
+    console.error(
+      renderWarningBanner(
+        `⚠  ${plan.noPrefixWarnings.length} component(s) grounded under bare 'auro-*' tags — pass a prefix to avoid collisions`,
+        plan.noPrefixWarnings,
+        "yellow",
+      ),
+    );
+  }
+
   // Advisory, network-dependent — mirror `auro context`. Warn last so it's the
   // final thing on screen, not scrolled off by the write summary and warnings.
   // `--offline` skips it, keeping the run fully network-free.
