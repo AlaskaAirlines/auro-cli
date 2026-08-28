@@ -862,6 +862,63 @@ test("a persisted editor choice is honored without a flag", async (t) => {
   await assert.rejects(readOutput(cwd, "auro-types/auro-jsx.d.ts"), /ENOENT/u);
 });
 
+test("interactive run prompts for unsettled targets, seeds detection defaults, and persists the answers", async (t) => {
+  const cwd = await tempCwd(t);
+  await installRealPackage(cwd, "auro-button");
+  await mkdir(path.join(cwd, ".vscode"), { recursive: true }); // VS Code signal only
+  stubEditorRun(t, cwd);
+  captureWrite(t, process.stderr);
+  forceInteractive(t);
+
+  // Capture the batched confirm so we can assert each question's default is the
+  // detected signal, then answer *against* those defaults — decline the detected
+  // VS Code target, opt into the undetected JSX one, leave Svelte off.
+  let askedDefaults: Record<string, unknown> | undefined;
+  t.mock.method(
+    inquirer,
+    "prompt",
+    async (questions: Array<{ name: string; default?: unknown }>) => {
+      if (questions.some((q) => q.name === "vscode")) {
+        askedDefaults = Object.fromEntries(
+          questions.map((q) => [q.name, q.default]),
+        );
+      }
+      return { vscode: false, jsx: true, svelte: false };
+    },
+  );
+
+  // No editor flags and no persisted editors: every target is unsettled and must
+  // be prompted for.
+  await runInit({ prefix: "myapp-" });
+
+  // Detection seeds each prompt's default (VS Code dir present; no JSX/Svelte).
+  assert.deepEqual(
+    askedDefaults,
+    { vscode: true, jsx: false, svelte: false },
+    "each confirm defaults to its detected signal",
+  );
+
+  // The answers — not the detected defaults — drive what gets written…
+  await assert.rejects(
+    readOutput(cwd, ".vscode/auro.html-custom-data.json"),
+    /ENOENT/u,
+    "declined despite the VS Code signal",
+  );
+  await readOutput(cwd, "auro-types/auro-jsx.d.ts"); // opted in despite no signal
+  await assert.rejects(
+    readOutput(cwd, "auro-types/auro-svelte.d.ts"),
+    /ENOENT/u,
+  );
+
+  // …and every answered target persists as a concrete boolean.
+  const config = JSON.parse(await readOutput(cwd, "auro.config.json"));
+  assert.deepEqual(config.init.editors, {
+    vscode: false,
+    jsx: true,
+    svelte: false,
+  });
+});
+
 test("--vscode preserves unrelated settings and is idempotent across runs", async (t) => {
   const cwd = await tempCwd(t);
   await installRealPackage(cwd, "auro-button");
