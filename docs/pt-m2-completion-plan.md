@@ -304,7 +304,16 @@ Per target, mirroring PT-M1's settled-vs-unsettled discipline:
 Sequenced so each step is independently testable; early steps need only synthetic
 fixtures + the new dependencies, matching PT-M1's front-loading.
 
-1. **Freeze the formats + add the dependencies (critical path).**
+1. **Freeze the formats + add the dependencies (critical path).** ✅ **DONE** —
+   committed [`785642e`](../) (AB#1628542): the four tools pinned **exact**;
+   optional `init.editors` field in [config.ts](../src/init/config.ts); frozen
+   constants in [src/init/editors/layout.ts](../src/init/editors/layout.ts); golden
+   fixtures per target under [test/fixtures/init/editors/](../test/fixtures/init/editors/)
+   (HTML custom-data v1.1, JSX `.d.ts` augmenting global `JSX` **and**
+   `react/jsx-runtime`, Svelte `.d.ts` augmenting `svelteHTML`, plus the
+   `settings.json` merge states and all four `tsconfig` include/files branches); and
+   [test/init.editors.format.test.ts](../test/init.editors.format.test.ts) (7 freeze
+   tests). Verify gate green — 165 tests, `tsc --noEmit`, scoped biome, build.
    - `npm i custom-element-vs-code-integration jsonc-parser custom-element-svelte-integration`
      (pin exact resolved versions; `@wc-toolkit/jsx-types` is already present — pin it
      exact too). Confirm each imports under ESM/Node16 and that

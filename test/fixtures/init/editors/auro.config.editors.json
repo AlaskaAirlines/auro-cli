@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "init": {
+    "prefix": {
+      "default": "myapp-",
+      "overrides": {
+        "auro-input": "legacy-input"
+      }
+    },
+    "editors": {
+      "vscode": true,
+      "jsx": true,
+      "svelte": false
+    }
+  }
+}

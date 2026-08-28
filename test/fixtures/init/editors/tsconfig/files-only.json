@@ -1,0 +1,8 @@
+{
+  // Branch 3 — `files` set but NO `include`: adding a bare `include` would drop
+  // the project's implicit sources, so the merge must ADD an `include` that
+  // carries "auro-types" AND re-lists what the project compiled (here, keep
+  // `files` and add include for the sources). Verified: files + include combine.
+  "compilerOptions": { "module": "ESNext" },
+  "files": ["src/main.ts"]
+}

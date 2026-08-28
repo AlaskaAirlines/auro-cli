@@ -1,0 +1,6 @@
+{
+  // A project that already registers its OWN html custom-data file. The merge
+  // must APPEND the Auro entry to this array, never clobber the existing one.
+  "html.customData": ["./.vscode/team.html-custom-data.json"],
+  "editor.tabSize": 2
+}
