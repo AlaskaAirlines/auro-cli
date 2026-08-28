@@ -713,6 +713,43 @@ offline/deterministic; `fetch` unused since detection is local):
   (`!.vscode/auro.code-snippets`) so the artifact is tracked even under a blanket
   `.vscode/` ignore, or (c) just document the tradeoff and let the consumer decide. Applies
   equally to the other `.vscode/` artifacts (`auro.html-custom-data.json`, `settings.json`).
+- ❓ **Internal sub-components leak into the grounding (and get broken import
+  paths).** Open. *Moved here from the PT-M1 plan:* the leak first surfaced while
+  reviewing PT-M1's init grounding, but it will be **fixed as PT-M2 work** — the same
+  resolver output feeds this milestone's editor artifacts (JSX/Svelte/VS Code
+  custom-data), so gating it here fixes the grounding **and** the editor targets in
+  one change, on the milestone that owns those targets. Some monorepo elements are
+  meant to be consumed only by their Auro parent component, never used directly — yet
+  the resolver's sole element filter
+  ([`registeredElements`](../src/init/resolver.ts), `customElement && tagName`)
+  surfaces **every** registered element. Real evidence: the `auro-formkit` CEM
+  registers **20** elements but its `package.json` `exports` map exposes only **10**
+  consumer-facing subpaths; the other 10 (`auro-bibtemplate`, `auro-checkbox-group`,
+  `auro-counter-button`, `auro-counter-group`, `auro-counter-wrapper`,
+  `auro-formkit-calendar`, `auro-formkit-calendar-cell`, `auro-formkit-calendar-month`,
+  `auro-menuoption`, `auro-radio-group`) are internal. Two consequences today: they
+  appear in the grounding as if public, **and** [resolver.ts](../src/init/resolver.ts)
+  builds each monorepo `importPath` as the `pkg/tagName` subpath — emitting
+  non-existent paths like `@aurodesignsystem/auro-formkit/auro-menuoption`, so the
+  grounding (and the editor artifacts) instruct an agent to write imports that won't
+  resolve. **Signal survey:** the CEM carries no per-declaration
+  `privacy`/`visibility`/`internal`/`_private` flag (only *member* privacy exists);
+  leading-underscore and tag-name conventions leak (`-group`, `-cell`, `-wrapper`
+  suffixes) but miss `auro-bibtemplate`/`auro-menuoption`. The **only reliable
+  machine-readable discriminator is the `package.json` `exports` map** — an element is
+  consumer-facing iff its `./tagName` key resolves to a public subpath. **Proposed
+  direction:** capture each package's `exports` in
+  [detectInstalled.ts](../src/utils/detectInstalled.ts) (today it keeps only
+  `version` + `manifest`) and gate the resolver loop on it — which also lets the
+  import path be *derived* from the exports map (same source of truth for *which* are
+  public and *how* to import them), and incidentally fixes a standalone package that
+  internally registers helper elements being mis-flagged `isMonorepo` by the
+  element-count heuristic (more than one registered element). Must **fall back
+  safely**: a package with no `exports` field (or no matching subpaths) keeps today's
+  behavior (surface all registered elements) rather than grounding *zero* components.
+  Decide: gate on the exports map (recommended), ship a curated internal-tag denylist,
+  or leave as-is. Applies to both the `AGENTS.md` table/API sections and the editor
+  artifacts (JSX/Svelte/VS Code), which share the same resolver output.
 
 ## Done when
 
