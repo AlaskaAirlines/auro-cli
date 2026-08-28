@@ -1061,3 +1061,65 @@ test("--vscode still writes the artifact when settings.json is unparseable, and 
   assert.match(err, /settings\.json is not valid JSON/u);
   assert.match(err, /by hand/u, "the manual wiring line is surfaced");
 });
+
+test("--jsx still writes the artifact when tsconfig include is unmergeable, and warns", async (t) => {
+  const cwd = await tempCwd(t);
+  await installRealPackage(cwd, "auro-button");
+  // A tsconfig whose `include` is a bare string, not an array — the merge can't
+  // safely append to it (branch 4a), so it must warn rather than clobber it.
+  await writeFile(
+    path.join(cwd, "tsconfig.json"),
+    JSON.stringify({ compilerOptions: { strict: true }, include: "src" }),
+  );
+  stubEditorRun(t, cwd);
+  const stderr = captureWrite(t, process.stderr);
+
+  await runInit({ prefix: "myapp-", jsx: true });
+
+  // The JSX artifact is written regardless; only the tsconfig wiring is skipped.
+  assert.match(
+    await readOutput(cwd, "auro-types/auro-jsx.d.ts"),
+    /myapp-button/u,
+  );
+  // The unmergeable tsconfig is left byte-for-byte untouched.
+  assert.equal(
+    await readOutput(cwd, "tsconfig.json"),
+    JSON.stringify({ compilerOptions: { strict: true }, include: "src" }),
+  );
+  const err = stderr();
+  assert.match(err, /tsconfig\.json "include" is not an array/u);
+  assert.match(err, /by hand/u, "the manual wiring line is surfaced");
+});
+
+test("an explicit flag overrides a conflicting persisted editor choice", async (t) => {
+  const cwd = await tempCwd(t);
+  await installRealPackage(cwd, "auro-button");
+  // Persisted config turns VS Code ON; the flag turns it OFF. Per the frozen
+  // precedence (flag → persisted → detection → prompt) the flag must win.
+  await writeFile(
+    path.join(cwd, "auro.config.json"),
+    JSON.stringify({
+      version: 1,
+      init: {
+        prefix: { default: "myapp-", overrides: {} },
+        editors: { vscode: true, jsx: false, svelte: false },
+      },
+    }),
+  );
+  stubEditorRun(t, cwd);
+  captureWrite(t, process.stderr);
+
+  await runInit({ vscode: false });
+
+  // No artifact despite the persisted opt-in, and the override re-persists.
+  await assert.rejects(
+    readOutput(cwd, ".vscode/auro.html-custom-data.json"),
+    /ENOENT/u,
+  );
+  const config = JSON.parse(await readOutput(cwd, "auro.config.json"));
+  assert.equal(
+    config.init.editors.vscode,
+    false,
+    "the flag overrides the persisted choice and is written back",
+  );
+});

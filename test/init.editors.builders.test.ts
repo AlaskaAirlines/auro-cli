@@ -384,3 +384,28 @@ test("builders tolerate a nameless member and a malformed event type", () => {
   // The well-formed sibling event still lands in the JSX handler map.
   assert.match(jsx, /onauroButton-idAdded/u, "the defective event still binds");
 });
+
+test("the delimiter-balance guard keeps well-formed types and drops only broken ones", () => {
+  const component = structuredClone(BUTTON);
+  (component.declaration as { events?: unknown[] }).events = [
+    // A balanced arrow type: the `=>` must be read as text, not an unbalanced
+    // generic close, so the whole signature survives verbatim.
+    { name: "pickArrow", type: { text: "(e: CustomEvent) => void" } },
+    // A balanced *nested* generic — legitimate and must be preserved.
+    { name: "pickGeneric", type: { text: "Map<string, number>" } },
+    // A *mismatched* pair (`<` closed by `]`) — distinct from a truncation; it
+    // must be caught and dropped so no unparseable type reaches the output.
+    { name: "pickMismatch", type: { text: "Array<string]" } },
+  ];
+  const jsx = buildJsxTypes([component], RESOLVED_TAGS).contents;
+
+  // Balanced types flow through untouched…
+  assert.match(jsx, /CustomEvent/u, "the arrow type is preserved (=> is text)");
+  assert.match(jsx, /Map<string, number>/u, "the nested generic is preserved");
+  // …while the mismatched one is dropped (the generator falls back to Event).
+  assert.doesNotMatch(
+    jsx,
+    /Array<string/u,
+    "a mismatched bracket pair is dropped, not emitted",
+  );
+});
