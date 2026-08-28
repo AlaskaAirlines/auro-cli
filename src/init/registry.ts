@@ -493,8 +493,8 @@ export interface TagResolutionPlan {
   /** True when existing registrations imply two or more distinct prefixes. */
   mixedPrefixes: boolean;
   /**
-   * Non-fatal warnings (bare `auro-*` defaults, unresolvable registrations, scan
-   * parse skips). Advisory only — the caller prints these as plain `⚠` lines.
+   * Non-fatal warnings (unresolvable registrations, scan parse skips). Advisory
+   * only — the caller prints these as plain `⚠` lines.
    */
   warnings: string[];
   /**
@@ -507,6 +507,14 @@ export interface TagResolutionPlan {
    * {@link renderWarningBanner}.
    */
   reconciliationWarnings: string[];
+  /**
+   * Components grounded under their bare `auro-*` tag because no custom prefix
+   * was given. Less severe than a reconciliation mismatch (the grounding is
+   * self-consistent), but still worth surfacing prominently since a bare tag
+   * risks registration collisions — the caller renders these in a yellow
+   * bordered banner. See {@link renderWarningBanner}.
+   */
+  noPrefixWarnings: string[];
 }
 
 /**
@@ -554,6 +562,9 @@ export function planTagResolution(
   // App-vs-grounding tag mismatches — surfaced prominently, not inline (see the
   // TagResolutionPlan.reconciliationWarnings doc).
   const reconciliationWarnings: string[] = [];
+  // Bare `auro-*` groundings — surfaced in a yellow banner (see the
+  // TagResolutionPlan.noPrefixWarnings doc).
+  const noPrefixWarnings: string[] = [];
 
   for (const component of components) {
     const tag = component.tagName;
@@ -579,7 +590,7 @@ export function planTagResolution(
     const resolved = applyPrefix(effectiveDefault, tag);
     resolvedTags.set(tag, resolved);
     if (resolved === tag) {
-      warnings.push(
+      noPrefixWarnings.push(
         `${tag}: no custom prefix — grounding it under its bare 'auro-*' tag. Pass a prefix to avoid registration collisions.`,
       );
     } else if (!reconciled.defaultRegistered.has(tag)) {
@@ -638,5 +649,6 @@ export function planTagResolution(
     mixedPrefixes: mixed,
     warnings,
     reconciliationWarnings,
+    noPrefixWarnings,
   };
 }
