@@ -30,6 +30,53 @@ import {
 import type { ResolvedComponent } from "#init/resolver.js";
 
 /**
+ * The exact module-scoped `svelteHTML` augmentation the community tool emits
+ * (prettier-formatted, so this matches the bytes it writes). Because the
+ * generated file has top-level `import`/`export`, it is a *module* — a plain
+ * `declare namespace svelteHTML` inside it is module-scoped and never merges
+ * into the global `svelteHTML` the Svelte language server actually reads, so
+ * element completion silently does nothing. See {@link globalizeSvelteNamespace}.
+ */
+const MODULE_SCOPED_SVELTE_NAMESPACE = `declare namespace svelteHTML {
+  // eslint-disable-next-line @typescript-eslint/no-empty-interface
+  interface IntrinsicElements extends CustomElements {}
+}`;
+
+/** The global-scoped replacement that merges into the language server's `svelteHTML`. */
+const GLOBAL_SVELTE_NAMESPACE = `declare global {
+  namespace svelteHTML {
+    // eslint-disable-next-line @typescript-eslint/no-empty-interface
+    interface IntrinsicElements extends CustomElements {}
+  }
+}`;
+
+/**
+ * Wrap the tool's module-scoped `declare namespace svelteHTML` in `declare
+ * global { … }` so it augments the global `svelteHTML` namespace the Svelte
+ * language server reads — the same pattern auro-cli's own per-component
+ * `addDtsExportsPlugin` already emits. Without this the augmentation is inert in
+ * a module file and Svelte element completion never appears.
+ *
+ * Throws if the expected block is absent (e.g. an upstream reflow of
+ * `custom-element-svelte-integration`) rather than returning the string
+ * unchanged — a silent no-op would ship the broken module-scoped form, so we
+ * surface the drift as a loud, test-caught failure instead.
+ */
+function globalizeSvelteNamespace(contents: string): string {
+  if (!contents.includes(MODULE_SCOPED_SVELTE_NAMESPACE)) {
+    throw new Error(
+      "custom-element-svelte-integration no longer emits the expected " +
+        "`declare namespace svelteHTML` block; the global-augmentation rewrite " +
+        "in svelteTypes.ts must be updated to match the new output.",
+    );
+  }
+  return contents.replace(
+    MODULE_SCOPED_SVELTE_NAMESPACE,
+    GLOBAL_SVELTE_NAMESPACE,
+  );
+}
+
+/**
  * Render the Svelte `.d.ts` for the resolved component set. Returns the
  * artifact's project-root-relative path plus its contents; writing is the
  * caller's job.
@@ -53,6 +100,6 @@ export function buildSvelteTypes(
 
   return {
     filename: SVELTE_TYPES_PATH,
-    contents: ensureTrailingNewline(contents),
+    contents: ensureTrailingNewline(globalizeSvelteNamespace(contents)),
   };
 }

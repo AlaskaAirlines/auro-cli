@@ -80,7 +80,9 @@ export type CustomElements = {
   "legacy-input": Partial<AuroInputProps & BaseProps & BaseEvents>;
 };
 
-declare namespace svelteHTML {
-  // eslint-disable-next-line @typescript-eslint/no-empty-interface
-  interface IntrinsicElements extends CustomElements {}
+declare global {
+  namespace svelteHTML {
+    // eslint-disable-next-line @typescript-eslint/no-empty-interface
+    interface IntrinsicElements extends CustomElements {}
+  }
 }
