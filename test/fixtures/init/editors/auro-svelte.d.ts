@@ -1,6 +1,3 @@
-import type { AuroButton } from "@aurodesignsystem/auro-button";
-import type { AuroInput } from "@aurodesignsystem/auro-formkit/auro-input";
-
 type BaseProps = {
   /** Content added between the opening and closing tags of the element */
   children?: JSX.Element;
@@ -42,9 +39,11 @@ type BaseEvents = {};
 
 type AuroButtonProps = {
   /** Disables the button. */
-  disabled?: AuroButton["undefined"];
+  disabled?: boolean;
   /** Stretches to full width. */
-  fluid?: AuroButton["undefined"];
+  fluid?: boolean;
+  /** Visual style variant. */
+  variant?: "primary" | "secondary" | "tertiary" | "ghost" | "flat";
 
   /** Fired on activation. */
   "on:click"?: (e: CustomEvent<never>) => void;
@@ -52,7 +51,7 @@ type AuroButtonProps = {
 
 type AuroInputProps = {
   /** Marks the field as required. */
-  required?: AuroInput["undefined"];
+  required?: boolean;
 };
 
 export type CustomElements = {

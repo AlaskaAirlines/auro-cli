@@ -88,11 +88,13 @@ type BaseEvents = {
 
 export type AuroButtonProps = {
   /** Disables the button. */
-          "disabled"?: unknown;
+          "disabled"?: boolean;
   /** Disables the button. */
-        "undefined"?: unknown;
+        "undefined"?: boolean;
   /** Stretches to full width. */
-          "fluid"?: unknown;
+          "fluid"?: boolean;
+  /** Visual style variant. */
+        "variant"?: "primary" | "secondary" | "tertiary" | "ghost" | "flat";
 
   /** Fired on activation. */
   "onclick"?: (e: Event) => void;
@@ -101,11 +103,13 @@ export type AuroButtonProps = {
 
 export type AuroButtonSolidJsProps = {
   /** Disables the button. */
-        "bool:disabled"?: unknown;
+        "bool:disabled"?: boolean;
   /** Disables the button. */
-        "prop:undefined"?: unknown;
+        "prop:undefined"?: boolean;
   /** Stretches to full width. */
-        "bool:fluid"?: unknown;
+        "bool:fluid"?: boolean;
+  /** Visual style variant. */
+        "prop:variant"?: "primary" | "secondary" | "tertiary" | "ghost" | "flat";
   /** Fired on activation. */
   "on:click"?: (e: Event) => void;
 
@@ -119,18 +123,18 @@ export type AuroButtonSolidJsProps = {
 
 export type AuroInputProps = {
   /** Marks the field as required. */
-          "required"?: unknown;
+          "required"?: boolean;
   /** Marks the field as required. */
-        "undefined"?: unknown;
+        "undefined"?: boolean;
 
 
 }
 
 export type AuroInputSolidJsProps = {
   /** Marks the field as required. */
-        "bool:required"?: unknown;
+        "bool:required"?: boolean;
   /** Marks the field as required. */
-        "prop:undefined"?: unknown;
+        "prop:undefined"?: boolean;
 
   /** Set the innerHTML of the element */
   innerHTML?: string;
@@ -150,6 +154,7 @@ export type AuroInputSolidJsProps = {
  * 
  * - `disabled`/`undefined`: Disables the button. 
  * - `fluid`/`undefined`: Stretches to full width. 
+ * - `variant`: Visual style variant. 
  * 
  * ## Events
  * 
@@ -196,6 +201,7 @@ export type AuroInputSolidJsProps = {
  * 
  * - `disabled`/`undefined`: Disables the button. 
  * - `fluid`/`undefined`: Stretches to full width. 
+ * - `variant`: Visual style variant. 
  * 
  * ## Events
  * 

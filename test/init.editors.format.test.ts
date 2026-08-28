@@ -143,11 +143,19 @@ test("Svelte types fixture augments svelteHTML for resolved tags", () => {
   assert.match(SVELTE_TYPES, /"myapp-button":/u);
   assert.match(SVELTE_TYPES, /"legacy-input":/u);
 
-  // Same importPath contract as JSX: monorepo component from its subpath export.
+  // Unlike JSX, the Svelte artifact carries NO package imports: with no
+  // componentTypePath the tool inlines each attribute's CEM `type.text`, so prop
+  // types never index a (broken) shipped class declaration. A real string-literal
+  // union survives verbatim — the value set editors complete/validate against.
+  assert.doesNotMatch(
+    SVELTE_TYPES,
+    /import type \{[^}]*\} from "@aurodesignsystem\//u,
+    "Svelte artifact imports no component class",
+  );
   assert.match(
     SVELTE_TYPES,
-    /from "@aurodesignsystem\/auro-formkit\/auro-input"/u,
-    "monorepo class imported from its subpath export",
+    /"primary" \| "secondary" \| "tertiary" \| "ghost" \| "flat"/u,
+    "CEM union inlined as a real type, not any",
   );
 });
 
