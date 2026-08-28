@@ -1296,3 +1296,67 @@ test("--offline skips the release check and makes no network call", async (t) =>
   assert.equal(fetchMock.mock.callCount(), 0, "no network call with --offline");
   assert.doesNotMatch(stderr(), /NOT on the latest release/u);
 });
+
+// IntelliSense health check — never finish an init with silently-broken markup
+// completions. See src/init/editors/verify.ts and the yellow/red banners in runInit.
+
+test("warns with a yellow banner when the VS Code markup target is off", async (t) => {
+  const cwd = await tempCwd(t);
+  await installRealPackage(cwd, "auro-button");
+  t.mock.method(process, "cwd", () => cwd);
+  t.mock.method(process, "exit", () => {
+    throw new Error("should not exit on success");
+  });
+  const stderr = captureWrite(t, process.stderr);
+  t.mock.method(globalThis, "fetch", async () => {
+    throw new Error("init must not hit the network");
+  });
+
+  // Markup off, type-checking on — the masked-failure shape from the bug report.
+  await runInit({
+    prefix: "myapp-",
+    offline: true,
+    vscode: false,
+    svelte: true,
+  });
+
+  // The Svelte layer landed, but no VS Code custom-data was generated.
+  await readOutput(cwd, "auro-types/auro-svelte.d.ts");
+  await assert.rejects(
+    readOutput(cwd, ".vscode/auro.html-custom-data.json"),
+    /ENOENT/u,
+    "no markup custom-data is written when vscode is off",
+  );
+  // ...and the run said so loudly instead of finishing silently.
+  assert.match(
+    stderr(),
+    /VS Code markup IntelliSense is off/u,
+    "the yellow markup-off banner fires",
+  );
+});
+
+test("a fully-wired vscode run emits no markup-off or wiring-incomplete banner", async (t) => {
+  const cwd = await tempCwd(t);
+  await installRealPackage(cwd, "auro-button");
+  t.mock.method(process, "cwd", () => cwd);
+  t.mock.method(process, "exit", () => {
+    throw new Error("should not exit on success");
+  });
+  const stderr = captureWrite(t, process.stderr);
+  t.mock.method(globalThis, "fetch", async () => {
+    throw new Error("init must not hit the network");
+  });
+
+  await runInit({
+    prefix: "myapp-",
+    offline: true,
+    vscode: true,
+    svelte: true,
+  });
+
+  // Both layers wired → the health check is quiet (no false-positive noise).
+  await readOutput(cwd, ".vscode/auro.html-custom-data.json");
+  const err = stderr();
+  assert.doesNotMatch(err, /VS Code markup IntelliSense is off/u);
+  assert.doesNotMatch(err, /wiring is incomplete/u);
+});

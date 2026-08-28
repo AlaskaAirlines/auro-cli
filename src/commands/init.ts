@@ -40,6 +40,7 @@ import {
   type EditorSelection,
   type EditorTarget,
 } from "#init/editors/detect.js";
+import { verifyEditorWiring } from "#init/editors/verify.js";
 import {
   type EditorWriteReport,
   writeEditorArtifacts,
@@ -501,6 +502,44 @@ export async function runInit(options: InitOptions): Promise<void> {
       renderWarningBanner(
         `⚠  ${plan.noPrefixWarnings.length} component(s) grounded under bare 'auro-*' tags — pass a prefix to avoid collisions`,
         plan.noPrefixWarnings,
+        "yellow",
+      ),
+    );
+  }
+
+  // IntelliSense health check. `writeEditorArtifacts` above already wrote every
+  // enabled target, but a merge can no-op against stale wiring whose artifact was
+  // externally removed — leaving a settings pointer to a missing file. Read back
+  // what actually landed; on a gap, re-run the idempotent writer once to self-heal,
+  // then re-verify. A surviving gap is a red banner; a disabled markup target is a
+  // yellow one, so absent `<auro-*>` completions are never a silent surprise.
+  let verdict = verifyEditorWiring(cwd, editorSelection);
+  if (verdict.inconsistencies.length > 0) {
+    await writeEditorArtifacts(
+      cwd,
+      components,
+      plan.resolvedTags,
+      editorSelection,
+    );
+    verdict = verifyEditorWiring(cwd, editorSelection);
+  }
+  if (verdict.inconsistencies.length > 0) {
+    console.error(
+      renderWarningBanner(
+        "⚠  Editor IntelliSense wiring is incomplete after writing",
+        verdict.inconsistencies,
+        "red",
+      ),
+    );
+  }
+  if (verdict.markupDisabled) {
+    console.error(
+      renderWarningBanner(
+        "⚠  VS Code markup IntelliSense is off — no <auro-*> completions or hover docs",
+        [
+          "Type-checking may still work, but tag/attribute completions will not.",
+          "Re-run `auro init --vscode` to generate them.",
+        ],
         "yellow",
       ),
     );

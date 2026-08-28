@@ -29,6 +29,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
+import { parse as parseJsonc } from "jsonc-parser";
 import { CONFIG_FILENAME } from "#init/config.js";
 import {
   CSS_SNIPPETS_PATH,
@@ -99,6 +100,17 @@ export interface ResetReport {
 /** Absolute path for a forward-slash, root-relative artifact path. */
 function toAbsolute(cwd: string, rel: string): string {
   return path.join(cwd, ...rel.split("/"));
+}
+
+/** True when `source` is JSONC for an object with no keys (`{}`, comments aside). */
+function isEmptyObject(source: string): boolean {
+  const data = parseJsonc(source, [], { allowTrailingComma: true }) as unknown;
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    !Array.isArray(data) &&
+    Object.keys(data).length === 0
+  );
 }
 
 /** Read a file as UTF-8, or `null` when it does not exist. */
@@ -206,7 +218,15 @@ export function planReset(cwd: string): ResetPlan {
     if (result.warning) {
       warnings.push(result.warning);
     } else if (result.changed) {
-      unmerges.push({ path: settingsRel, result });
+      // Removing our entry emptied the object → the file held only our entry, so
+      // `auro init` created it. Delete it (a faithful teardown, and so the
+      // `.vscode/` prune below can reclaim a now-empty dir) rather than leaving a
+      // stray `{}` that a later run only survives on by accident.
+      if (isEmptyObject(result.contents)) {
+        filesToRemove.push(settingsRel);
+      } else {
+        unmerges.push({ path: settingsRel, result });
+      }
     }
   }
   for (const configRel of ["tsconfig.json", "jsconfig.json"]) {
