@@ -15,7 +15,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ResolvedComponent } from "#init/resolver.js";
-import type { CemDeclaration, Manifest } from "#utils/cem.js";
+import type { CemAttribute, CemDeclaration, Manifest } from "#utils/cem.js";
 
 /**
  * True when every bracket pair (`()[]{}<>`) in `text` is balanced, treating a
@@ -70,6 +70,45 @@ function withSafeType<T extends { type?: { text?: string } }>(entry: T): T {
 }
 
 /**
+ * True when `attribute` merely reflects an internal (private or omitted) property
+ * and carries no documentation of its own — e.g. auro-button's `data-hover` /
+ * `data-active`, reflected from its `@private onHover` / `onActive` members. The
+ * CEM analyzer derives an attribute from a property's `attribute:` / `reflect:`
+ * options **independently of the property's `privacy`**, so `@private` (or
+ * `@ignore`) on the source suppresses the *member* but still emits the
+ * *attribute* as a public, description-less entry — which then leaks into editor
+ * autocomplete as something a consumer might set, when it never should.
+ *
+ * We treat an attribute as such a leak when its backing member (`fieldName`) is
+ * private/protected, or absent from the (pruned) member list — meaning the
+ * property was intentionally omitted, e.g. dropped as `@private` — **and** the
+ * attribute has no description. The no-description guard deliberately preserves
+ * documented reflections a component *does* expose on purpose (e.g. a11y
+ * `role` / `aria-*` attributes carrying real descriptions). An attribute with no
+ * `fieldName` has no backing member to judge and is always kept.
+ *
+ * @see docs/pt-m2-completion-plan.md → Risks/open questions, "Private-reflected
+ *   attributes leak into autocomplete".
+ */
+function isPrivateReflection(
+  attribute: CemAttribute,
+  memberPrivacyByName: ReadonlyMap<string, string | undefined>,
+): boolean {
+  const { fieldName, description } = attribute;
+  if (typeof fieldName !== "string" || fieldName === "") {
+    return false; // no backing member to judge — keep it
+  }
+  if (typeof description === "string" && description !== "") {
+    return false; // deliberately documented — keep it
+  }
+  if (!memberPrivacyByName.has(fieldName)) {
+    return true; // backing property omitted (e.g. pruned as @private)
+  }
+  const privacy = memberPrivacyByName.get(fieldName);
+  return privacy === "private" || privacy === "protected";
+}
+
+/**
  * Normalise a CEM declaration into something the community JSX/Svelte/HTML
  * generators reliably accept:
  *
@@ -82,19 +121,33 @@ function withSafeType<T extends { type?: { text?: string } }>(entry: T): T {
  *    (An empty-string name is kept — it is the valid default-slot name.)
  * 2. Drop a malformed `type.text` from members/attributes/events (see
  *    {@link withSafeType}) so a garbled type can't produce unparseable output.
+ * 3. Drop attributes that merely reflect a private/omitted property and carry no
+ *    description (see {@link isPrivateReflection}) so an internal reflection like
+ *    `data-hover` never leaks into editor autocomplete as a settable attribute.
  *
  * Everything else on the declaration is preserved verbatim.
  */
 function withNamedEntriesPruned(declaration: CemDeclaration): CemDeclaration {
   const hasName = (entry: { name?: unknown }): boolean =>
     typeof entry.name === "string";
+  const members = declaration.members?.filter(hasName).map(withSafeType);
+  // Backing-member privacy for the private-reflection guard, keyed by member
+  // name. Built from the pruned members (nameless entries can't be a fieldName
+  // target); an attribute whose fieldName is missing here reflects an omitted
+  // property.
+  const memberPrivacyByName = new Map<string, string | undefined>(
+    (members ?? []).map((member) => [member.name, member.privacy]),
+  );
   return {
     ...declaration,
-    ...(declaration.members && {
-      members: declaration.members.filter(hasName).map(withSafeType),
-    }),
+    ...(members && { members }),
     ...(declaration.attributes && {
-      attributes: declaration.attributes.filter(hasName).map(withSafeType),
+      attributes: declaration.attributes
+        .filter(hasName)
+        .filter(
+          (attribute) => !isPrivateReflection(attribute, memberPrivacyByName),
+        )
+        .map(withSafeType),
     }),
     ...(declaration.slots && { slots: declaration.slots.filter(hasName) }),
     ...(declaration.events && {

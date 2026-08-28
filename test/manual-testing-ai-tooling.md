@@ -8,8 +8,9 @@ at a time; every phase gets its own top-level section below.
 
 **Currently covered:** [Phase 1 — Standalone Grounding (no MCP)](#phase-1--standalone-grounding-no-mcp-ab1628539)
 (AB#1628539) — [PT-M0 — Land Tier 1 CLI primitives](#ab1628540--pt-m0-land-tier-1-cli-primitives)
-(AB#1628540) and [PT-M1 — `auro init` v1 (scoped grounding file)](#ab1628541--pt-m1-auro-init-v1-scoped-grounding-file)
-(AB#1628541). Sections for PT-M2…M4 and later phases will be added as that work
+(AB#1628540), [PT-M1 — `auro init` v1 (scoped grounding file)](#ab1628541--pt-m1-auro-init-v1-scoped-grounding-file)
+(AB#1628541), and [PT-M2 — Editor IntelliSense generation](#ab1628542--pt-m2-editor-intellisense-generation-html-custom-data--framework-types)
+(AB#1628542). Sections for PT-M3…M4 and later phases will be added as that work
 lands.
 
 ---
@@ -1038,7 +1039,320 @@ Uses the **dedupe scenario** (both `@aurodesignsystem/auro-input` and
 
 ---
 
+### AB#1628542 — PT-M2: Editor IntelliSense generation (HTML custom-data + framework types)
+
+Milestone goal: after `auro init`, an engineer's **editor** offers autocomplete +
+hover for the Auro tags they actually have installed — with **no network call**,
+generated from the CEM already in `node_modules`. Where PT-M1 emitted grounding
+files for an AI assistant, PT-M2 emits **editor artifacts** for the IDE's own
+language servers, including for components registered under a **custom tag name**
+(not just the default `auro-*`).
+
+Reference: [docs/pt-m2-completion-plan.md](../docs/pt-m2-completion-plan.md),
+[src/init/editors/](../src/init/editors/), [src/commands/init.ts](../src/commands/init.ts).
+
+#### Two mechanisms — why one artifact can't cover all three apps
+
+This is the central fact of the manual pass: editor IntelliSense for web components
+comes from **two independent language-server subsystems**, so PT-M2 ships **three
+emit targets over one resolved manifest**. Each app below is powered by a different
+server, so each must be verified in its **own** file type — a green HTML check says
+nothing about JSX or Svelte.
+
+| App / file | Language server | Fed by | Artifact |
+| --- | --- | --- | --- |
+| Vanilla `.html` (+ HTML regions) | VS Code **HTML** server | `html.customData` JSON | `.vscode/auro.html-custom-data.json` |
+| React `.tsx`/`.jsx` | **TypeScript** service | `.d.ts` augmenting `JSX.IntrinsicElements` | `auro-types/auro-jsx.d.ts` |
+| Svelte `.svelte` | **Svelte** server | `.d.ts` augmenting `svelteHTML` | `auro-types/auro-svelte.d.ts` |
+
+> **HTML hover ≠ HTML autocomplete for slots/events.** The `html.customData` format
+> models **tags and attributes** as first-class (both autocomplete *and* hover), but
+> has **no slot/event model**. Slots, events, methods, and CSS parts are rendered
+> into the tag's **hover description** only. So for the HTML app, word every check as
+> *tag/attribute autocomplete* and *hover shows slots/events/methods/CSS parts* —
+> **never** "slot/event autocomplete." (The JSX/Svelte targets, being real TS types,
+> do surface typed events/props.)
+
+#### Artifacts written + how init decides to write them
+
+Enabled targets write, at the project root (all generated from the local CEM, no
+network):
+
+- `.vscode/auro.html-custom-data.json` — wired into `.vscode/settings.json`
+  (`"html.customData": ["./.vscode/auro.html-custom-data.json"]`).
+- `auro-types/auro-jsx.d.ts` — its `import type { … }` specifiers resolved to the
+  **installed** packages so they type-check from the consumer's `node_modules`.
+- `auro-types/auro-svelte.d.ts` — self-contained (no class imports).
+
+The `auro-types/` dir is deliberately **non-dotted** so TypeScript's default `**/*`
+include picks it up with **zero** tsconfig edits; when a project has an explicit
+`include`/`files`, init appends `"auro-types"` non-destructively (see M2-6).
+
+New `auro init` options (tri-state, commander-negatable):
+
+| Option | Effect |
+| --- | --- |
+| `--vscode` / `--no-vscode` | Force the HTML custom-data target on / off. |
+| `--jsx` / `--no-jsx` | Force the React/JSX `.d.ts` target on / off. |
+| `--svelte` / `--no-svelte` | Force the Svelte `.d.ts` target on / off. |
+
+Per-target resolution precedence (frozen): **flag → persisted `auro.config.json`
+`init.editors.*` → detection → interactive confirm (TTY only)**. Detection defaults:
+`.vscode/` dir → VS Code; a `tsconfig.json` with `jsx` set **or** a `react` dep →
+JSX; a `svelte` dep or `svelte.config.*` → Svelte. Non-interactive/CI takes the
+detected default and **never** prompts or fails (an editor choice always has a safe
+default — unlike the PT-M1 prefix).
+
+#### Test projects — the same three real consumer apps, opened in an editor
+
+PT-M2 reuses the exact three PT-M1 apps ([§ Test projects — three real consumer
+apps](#test-projects--three-real-consumer-apps)), because the point is to prove live
+IntelliSense against real framework source. The **new** requirement over PT-M1 is
+that each must be **opened in an editor with the right language server**, and the
+artifacts committed to the TS program / HTML server:
+
+| Repo | Prove in this file type | Editor prerequisite |
+| --- | --- | --- |
+| [ai-tooling-test-vanilla](https://github.com/AlaskaAirlines/ai-tooling-test-vanilla) | `.html` file / HTML region | VS Code **HTML Language Features** (built in) |
+| [ai-tooling-test-react](https://github.com/AlaskaAirlines/ai-tooling-test-react) | `.tsx` / `.jsx` | VS Code **TypeScript** service (built in); `@types/react` installed |
+| [ai-tooling-test-svelte](https://github.com/AlaskaAirlines/ai-tooling-test-svelte) | `.svelte` | **Svelte for VS Code** (`svelte.svelte-vscode`) |
+
+```bash
+# Per repo, from a scratch working area:
+git clone https://github.com/AlaskaAirlines/ai-tooling-test-react && cd ai-tooling-test-react
+npm install                 # pulls auro-button + auro-formkit (+ react/@types/react)
+auro init --jsx             # writes auro-types/auro-jsx.d.ts + tsconfig wiring
+code .                      # open the folder in VS Code
+```
+
+> **Editor must reload to pick up new wiring.** After `auro init` writes/merges
+> `settings.json` or `tsconfig.json`, force the servers to re-read — HTML
+> custom-data via **Developer: Reload Window** (or reopen the folder); TypeScript
+> (JSX) via **TypeScript: Restart TS Server**; Svelte via **Svelte: Restart Language
+> Server** (or Reload Window). If completion/hover doesn't appear, a stale server is
+> the first thing to rule out.
+
+**Teardown:** discard the generated `.vscode/auro.html-custom-data.json`,
+`auro-types/`, and the `settings.json`/`tsconfig.json` merges (`git checkout`/`git
+clean`) rather than committing them.
+
+#### Automated coverage & manual scope (PT-M2)
+
+As with M0/M1, the bulk of PT-M2 is locked down by the automated suite (`npm test`),
+which drives the three pure builders and the full write/merge orchestration with
+synthetic + real vendored CEMs, on-disk fixtures, and forced non-interactive/TTY
+states. Those tests authoritatively cover **artifact *contents* (byte-exact golden
+fixtures per target), tag-swap for custom names, JSX class-import resolution, the
+`settings.json` + `tsconfig.json` merges (every branch), detection heuristics, the
+interactive prompt, flag precedence, idempotent regeneration, and dependency
+add/remove** — deterministically and offline. Re-running them by hand adds nothing;
+cite the test in sign-off instead.
+
+**Regression-covered by `npm test` — do not test manually:**
+
+| Area | Test file |
+| --- | --- |
+| Byte-exact HTML/JSX/Svelte artifact contents (golden fixtures); tag swap for default-prefix / arbitrary override / bare fallback; attributes present; private-reflected description-less attributes (`data-hover`/`data-active`) dropped while documented ones are kept; slots/events/methods in the HTML hover description; JSX class-import specifiers resolved to the installed package | [`init.editors.builders.test.ts`](init.editors.builders.test.ts) |
+| Format-freeze golden fixtures per target (upstream drift → failing test) | [`init.editors.format.test.ts`](init.editors.format.test.ts) |
+| `mergeVsCodeSettings` + `mergeTsconfigInclude`: empty / unrelated-keys+comments / string→array normalize / pre-existing entry / idempotent / unparseable→warn+skip; the four-branch `include` decision tree | [`init.editors.builders.test.ts`](init.editors.builders.test.ts) |
+| Detection heuristics — every branch of `detectVsCode`/`detectJsx`/`detectSvelte`/`detectEditorSignals`, negatives, never-throws | [`init.editors.detect.test.ts`](init.editors.detect.test.ts) |
+| JSX `.d.ts` type-checks under the project's own `tsc` (imports resolve; self-contained prop/element types valid) | [`init.editors.tsc-smoke.test.ts`](init.editors.tsc-smoke.test.ts) |
+| `auro init` integration: each `--<target>` writes its artifact + wiring with the resolved (prefixed) tag; `--no-*` writes nothing; detected signal enables non-interactively; persisted choice honored without a flag; interactive prompt seeds detection defaults + persists answers; flag overrides a conflicting persisted choice; malformed-CEM hardening; all-three idempotent regeneration + dependency removal | [`init.command.test.ts`](init.command.test.ts) |
+
+**Manual scope — what automation structurally cannot cover.** Automation proves the
+artifacts are **correct**; only a human in an editor can prove the language servers
+**consume** them into live completion/hover. The manual pass needs only:
+
+1. **Live HTML IntelliSense** (M2-1) — real `<auro-` completion, attribute
+   completion, and hover in an `.html` file, driven by the written custom-data.
+2. **Live React/JSX IntelliSense** (M2-2) — typed intrinsic-element completion,
+   prop-type hover, and a real type **error** on a wrong prop in a `.tsx` file.
+3. **Live Svelte IntelliSense** (M2-3) — element completion with typed props/events
+   in a `.svelte` file.
+4. **Custom-registered tag names in the editor** (M2-4) — the same three checks, but
+   under a custom tag (`--prefix myapp-` → `myapp-button`, and an existing
+   `legacy-input` registration), proving task #4 end-to-end in the IDE.
+5. **Real-TTY per-target prompt** (M2-5) — the `confirm`-per-detected-target UX the
+   suite forces non-interactive.
+6. **Live wiring merge on a real editor config** (M2-6 smoke) — that a real
+   pre-existing `.vscode/settings.json` / `tsconfig.json` keeps its comments/keys and
+   the servers still activate.
+
+Individual cases below are annotated **[Manual]**, **[Manual smoke]**, or
+**[Regression-covered]** accordingly.
+
+---
+
+#### M2-1 — Vanilla / HTML: live tag + attribute autocomplete and hover — [Manual]
+
+From **ai-tooling-test-vanilla** after `npm install`.
+
+1. Run `auro init --vscode` (or plain `auro init` — the `.vscode/` dir makes VS Code
+   the detected default), then **Reload Window** and open an `.html` file (create
+   `scratch.html` if the repo has none).
+2. **Tag autocomplete:** type `<auro-` in the HTML body.
+   - **Expect:** installed Auro tags complete — `auro-button` plus every installed
+     `auro-formkit` element (`auro-input`, `auro-select`, …). **No** uninstalled
+     catalog tag appears (strict install-scoping).
+3. **Attribute autocomplete:** inside `<auro-button>` (type a space after the tag),
+   trigger completion.
+   - **Expect:** real attributes from the CEM complete (e.g. `variant`, `disabled`),
+     each with a hover description.
+   - **Negative (private reflections):** internal reflected attributes such as
+     `data-hover` / `data-active` do **not** appear in the completion list —
+     [Regression-covered] by the builder drop (`isPrivateReflection`), confirmed
+     live here.
+4. **Tag hover:** hover the `<auro-button>` tag name.
+   - **Expect:** a description that includes **Slots / Events / Methods / CSS Parts**
+     markdown sections (hover, not autocomplete — per the note above). Confirm a
+     slot-rich element like `auro-input` shows its slots/events on hover.
+5. **Negative:** a plain `<div>` shows no Auro attributes (custom-data is scoped to
+   the Auro tags), and a tag from an **uninstalled** package does not complete.
+
+#### M2-2 — React / JSX: typed intrinsic completion, prop hover, and a type error — [Manual]
+
+From **ai-tooling-test-react** after `npm install` (confirm `react` + `@types/react`
+are present so JSX prop typing fully resolves).
+
+1. Run `auro init --jsx`, then **TypeScript: Restart TS Server**, and open a `.tsx`
+   file with JSX markup.
+2. **Intrinsic-element completion:** type `<auro-button` (then a space) in JSX.
+   - **Expect:** the intrinsic element completes with **typed props** (attributes
+     typed from the CEM), not `any`. Prop names autocomplete inside the tag.
+3. **Prop-type hover:** hover a prop (e.g. `variant`).
+   - **Expect:** the hover shows its **type**, not `any`/`unknown`.
+4. **Type error on a wrong prop type:** assign a prop a value of the wrong type (e.g.
+   a boolean-typed attribute set to a number, or an unknown prop under a strict
+   config).
+   - **Expect:** the TS service flags it with a red squiggle / Problems entry — proof
+     the `.d.ts` is genuinely on the program and type-checking, not merely present.
+5. **Import resolution:** confirm no "cannot find module" error originates from
+   `auro-types/auro-jsx.d.ts` — its `import type { … }` specifiers must resolve from
+   the installed packages (regression-covered by the tsc smoke, but confirm live too).
+
+> **JSX namespace note (React version).** Newer React (19) routes JSX through
+> `react/jsx-runtime` rather than the global `JSX` namespace. The generated `.d.ts`
+> augments both; if intrinsic completion doesn't appear, record the React version and
+> which namespace the project uses — this is the one JSX variance the plan flagged as
+> a verify-in-editor item, not a blocker.
+
+#### M2-3 — Svelte: typed element completion + hover — [Manual]
+
+From **ai-tooling-test-svelte** after `npm install`, with the **Svelte for VS Code**
+extension installed.
+
+1. Run `auro init --svelte`, then restart the Svelte language server so it re-reads
+   `tsconfig.json` and loads the new `auro-types/auro-svelte.d.ts`:
+   - Open a `.svelte` file first (this **activates** the Svelte extension — its
+     commands don't appear until a Svelte file is open).
+   - Open the Command Palette (**⇧⌘P** on macOS / **Ctrl+Shift+P** on Windows/Linux),
+     type `Svelte: Restart Language Server`, and run it. (The command is contributed
+     by the `svelte.svelte-vscode` extension; if it isn't listed, the extension isn't
+     installed or hasn't activated — reopen a `.svelte` file.)
+   - Fallback if completion still doesn't appear: **Developer: Reload Window** (from
+     the same Command Palette) restarts every server, including Svelte's.
+2. Back in the `.svelte` file's template markup, type `<auro-button` (or
+   `<auro-input`), then a space.
+   - **Expect:** the element completes with **typed props/events** from the CEM; prop
+     hover shows types. Only installed Auro elements appear.
+3. Confirm the Svelte server — not just the HTML fallback — is providing this: the
+   typed props/events (not merely tag-name completion) are the Svelte `.d.ts` at work.
+
+#### M2-4 — Custom-registered tag names in the editor (task #4) — [Manual]
+
+The ticket's task #4: autocomplete/hover must work for a component registered under a
+**custom** name, not only the default `auro-*`. Prove it lives in each editor.
+
+1. **Prefix-driven custom tag.** In any of the three apps, run
+   `auro init --prefix myapp- --vscode --jsx --svelte` (delete `auro.config.json`
+   first to force a fresh prefix), reload the servers.
+   - **HTML (vanilla):** `<myapp-` completes to `myapp-button` etc.; hover works
+     under the custom name; the bare `<auro-button>` does **not** complete (the tag
+     was swapped, not duplicated).
+   - **React:** `<myapp-button` completes with typed props.
+   - **Svelte:** `<myapp-button` completes with typed props/events.
+2. **Existing per-component registration.** In **ai-tooling-test-react** (which has a
+   real `Component.register('legacy-input')`), run `auro init --jsx`.
+   - **Expect:** `<legacy-input` completes/hovers under its **actual** registered tag
+     (honored as a per-component override), while other components use the default
+     (or prefixed) tag — proving arbitrary per-tag overrides reach the editor, not
+     just a uniform prefix.
+
+#### M2-5 — Real-TTY per-target detection prompt — [Manual]
+
+Exercises the `confirm`-per-target UX the suite forces non-interactive. Use a scratch
+project (or one of the apps) with **no** `--vscode/--jsx/--svelte` flags and **no**
+persisted `init.editors` in `auro.config.json` (delete it to force a fresh decision).
+
+1. Run `auro init` on a real TTY.
+   - **Expect:** a `confirm` prompt **per target**, each **defaulting to its detected
+     signal** — e.g. VS Code defaults **Yes** when a `.vscode/` dir exists, JSX
+     defaults **Yes** when `react`/`jsx` is present, Svelte defaults **Yes** with a
+     `svelte` dep/config. Answer against a default (e.g. decline a detected target,
+     accept an undetected one).
+2. **Expect:** the **answers** (not the detected defaults) drive which artifacts are
+   written, and all three booleans persist to `auro.config.json` `init.editors`.
+3. **Re-run is silent:** run `auro init` again — with `init.editors` now settled, it
+   does **not** re-prompt (idempotent, CI-safe). Exit `0`.
+4. **Non-interactive default:** `CI=1 auro init` (fresh config) writes each target
+   per its detected signal with **no** prompt and **no** failure. Exit `0`.
+
+#### M2-6 — Non-destructive wiring on a real editor config — [Regression-covered; live-server smoke → Manual]
+
+The merges are exhaustively regression-covered (every branch, idempotent,
+comment-preserving). The **only** manual value is confirming a real language server
+still activates against a genuine pre-existing config.
+
+1. In an app that already has a `.vscode/settings.json` **with comments and unrelated
+   keys** (add a couple if none), run `auro init --vscode`.
+   - **Expect:** the file keeps its comments/keys/formatting and gains
+     `html.customData` (verify via `git diff`); a **second** run does not duplicate
+     the entry; the HTML server activates after reload (M2-1 checks pass).
+2. In an app with an explicit `tsconfig.json` `include` array, run `auro init --jsx`.
+   - **Expect:** `"auro-types"` is appended to `include` (deduped, source files
+     unaffected); the `.d.ts` lands on the TS program (M2-2 checks pass). For a
+     default-include project (no `include`/`files`), confirm init makes **no**
+     tsconfig edit yet the `.tsx` still type-checks (the non-dotted dir is auto-picked
+     up).
+3. **Unrecoverable config → warn + still write.** Temporarily corrupt the
+   `tsconfig.json` (malformed JSONC) and run `auro init --jsx`.
+   - **Expect:** a stderr warning carrying the exact manual `include` line to add, the
+     `.d.ts` **still written**, and the tsconfig left untouched (regression-covered;
+     smoke only if verifying the live message).
+
+---
+
+### Sign-off checklist (PT-M2 / AB#1628542)
+
+**Automated — one check covers the bulk of the matrix:**
+
+- [ ] `npm test` passes (green run signs off every **[Regression-covered]** case
+      above — artifact contents, tag swap, JSX class-import + tsc smoke, both merges,
+      detection, interactive prompt, flag precedence, idempotent regen, dependency
+      removal, malformed-CEM hardening)
+
+**Manual pass — only what automation can't reach (live language servers):**
+
+- [ ] `auro init` `--vscode`/`--jsx`/`--svelte` (+ `--no-*`) appear in `auro init
+      --help` and run from the packed/global install
+- [ ] **M2-1** HTML: `<auro-` tag completion, attribute completion, hover shows
+      slots/events/methods/CSS parts (vanilla app, `.html`)
+- [ ] **M2-2** React: typed `<auro-button` intrinsic completion, prop-type hover, a
+      wrong-prop **type error** (react app, `.tsx`)
+- [ ] **M2-3** Svelte: element completion with typed props/events (svelte app,
+      `.svelte`, Svelte extension)
+- [ ] **M2-4** custom-registered tags in the editor: `--prefix myapp-` completes under
+      `myapp-*` in all three; existing `legacy-input` registration honored
+- [ ] **M2-5** real-TTY per-target prompt (detected defaults, answers persist, re-run
+      silent, CI default no-prompt/no-fail)
+- [ ] **M2-6** live smoke: real commented `settings.json` / `tsconfig.json` preserved
+      and the server still activates
+- [ ] Editor + versions recorded (VS Code build, Svelte extension version, React /
+      TypeScript versions), plus CLI SHA, Node, OS
+
+---
+
 ### Milestones pending (to be expanded later)
 
-- **PT-M2…M4 — `auro init`** downstream tooling and later surfaces: test sections
+- **PT-M3…M4 — `auro init`** downstream tooling and later surfaces: test sections
   will be added to this document as each milestone lands under AB#1628539.
