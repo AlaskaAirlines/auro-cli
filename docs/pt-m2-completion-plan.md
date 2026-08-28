@@ -288,6 +288,15 @@ contract, using **[`jsonc-parser`](https://www.npmjs.com/package/jsonc-parser)**
   - **No `tsconfig.json` at all** → no edit; the default program includes the
     non-dotted root dir.
   - Idempotent: re-running never duplicates the entry.
+- **`jsconfig.json` gets the same treatment (RESOLVED).** A JS-based Svelte/JSX
+  project ships a **`jsconfig.json`** instead of `tsconfig.json` — identical
+  `include`/`files` schema, same language service. The generated `auro-types/`
+  otherwise never loads (its `include` doesn't cover the dir), which is the manual
+  jsconfig edit consumers previously had to make by hand. `writeEditorArtifacts`
+  now wires whichever config exists, **preferring `tsconfig.json`** (TypeScript
+  ignores `jsconfig.json` when a `tsconfig.json` is present, so tsconfig wins when
+  both exist) and running the exact same four-branch merge; the untouched config is
+  left byte-for-byte intact.
 - **Warn-and-instruct fallback (last resort).** Only when the config is unrecoverably
   malformed, or an `extends` chain / `exclude` / monorepo path setup means the parsed
   local config can't be safely amended, **write the `.d.ts` files and print the exact

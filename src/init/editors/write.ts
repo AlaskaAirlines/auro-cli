@@ -89,8 +89,9 @@ async function readOrEmpty(absolute: string): Promise<string> {
  * skipped entirely — no artifact, no directory, no merge (so `init` never creates
  * `.vscode/` or `auro-types/` for a target the consumer turned off). The tsconfig
  * merge runs once when either the JSX or Svelte target is on, and only when a
- * `tsconfig.json` already exists (absent → the default program glob already picks
- * up the non-dotted `auro-types/`, so there is nothing to wire).
+ * `tsconfig.json` (or its JS-project `jsconfig.json` variant) already exists
+ * (absent → the default program glob already picks up the non-dotted
+ * `auro-types/`, so there is nothing to wire).
  */
 export async function writeEditorArtifacts(
   cwd: string,
@@ -133,22 +134,33 @@ export async function writeEditorArtifacts(
     );
   }
 
-  // A single tsconfig wiring covers both TS-consuming targets. Only touch an
-  // existing tsconfig.json — its absence is the "default glob covers it" branch.
+  // A single config wiring covers both TS-consuming targets. Prefer tsconfig.json;
+  // a JS-based Svelte/JSX project uses jsconfig.json instead (TypeScript ignores
+  // jsconfig.json when a tsconfig.json is present, so tsconfig wins when both
+  // exist). Only touch an existing config — neither present is the "default glob
+  // covers the non-dotted auro-types/" branch, so there is nothing to wire.
   if (selection.jsx || selection.svelte) {
-    const tsconfigRel = "tsconfig.json";
-    const tsconfigAbs = path.join(cwd, tsconfigRel);
-    const existing = await readOrEmpty(tsconfigAbs);
-    if (existing !== "") {
-      const merged = mergeTsconfigInclude(existing);
+    for (const configRel of ["tsconfig.json", "jsconfig.json"]) {
+      const configAbs = path.join(cwd, configRel);
+      const existing = await readOrEmpty(configAbs);
+      if (existing === "") {
+        continue;
+      }
+      const merged = mergeTsconfigInclude(
+        existing,
+        TSCONFIG_INCLUDE_ENTRY,
+        configRel,
+      );
       if (merged.warning) {
         warnings.push(
-          `${merged.warning} Add "${TSCONFIG_INCLUDE_ENTRY}" to "${TSCONFIG_INCLUDE_KEY}" in ${tsconfigRel} by hand.`,
+          `${merged.warning} Add "${TSCONFIG_INCLUDE_ENTRY}" to "${TSCONFIG_INCLUDE_KEY}" in ${configRel} by hand.`,
         );
       } else if (merged.changed) {
-        await fs.writeFile(tsconfigAbs, merged.contents, "utf-8");
-        written.push(tsconfigRel);
+        await fs.writeFile(configAbs, merged.contents, "utf-8");
+        written.push(configRel);
       }
+      // Only the first existing config is authoritative; stop after it.
+      break;
     }
   }
 
