@@ -661,6 +661,17 @@ Map the ticket's enumerated test list to suites (node:test via
   three `init.command` integration tests (accept → migrate + defer grounding, decline
   → ground as-is, non-interactive → advisory only), and `outdated` banner tests.
 
+- ➡️ **Internal sub-components leak into the grounding (and get broken import
+  paths).** *Surfaced while reviewing PT-M1 init grounding, but tracked and to be
+  fixed in the **PT-M2** plan* (see its Risks / open questions). The resolver's sole
+  element filter surfaces **every** registered element, so a monorepo package like
+  `auro-formkit` grounds internal-only elements (10 of its 20 registered tags are
+  absent from the `package.json` `exports` map) and emits non-existent subpath imports
+  for them. It's moved to PT-M2 because the same resolver output feeds that
+  milestone's editor artifacts (JSX/Svelte/VS Code), so the `exports`-map gate fixes
+  the grounding **and** the editor targets in one change, on the milestone that owns
+  those targets.
+
 ## Done when
 
 Running `auro init` in a project with known Auro deps produces `AGENTS.md` (+ a
