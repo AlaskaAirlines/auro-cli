@@ -47,6 +47,7 @@ type AuroButtonProps = {
 
   /** Fired on activation. */
   "on:click"?: (e: CustomEvent<never>) => void;
+  "onclick"?: (e: CustomEvent<never>) => void;
 };
 
 type AuroInputProps = {

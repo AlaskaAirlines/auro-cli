@@ -155,6 +155,29 @@ test("Svelte inlines CEM types and emits no package class import", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Event handlers: the tool emits only the Svelte 4 `on:event` directive form;
+// Svelte 5 uses handler *properties* (`onclick={…}`). buildSvelteTypes emits BOTH
+// so a component that uses either syntax type-checks against the same event type.
+// ---------------------------------------------------------------------------
+
+test("Svelte emits both the Svelte 4 directive and Svelte 5 property event handler", () => {
+  const svelte = buildSvelteTypes(COMPONENTS, RESOLVED_TAGS).contents;
+  const handler = String.raw`\?: \(e: CustomEvent<never>\) => void;`;
+  // Svelte 4 directive form (what the community tool emits).
+  assert.match(
+    svelte,
+    new RegExp(`"on:click"${handler}`, "u"),
+    "Svelte 4 `on:click` directive handler present",
+  );
+  // Svelte 5 property form (the sibling we add) — identical signature.
+  assert.match(
+    svelte,
+    new RegExp(`"onclick"${handler}`, "u"),
+    "Svelte 5 `onclick` property handler present",
+  );
+});
+
+// ---------------------------------------------------------------------------
 // Value completion/validation: a string-literal union survives to every target
 // as a real union (not `any`), so editors complete + validate attribute values.
 // ---------------------------------------------------------------------------
