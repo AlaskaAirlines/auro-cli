@@ -60,7 +60,7 @@ test("writes AGENTS.md, CLAUDE.md and config for the real installed components",
     throw new Error("init must not hit the network");
   });
 
-  await runInit({ prefix: "myapp-" });
+  await runInit({ prefix: "myapp-", offline: true });
 
   const agents = await readOutput(cwd, "AGENTS.md");
   // The standalone button and a formkit monorepo component are both prefixed.
@@ -93,7 +93,7 @@ test("with nothing installed, warns and writes no files", async (t) => {
     throw new Error("init must not hit the network");
   });
 
-  await runInit({});
+  await runInit({ offline: true });
 
   await assert.rejects(
     readOutput(cwd, "AGENTS.md"),
@@ -117,7 +117,7 @@ test("exits 1 when a default prefix is needed but the run is non-interactive", a
 
   // No --prefix, no config, no scan match → needsDefaultPrefix; the test runner
   // has no TTY, so the run is non-interactive and must fail cleanly.
-  await assert.rejects(runInit({}), (err: ExitError) => {
+  await assert.rejects(runInit({ offline: true }), (err: ExitError) => {
     assert.equal(err.code, 1);
     return true;
   });
@@ -151,7 +151,7 @@ test("an existing config override wins over the default prefix", async (t) => {
   });
 
   // A defined config default means no prompt is needed even without --prefix.
-  await runInit({});
+  await runInit({ offline: true });
 
   const agents = await readOutput(cwd, "AGENTS.md");
   assert.match(agents, /<brand-cta>/u, "config override is honored");
@@ -171,10 +171,13 @@ test("exits 1 on a malformed config", async (t) => {
     throw new Error("init must not hit the network");
   });
 
-  await assert.rejects(runInit({ prefix: "myapp-" }), (err: ExitError) => {
-    assert.equal(err.code, 1);
-    return true;
-  });
+  await assert.rejects(
+    runInit({ prefix: "myapp-", offline: true }),
+    (err: ExitError) => {
+      assert.equal(err.code, 1);
+      return true;
+    },
+  );
   assert.match(stderr(), /Cannot read auro\.config\.json/u);
 });
 
@@ -203,7 +206,7 @@ test("warns when a tag is registered by more than one installed package", async 
     throw new Error("init must not hit the network");
   });
 
-  await runInit({ prefix: "myapp-" });
+  await runInit({ prefix: "myapp-", offline: true });
 
   const err = stderr();
   assert.match(err, /registered by multiple installed packages/u);
@@ -233,12 +236,12 @@ test("regeneration is idempotent and reuses the persisted default", async (t) =>
     throw new Error("init must not hit the network");
   });
 
-  await runInit({ prefix: "myapp-" });
+  await runInit({ prefix: "myapp-", offline: true });
   const first = await readOutput(cwd, "AGENTS.md");
 
   // Second run without --prefix: the persisted config default carries the prefix,
   // so it neither prompts nor fails, and reproduces the same document.
-  await runInit({});
+  await runInit({ offline: true });
   const second = await readOutput(cwd, "AGENTS.md");
 
   assert.equal(second, first, "regeneration is byte-identical");
@@ -259,7 +262,7 @@ test("regeneration after removing a dependency drops it and stays idempotent", a
   });
 
   // First run grounds both packages and persists the default prefix.
-  await runInit({ prefix: "myapp-" });
+  await runInit({ prefix: "myapp-", offline: true });
   const withBoth = await readOutput(cwd, "AGENTS.md");
   assert.match(
     withBoth,
@@ -281,7 +284,7 @@ test("regeneration after removing a dependency drops it and stays idempotent", a
       force: true,
     },
   );
-  await runInit({});
+  await runInit({ offline: true });
   const afterRemoval = await readOutput(cwd, "AGENTS.md");
 
   assert.match(
@@ -309,7 +312,7 @@ test("regeneration after removing a dependency drops it and stays idempotent", a
   assert.equal(config.init.prefix.default, "myapp-");
 
   // A third run against the same reduced deps reproduces the document byte-for-byte.
-  await runInit({});
+  await runInit({ offline: true });
   const third = await readOutput(cwd, "AGENTS.md");
   assert.equal(third, afterRemoval, "post-removal regeneration is idempotent");
 });
@@ -328,7 +331,7 @@ test("mixed existing prefixes fail cleanly (exit 1) in a non-interactive run", a
 
   // The runner has no TTY → non-interactive. A mixed-prefix conflict with no
   // settled default cannot be resolved without a prompt, so init must fail.
-  await assert.rejects(runInit({}), (err: ExitError) => {
+  await assert.rejects(runInit({ offline: true }), (err: ExitError) => {
     assert.equal(err.code, 1);
     return true;
   });
@@ -353,7 +356,7 @@ test("mixed prefixes: interactive confirm adopts the majority as the default", a
   // Accept the suggested majority (`legacy-`) at the confirm prompt.
   t.mock.method(inquirer, "prompt", async () => ({ accept: true }));
 
-  await runInit({});
+  await runInit({ offline: true });
 
   const agents = await readOutput(cwd, "AGENTS.md");
   // Per-component scan overrides are honored regardless of the chosen default.
@@ -389,7 +392,7 @@ test("mixed prefixes: declining the confirm falls back to an entered prefix", as
         : { prefix: "custom-" },
   );
 
-  await runInit({});
+  await runInit({ offline: true });
 
   const agents = await readOutput(cwd, "AGENTS.md");
   // The entered default governs only unregistered components; the two scanned
@@ -418,7 +421,7 @@ test("mixed prefixes: an explicit --prefix bypasses the prompt and CI fail", asy
   // No inquirer mock: if the command tried to prompt, the real prompt would hang
   // or throw — proving --prefix short-circuits the decision entirely.
 
-  await runInit({ prefix: "myapp-" });
+  await runInit({ prefix: "myapp-", offline: true });
 
   const agents = await readOutput(cwd, "AGENTS.md");
   assert.match(
@@ -473,7 +476,7 @@ test("a committed mixed-prefix config regenerates cleanly without prompting or f
     throw new Error("init must not hit the network");
   });
 
-  await runInit({});
+  await runInit({ offline: true });
 
   const agents = await readOutput(cwd, "AGENTS.md");
   assert.match(agents, /<legacy-button>/u);
@@ -520,7 +523,7 @@ test("AST scan warns (never guesses) on default, computed, and auto-versioned re
     throw new Error("init must not hit the network");
   });
 
-  await runInit({ prefix: "myapp-" });
+  await runInit({ prefix: "myapp-", offline: true });
 
   const agents = await readOutput(cwd, "AGENTS.md");
   assert.match(
@@ -588,7 +591,7 @@ test("legacy standalone: accepting the prompt migrates to formkit and stops befo
   forceInteractive(t);
   t.mock.method(inquirer, "prompt", async () => ({ migrate: true }));
 
-  await runInit({ prefix: "myapp-" });
+  await runInit({ prefix: "myapp-", offline: true });
 
   // package.json swapped: legacy removed, formkit added.
   const pkg = JSON.parse(await readOutput(cwd, "package.json"));
@@ -620,7 +623,7 @@ test("legacy standalone: declining the prompt grounds the standalone as-is", asy
   forceInteractive(t);
   t.mock.method(inquirer, "prompt", async () => ({ migrate: false }));
 
-  await runInit({ prefix: "myapp-" });
+  await runInit({ prefix: "myapp-", offline: true });
 
   // Nothing migrated; normal grounding proceeded.
   const pkg = JSON.parse(await readOutput(cwd, "package.json"));
@@ -654,7 +657,7 @@ test("legacy standalone: a non-interactive run only advises, never migrates", as
   // No forceInteractive (runner is non-TTY) and no inquirer mock: prompting would
   // throw, proving the non-interactive path never prompts.
 
-  await runInit({ prefix: "myapp-" });
+  await runInit({ prefix: "myapp-", offline: true });
 
   // Advisory printed; no edits made.
   assert.match(stderr(), /can be migrated to @aurodesignsystem\/auro-formkit/u);
@@ -687,7 +690,7 @@ test("--vscode writes the HTML custom-data artifact and wires settings.json", as
   stubEditorRun(t, cwd);
   captureWrite(t, process.stderr);
 
-  await runInit({ prefix: "myapp-", vscode: true });
+  await runInit({ prefix: "myapp-", vscode: true, offline: true });
 
   // The artifact is keyed on the resolved (prefixed) tag, not the bare auro-* tag.
   const customData = await readOutput(
@@ -726,7 +729,7 @@ test("--jsx writes the JSX types with resolved tags and installed import paths",
   stubEditorRun(t, cwd);
   captureWrite(t, process.stderr);
 
-  await runInit({ prefix: "myapp-", jsx: true });
+  await runInit({ prefix: "myapp-", jsx: true, offline: true });
 
   const jsx = await readOutput(cwd, "auro-types/auro-jsx.d.ts");
   assert.match(jsx, /myapp-button/u, "tag is the resolved custom tag");
@@ -761,7 +764,7 @@ test("--jsx appends auro-types to an existing tsconfig include", async (t) => {
   stubEditorRun(t, cwd);
   captureWrite(t, process.stderr);
 
-  await runInit({ prefix: "myapp-", jsx: true });
+  await runInit({ prefix: "myapp-", jsx: true, offline: true });
 
   const tsconfig = JSON.parse(await readOutput(cwd, "tsconfig.json"));
   assert.deepEqual(tsconfig.include, ["src", "auro-types"], "entry appended");
@@ -789,7 +792,7 @@ test("--svelte appends auro-types to an existing jsconfig include", async (t) =>
   stubEditorRun(t, cwd);
   captureWrite(t, process.stderr);
 
-  await runInit({ prefix: "myapp-", svelte: true });
+  await runInit({ prefix: "myapp-", svelte: true, offline: true });
 
   const jsconfig = JSON.parse(await readOutput(cwd, "jsconfig.json"));
   assert.deepEqual(
@@ -818,7 +821,7 @@ test("tsconfig wins over jsconfig when both exist", async (t) => {
   stubEditorRun(t, cwd);
   captureWrite(t, process.stderr);
 
-  await runInit({ prefix: "myapp-", svelte: true });
+  await runInit({ prefix: "myapp-", svelte: true, offline: true });
 
   const tsconfig = JSON.parse(await readOutput(cwd, "tsconfig.json"));
   assert.deepEqual(tsconfig.include, ["src", "auro-types"], "tsconfig wired");
@@ -835,7 +838,7 @@ test("--svelte writes the Svelte types artifact", async (t) => {
   stubEditorRun(t, cwd);
   captureWrite(t, process.stderr);
 
-  await runInit({ prefix: "myapp-", svelte: true });
+  await runInit({ prefix: "myapp-", svelte: true, offline: true });
 
   const svelte = await readOutput(cwd, "auro-types/auro-svelte.d.ts");
   assert.match(svelte, /myapp-button/u);
@@ -851,7 +854,7 @@ test("--css-snippets writes a ::part snippets file from the CEM cssParts", async
   stubEditorRun(t, cwd);
   captureWrite(t, process.stderr);
 
-  await runInit({ prefix: "myapp-", cssSnippets: true });
+  await runInit({ prefix: "myapp-", cssSnippets: true, offline: true });
 
   // The artifact is auto-discovered under .vscode/ — no settings.json entry.
   const snippets = JSON.parse(
@@ -896,6 +899,7 @@ test("--no-* flags write no editor artifacts even when signals are present", asy
     jsx: false,
     svelte: false,
     cssSnippets: false,
+    offline: true,
   });
 
   await assert.rejects(
@@ -930,7 +934,7 @@ test("a detected signal enables its target on a non-interactive run", async (t) 
   // No flags, no persisted config: the non-interactive run takes the detected
   // default and records every target. The .vscode/ signal enables BOTH the VS
   // Code and cssSnippets targets (they share it); jsx/svelte have no signal.
-  await runInit({ prefix: "myapp-" });
+  await runInit({ prefix: "myapp-", offline: true });
 
   await readOutput(cwd, ".vscode/auro.html-custom-data.json"); // exists
   const config = JSON.parse(await readOutput(cwd, "auro.config.json"));
@@ -964,7 +968,7 @@ test("a persisted editor choice is honored without a flag", async (t) => {
   stubEditorRun(t, cwd);
   captureWrite(t, process.stderr);
 
-  await runInit({});
+  await runInit({ offline: true });
 
   await readOutput(cwd, ".vscode/auro.html-custom-data.json"); // vscode:true honored
   await assert.rejects(readOutput(cwd, "auro-types/auro-jsx.d.ts"), /ENOENT/u);
@@ -997,7 +1001,7 @@ test("interactive run prompts for unsettled targets, seeds detection defaults, a
 
   // No editor flags and no persisted editors: every target is unsettled and must
   // be prompted for.
-  await runInit({ prefix: "myapp-" });
+  await runInit({ prefix: "myapp-", offline: true });
 
   // Detection seeds each prompt's default. The .vscode/ dir is present, so both
   // the VS Code and cssSnippets confirms default true; JSX/Svelte have no signal.
@@ -1040,8 +1044,8 @@ test("--vscode preserves unrelated settings and is idempotent across runs", asyn
   stubEditorRun(t, cwd);
   captureWrite(t, process.stderr);
 
-  await runInit({ prefix: "myapp-", vscode: true });
-  await runInit({ prefix: "myapp-", vscode: true }); // second run must not duplicate
+  await runInit({ prefix: "myapp-", vscode: true, offline: true });
+  await runInit({ prefix: "myapp-", vscode: true, offline: true }); // second run must not duplicate
 
   // The merge is comment-preserving (JSONC), so assert on the raw text.
   const settingsRaw = await readOutput(cwd, ".vscode/settings.json");
@@ -1076,7 +1080,7 @@ test("all three editor targets regenerate byte-identically and drop a removed de
   const editorFlags = { vscode: true, jsx: true, svelte: true } as const;
 
   // First run emits all three artifacts plus the settings/tsconfig merges.
-  await runInit({ prefix: "myapp-", ...editorFlags });
+  await runInit({ prefix: "myapp-", ...editorFlags, offline: true });
   const firstRun = await Promise.all(artifacts.map((f) => readOutput(cwd, f)));
   // Both components are present across every target before removal.
   for (const contents of firstRun) {
@@ -1085,7 +1089,7 @@ test("all three editor targets regenerate byte-identically and drop a removed de
   }
 
   // Second run over identical deps: every artifact is byte-for-byte identical…
-  await runInit({ prefix: "myapp-", ...editorFlags });
+  await runInit({ prefix: "myapp-", ...editorFlags, offline: true });
   const secondRun = await Promise.all(artifacts.map((f) => readOutput(cwd, f)));
   for (const [i, contents] of secondRun.entries()) {
     assert.equal(
@@ -1114,7 +1118,7 @@ test("all three editor targets regenerate byte-identically and drop a removed de
     path.join(cwd, "node_modules", "@aurodesignsystem", "auro-formkit"),
     { recursive: true, force: true },
   );
-  await runInit({ prefix: "myapp-", ...editorFlags });
+  await runInit({ prefix: "myapp-", ...editorFlags, offline: true });
   const afterRemoval = await Promise.all(
     artifacts.map((f) => readOutput(cwd, f)),
   );
@@ -1132,7 +1136,7 @@ test("all three editor targets regenerate byte-identically and drop a removed de
   }
 
   // A further run against the reduced deps reproduces each artifact exactly.
-  await runInit({ prefix: "myapp-", ...editorFlags });
+  await runInit({ prefix: "myapp-", ...editorFlags, offline: true });
   const finalRun = await Promise.all(artifacts.map((f) => readOutput(cwd, f)));
   for (const [i, contents] of finalRun.entries()) {
     assert.equal(
@@ -1154,7 +1158,7 @@ test("--vscode still writes the artifact when settings.json is unparseable, and 
   stubEditorRun(t, cwd);
   const stderr = captureWrite(t, process.stderr);
 
-  await runInit({ prefix: "myapp-", vscode: true });
+  await runInit({ prefix: "myapp-", vscode: true, offline: true });
 
   // The artifact is written regardless; only the merge is skipped.
   const customData = await readOutput(
@@ -1184,7 +1188,7 @@ test("--jsx still writes the artifact when tsconfig include is unmergeable, and 
   stubEditorRun(t, cwd);
   const stderr = captureWrite(t, process.stderr);
 
-  await runInit({ prefix: "myapp-", jsx: true });
+  await runInit({ prefix: "myapp-", jsx: true, offline: true });
 
   // The JSX artifact is written regardless; only the tsconfig wiring is skipped.
   assert.match(
@@ -1219,7 +1223,7 @@ test("an explicit flag overrides a conflicting persisted editor choice", async (
   stubEditorRun(t, cwd);
   captureWrite(t, process.stderr);
 
-  await runInit({ vscode: false });
+  await runInit({ vscode: false, offline: true });
 
   // No artifact despite the persisted opt-in, and the override re-persists.
   await assert.rejects(
@@ -1232,4 +1236,63 @@ test("an explicit flag overrides a conflicting persisted editor choice", async (
     false,
     "the flag overrides the persisted choice and is written back",
   );
+});
+
+// ---------------------------------------------------------------------------
+// Outdated-release banner — init mirrors `auro context`/`auro component`,
+// warning (on stderr) when an installed package is behind its latest release.
+// Online by default; `--offline` skips the network check entirely.
+// ---------------------------------------------------------------------------
+
+test("warns on stderr when an installed component is behind its latest release", async (t) => {
+  const cwd = await tempCwd(t);
+  await installRealPackage(cwd, "auro-button");
+  t.mock.method(process, "cwd", () => cwd);
+  t.mock.method(process, "exit", () => {
+    throw new Error("should not exit on success");
+  });
+  const stderr = captureWrite(t, process.stderr);
+  // The installed package's registry lookup reports a much newer release; any
+  // other URL 404s so only the release check drives the banner.
+  t.mock.method(globalThis, "fetch", async (url: string) => {
+    if (String(url).includes("registry.npmjs.org")) {
+      return new Response(JSON.stringify({ version: "999.0.0" }), {
+        status: 200,
+      });
+    }
+    return new Response(null, { status: 404 });
+  });
+
+  // Online (no --offline): the check runs after the files are written.
+  await runInit({ prefix: "myapp-" });
+
+  // Grounding still happened.
+  assert.match(await readOutput(cwd, "AGENTS.md"), /<myapp-button>/u);
+  // The shared banner fired and named the outdated package.
+  const err = stderr();
+  assert.match(err, /NOT on the latest release/u);
+  assert.ok(
+    err.includes("auro-button"),
+    "the banner names the outdated package",
+  );
+});
+
+test("--offline skips the release check and makes no network call", async (t) => {
+  const cwd = await tempCwd(t);
+  await installRealPackage(cwd, "auro-button");
+  t.mock.method(process, "cwd", () => cwd);
+  t.mock.method(process, "exit", () => {
+    throw new Error("should not exit on success");
+  });
+  const stderr = captureWrite(t, process.stderr);
+  const fetchMock = t.mock.method(globalThis, "fetch", async () => {
+    throw new Error("init --offline must not hit the network");
+  });
+
+  await runInit({ prefix: "myapp-", offline: true });
+
+  // Files written, but the release check never ran: no fetch, no banner.
+  assert.match(await readOutput(cwd, "AGENTS.md"), /<myapp-button>/u);
+  assert.equal(fetchMock.mock.callCount(), 0, "no network call with --offline");
+  assert.doesNotMatch(stderr(), /NOT on the latest release/u);
 });
