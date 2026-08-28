@@ -305,7 +305,7 @@ Sequenced so each step is independently testable; early steps need only syntheti
 fixtures + the new dependencies, matching PT-M1's front-loading.
 
 1. **Freeze the formats + add the dependencies (critical path).** ✅ **DONE** —
-   committed [`785642e`](../) (AB#1628542): the four tools pinned **exact**;
+   committed [`acbc8e7`](../) (AB#1628542): the four tools pinned **exact**;
    optional `init.editors` field in [config.ts](../src/init/config.ts); frozen
    constants in [src/init/editors/layout.ts](../src/init/editors/layout.ts); golden
    fixtures per target under [test/fixtures/init/editors/](../test/fixtures/init/editors/)
@@ -327,7 +327,7 @@ fixtures + the new dependencies, matching PT-M1's front-loading.
      `settings.json` and `tsconfig.json` (empty / unrelated-keys / pre-existing entry).
      Freeze the filenames/paths/wiring-key shapes.
 2. **Build the three pure builders in `src/init/editors/`.** ✅ **DONE** (AB#1628542,
-   uncommitted): shared plumbing in [manifest.ts](../src/init/editors/manifest.ts)
+   committed [`41eb506`](../)): shared plumbing in [manifest.ts](../src/init/editors/manifest.ts)
    (`EditorArtifact`, `resolvedTagFor`, `buildManifest` pre-swap, `importPathsByClass`,
    `withTempDir`); the three builders
    ([htmlCustomData.ts](../src/init/editors/htmlCustomData.ts),
@@ -350,7 +350,7 @@ fixtures + the new dependencies, matching PT-M1's front-loading.
      override + bare fallback; attributes present; slots/events in the HTML hover
      description; JSX class-import specifiers resolved; both merges across
      empty/unrelated/pre-existing/duplicate).
-3. **Wire `src/commands/init.ts`.** ✅ **DONE** (AB#1628542, uncommitted):
+3. **Wire `src/commands/init.ts`.** ✅ **DONE** (AB#1628542, committed [`7548ab6`](../)):
    - New pure detection module [detect.ts](../src/init/editors/detect.ts)
      (`detectEditorSignals` — `.vscode/` dir → VS Code; `compilerOptions.jsx` or a `react`
      dep → JSX; a `svelte` dep or `svelte.config.*` → Svelte) and orchestration module
@@ -375,7 +375,7 @@ fixtures + the new dependencies, matching PT-M1's front-loading.
      artifact. Verify gate green — 201 tests, `tsc --noEmit`, scoped biome, build; plus an
      offline end-to-end smoke (all three artifacts, non-destructive tsconfig merge,
      idempotent re-run).
-4. **JSX type-check smoke + idempotent regeneration.** ✅ **DONE** (AB#1628542, uncommitted).
+4. **JSX type-check smoke + idempotent regeneration.** ✅ **DONE** (AB#1628542, committed [`9d18b35`](../)).
    - **tsc smoke** ([init.editors.tsc-smoke.test.ts](../test/init.editors.tsc-smoke.test.ts)):
      builds the JSX `.d.ts` for the shared button, stands in the component class type via a
      tsconfig `paths` stub (deterministic/offline, independent of package `exports`), and
@@ -402,9 +402,25 @@ fixtures + the new dependencies, matching PT-M1's front-loading.
      in [init.editors.builders.test.ts](../test/init.editors.builders.test.ts) (`builders
      tolerate a nameless member and a malformed event type`).
    - Verify gate green — **204 tests**, `tsc --noEmit`, scoped biome, build.
-5. **Tests audit.** Confirm the ticket's enumerated coverage is met by real assertions.
-   Run the full gate: new suites → `npm test` → `tsc --noEmit` → scoped
-   `biome check --write` → `npm run build`.
+5. ✅ **DONE** (AB#1628542, committed [`8f4f5b7`](../)) — **Tests audit.** Confirmed the ticket's
+   enumerated coverage is met by real assertions and closed the two thin spots the audit
+   surfaced (both from the step-3 detection/prompt work):
+   - **Detection heuristics — dedicated unit suite**
+     ([init.editors.detect.test.ts](../test/init.editors.detect.test.ts), 19 tests): every
+     branch of `detectVsCode`/`detectJsx`/`detectSvelte`/`detectEditorSignals` pinned
+     directly — VS Code dir present/absent/is-a-file; JSX via `tsconfig.compilerOptions.jsx`
+     **and** via a `react` dep/devDep, negatives, and unparseable-tsconfig-falls-through-to-
+     react; Svelte via a `svelte` dep/devDep **and** each `svelte.config.{js,ts,mjs,cjs}`;
+     the aggregate; and never-throws robustness over a bare dir and a malformed
+     `package.json`. Previously only the VS Code signal was exercised, indirectly.
+   - **Interactive editor prompt** ([init.command.test.ts](../test/init.command.test.ts)
+     `interactive run prompts for unsettled targets…`): an interactive run with no flags and
+     no persisted editors prompts for all three targets; each confirm's `default` is the
+     detected signal; answers given *against* those defaults (decline the detected VS Code
+     target, opt into the undetected JSX one) drive what's written and persist as concrete
+     booleans. Covers the `resolveEditorTargets` prompt branch end-to-end.
+   - Verify gate green — **224 tests** (204 → +19 detect +1 interactive), `tsc --noEmit`,
+     scoped biome, build.
 6. **Manual verification.** Extend
    [test/manual-testing-ai-tooling.md](../test/manual-testing-ai-tooling.md) with a
    **PT-M2 / AB#1628542** section proving the live editor experience across the three
