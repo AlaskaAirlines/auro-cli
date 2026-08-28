@@ -29,6 +29,16 @@ import { program } from "commander";
 import inquirer from "inquirer";
 import ora from "ora";
 import { CONFIG_FILENAME } from "#init/config.js";
+import {
+  detectEditorSignals,
+  EDITOR_TARGETS,
+  type EditorSelection,
+  type EditorTarget,
+} from "#init/editors/detect.js";
+import {
+  type EditorWriteReport,
+  writeEditorArtifacts,
+} from "#init/editors/write.js";
 import { groundingFiles } from "#init/generator.js";
 import { AGENTS_FILENAME, CLAUDE_FILENAME } from "#init/layout.js";
 import {
@@ -54,6 +64,15 @@ export interface InitOptions {
   nonInteractive?: boolean;
   /** Alias for {@link nonInteractive}. */
   yes?: boolean;
+  /**
+   * Editor-target opt-ins. Each is **tri-state**: `true` (`--vscode`) forces the
+   * target on, `false` (`--no-vscode`) forces it off, and `undefined` (neither
+   * flag) leaves it to the persisted config → detection → prompt precedence. An
+   * explicit flag always wins and is persisted for later runs.
+   */
+  vscode?: boolean;
+  jsx?: boolean;
+  svelte?: boolean;
 }
 
 /**
@@ -105,6 +124,93 @@ async function promptDefaultPrefix(plan: TagResolutionPlan): Promise<string> {
     },
   ]);
   return String(prefix).trim();
+}
+
+/** Human-facing label + artifact path for each editor target's confirm prompt. */
+const EDITOR_TARGET_META: Record<
+  EditorTarget,
+  { label: string; artifact: string }
+> = {
+  vscode: {
+    label: "VS Code HTML custom-data",
+    artifact: ".vscode/auro.html-custom-data.json",
+  },
+  jsx: {
+    label: "JSX/React type declarations",
+    artifact: "auro-types/auro-jsx.d.ts",
+  },
+  svelte: {
+    label: "Svelte type declarations",
+    artifact: "auro-types/auro-svelte.d.ts",
+  },
+};
+
+/**
+ * Settle each editor target on/off under the frozen precedence
+ * flag → persisted config → detection → interactive prompt. An explicit
+ * `--vscode`/`--no-vscode` flag wins outright; else a settled `init.editors.*`
+ * choice from a prior run is honored (no re-detect/re-prompt); else the target is
+ * unsettled and its detected default is either offered as a confirm (interactive)
+ * or taken as-is (non-interactive/CI — an editor target has a safe default, so
+ * `init` never prompts or fails over it here). Every target is returned as a
+ * concrete boolean so the caller can persist all three and later runs stay
+ * deterministic.
+ */
+async function resolveEditorTargets(
+  cwd: string,
+  options: InitOptions,
+  config: Awaited<ReturnType<typeof loadConfig>>,
+): Promise<EditorSelection> {
+  const persisted = config?.init.editors;
+  const signals = detectEditorSignals(cwd);
+  const interactive = !isNonInteractive(options);
+
+  const selection: EditorSelection = {
+    vscode: false,
+    jsx: false,
+    svelte: false,
+  };
+  const pending: Array<{
+    type: "confirm";
+    name: EditorTarget;
+    message: string;
+    default: boolean;
+  }> = [];
+
+  for (const target of EDITOR_TARGETS) {
+    const flag = options[target];
+    if (flag !== undefined) {
+      selection[target] = flag; // explicit flag — highest precedence, persisted.
+      continue;
+    }
+    const saved = persisted?.[target];
+    if (saved !== undefined) {
+      selection[target] = saved; // settled last run — honored as-is.
+      continue;
+    }
+    // Unsettled: prompt on an interactive TTY, else take the detected default.
+    if (interactive) {
+      const { label, artifact } = EDITOR_TARGET_META[target];
+      pending.push({
+        type: "confirm",
+        name: target,
+        message: `Generate ${label} (${artifact})?`,
+        default: signals[target],
+      });
+    } else {
+      selection[target] = signals[target];
+    }
+  }
+
+  if (pending.length > 0) {
+    const answers =
+      await inquirer.prompt<Record<EditorTarget, boolean>>(pending);
+    for (const { name } of pending) {
+      selection[name] = Boolean(answers[name]);
+    }
+  }
+
+  return selection;
 }
 
 /**
@@ -261,24 +367,47 @@ export async function runInit(options: InitOptions): Promise<void> {
     process.exit(1);
   }
 
-  const writeSpinner = ora("Writing grounding files...").start();
+  // Settle the editor targets (may prompt) before the spinner so the confirm UI
+  // and the spinner never fight for the terminal, then record all three in the
+  // config we are about to persist so later runs honor them without re-detecting.
+  const editorSelection = await resolveEditorTargets(cwd, options, config);
+  plan.config.init.editors = editorSelection;
+
+  const writeSpinner = ora("Writing generated files...").start();
+  let editorReport: EditorWriteReport = { written: [], warnings: [] };
   try {
     for (const file of groundingFiles(components, plan.resolvedTags)) {
       await fs.writeFile(path.join(cwd, file.filename), file.contents, "utf-8");
     }
+    // Write + wire the enabled editor artifacts (no-op when all targets are off).
+    editorReport = await writeEditorArtifacts(
+      cwd,
+      components,
+      plan.resolvedTags,
+      editorSelection,
+    );
     // Persist the authoritative config so regeneration is idempotent.
     saveConfig(cwd, plan.config);
+    const editorNote =
+      editorReport.written.length > 0
+        ? ` Editor IntelliSense: ${editorReport.written.join(", ")}.`
+        : "";
     writeSpinner.succeed(
-      `Wrote ${AGENTS_FILENAME}, ${CLAUDE_FILENAME}, and ${CONFIG_FILENAME} for ${components.length} component(s).`,
+      `Wrote ${AGENTS_FILENAME}, ${CLAUDE_FILENAME}, and ${CONFIG_FILENAME} for ${components.length} component(s).${editorNote}`,
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    writeSpinner.fail(`Failed to write grounding files: ${message}`);
+    writeSpinner.fail(`Failed to write generated files: ${message}`);
     process.exit(1);
   }
 
   // Advisory only — keep warnings on stderr so a caller capturing stdout gets a
   // clean run. Warn, never guess: unresolvable registrations and bare fallbacks.
+  // Editor-wiring merges that were skipped (malformed target file) warn too, with
+  // the manual one-liner already baked in.
+  for (const warning of editorReport.warnings) {
+    console.error(`⚠ ${warning}`);
+  }
   for (const warning of plan.warnings) {
     console.error(`⚠ ${warning}`);
   }
@@ -306,4 +435,19 @@ export default program
     false,
   )
   .option("--yes", "Alias for --non-interactive", false)
+  .option(
+    "--vscode",
+    "Generate VS Code HTML custom-data IntelliSense (use --no-vscode to skip; default: auto-detect)",
+  )
+  .option("--no-vscode", "Skip the VS Code HTML custom-data artifact")
+  .option(
+    "--jsx",
+    "Generate JSX/React type declarations (use --no-jsx to skip; default: auto-detect)",
+  )
+  .option("--no-jsx", "Skip the JSX/React type declarations")
+  .option(
+    "--svelte",
+    "Generate Svelte type declarations (use --no-svelte to skip; default: auto-detect)",
+  )
+  .option("--no-svelte", "Skip the Svelte type declarations")
   .action(runInit);
