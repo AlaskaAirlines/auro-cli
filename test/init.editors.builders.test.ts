@@ -340,3 +340,47 @@ test("builders do not mutate the caller's component declarations", () => {
     "input declaration unchanged (tag not swapped in place)",
   );
 });
+
+// ---------------------------------------------------------------------------
+// Malformed-CEM hardening — real manifests ship the odd nameless member or a
+// truncated type.text (e.g. auro-formkit's auro-menu / auro-dropdown); the
+// community tools splice those in verbatim and crash. buildManifest prunes them
+// so a single bad entry can't break the whole artifact.
+// ---------------------------------------------------------------------------
+
+/** A component carrying both real-world CEM defects at once. */
+function componentWithCemDefects(): ResolvedComponent {
+  const component = structuredClone(BUTTON);
+  const declaration = component.declaration as {
+    members?: unknown[];
+    events?: unknown[];
+  };
+  // A `field` member with no `name` — auro-menu ships one; the tools call
+  // `member.name.startsWith("#")` and throw.
+  declaration.members = [
+    { kind: "field", type: { text: "number" }, default: "1" },
+  ];
+  // An event whose `type.text` is truncated — auro-dropdown ships `Object<key`;
+  // emitted verbatim it yields TypeScript no parser accepts.
+  declaration.events = [
+    { name: "auroButton-idAdded", type: { text: "Object<key" } },
+    { name: "click", description: "Fired on activation." },
+  ];
+  return component;
+}
+
+test("builders tolerate a nameless member and a malformed event type", () => {
+  const components = [componentWithCemDefects()];
+  // None of the three generators throw on the malformed manifest…
+  const html = buildHtmlCustomData(components, RESOLVED_TAGS).contents;
+  const jsx = buildJsxTypes(components, RESOLVED_TAGS).contents;
+  const svelte = buildSvelteTypes(components, RESOLVED_TAGS).contents;
+
+  // …and the truncated type never reaches the emitted output.
+  for (const out of [html, jsx, svelte]) {
+    assert.match(out, /myapp-button/u, "the component is still emitted");
+    assert.doesNotMatch(out, /Object<key/u, "the malformed type is dropped");
+  }
+  // The well-formed sibling event still lands in the JSX handler map.
+  assert.match(jsx, /onauroButton-idAdded/u, "the defective event still binds");
+});

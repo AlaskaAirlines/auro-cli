@@ -375,11 +375,33 @@ fixtures + the new dependencies, matching PT-M1's front-loading.
      artifact. Verify gate green — 201 tests, `tsc --noEmit`, scoped biome, build; plus an
      offline end-to-end smoke (all three artifacts, non-destructive tsconfig merge,
      idempotent re-run).
-4. **JSX type-check smoke + idempotent regeneration.** In a fixture consumer with the
-   packages installed, `tsc --noEmit` accepts the emitted `.d.ts` (imports resolve). A
-   second run per target reproduces byte-identical artifacts and does **not** duplicate
-   `html.customData` or `include` entries; removing a dependency drops that tag from all
-   targets.
+4. **JSX type-check smoke + idempotent regeneration.** ✅ **DONE** (AB#1628542, uncommitted).
+   - **tsc smoke** ([init.editors.tsc-smoke.test.ts](../test/init.editors.tsc-smoke.test.ts)):
+     builds the JSX `.d.ts` for the shared button, stands in the component class type via a
+     tsconfig `paths` stub (deterministic/offline, independent of package `exports`), and
+     runs the project's own pinned `tsc -p` (`skipLibCheck: false`, so the `.d.ts` itself is
+     type-checked) — a non-zero exit fails with the compiler's diagnostics. Proves the
+     emitted `import type` specifiers resolve and the self-contained prop/element types are
+     valid TS.
+   - **All-three-target idempotent regeneration + dependency removal**
+     ([init.command.test.ts](../test/init.command.test.ts) `all three editor targets
+     regenerate byte-identically…`): a real `auro-button` + `auro-formkit` consumer with a
+     pre-existing tsconfig; a second run reproduces the HTML/JSX/Svelte artifacts
+     byte-for-byte and duplicates neither the `html.customData` entry nor the `include`;
+     uninstalling `auro-formkit` drops `myapp-input` from **every** target while the
+     standalone stays, and a further run is byte-identical.
+   - **Malformed-CEM hardening (real-world defect surfaced by feeding the full formkit CEM
+     to the generators for the first time).** Two genuine defects in the vendored formkit
+     manifest crash the community tools: `auro-menu` ships a `{ kind: "field", type, default }`
+     member with **no `name`** (the tools call `member.name.startsWith("#")`), and
+     `auro-dropdown`'s `auroDropdown-idAdded` event ships the **truncated type** `"Object<key"`
+     (spliced verbatim → TypeScript no parser accepts). `buildManifest`
+     ([manifest.ts](../src/init/editors/manifest.ts)) now prunes entries whose `name` is not a
+     string (keeping the empty-string default-slot name) and drops a `type.text` whose
+     brackets are unbalanced, so the generators fall back to a safe default. Covered directly
+     in [init.editors.builders.test.ts](../test/init.editors.builders.test.ts) (`builders
+     tolerate a nameless member and a malformed event type`).
+   - Verify gate green — **204 tests**, `tsc --noEmit`, scoped biome, build.
 5. **Tests audit.** Confirm the ticket's enumerated coverage is met by real assertions.
    Run the full gate: new suites → `npm test` → `tsc --noEmit` → scoped
    `biome check --write` → `npm run build`.

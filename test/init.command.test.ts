@@ -885,6 +885,97 @@ test("--vscode preserves unrelated settings and is idempotent across runs", asyn
   assert.equal(entryCount, 1, "the entry appears exactly once across two runs");
 });
 
+test("all three editor targets regenerate byte-identically and drop a removed dependency's tag", async (t) => {
+  const cwd = await tempCwd(t);
+  await installRealPackage(cwd, "auro-button"); // standalone (kept)
+  await installRealPackage(cwd, "auro-formkit"); // monorepo (removed below)
+  // A pre-existing tsconfig so the JSX/Svelte include merge participates too.
+  await writeFile(
+    path.join(cwd, "tsconfig.json"),
+    JSON.stringify(
+      { compilerOptions: { strict: true }, include: ["src"] },
+      null,
+      2,
+    ),
+  );
+  stubEditorRun(t, cwd);
+  captureWrite(t, process.stderr);
+
+  const artifacts = [
+    ".vscode/auro.html-custom-data.json",
+    "auro-types/auro-jsx.d.ts",
+    "auro-types/auro-svelte.d.ts",
+  ];
+  const editorFlags = { vscode: true, jsx: true, svelte: true } as const;
+
+  // First run emits all three artifacts plus the settings/tsconfig merges.
+  await runInit({ prefix: "myapp-", ...editorFlags });
+  const firstRun = await Promise.all(artifacts.map((f) => readOutput(cwd, f)));
+  // Both components are present across every target before removal.
+  for (const contents of firstRun) {
+    assert.match(contents, /myapp-button/u);
+    assert.match(contents, /myapp-input/u);
+  }
+
+  // Second run over identical deps: every artifact is byte-for-byte identical…
+  await runInit({ prefix: "myapp-", ...editorFlags });
+  const secondRun = await Promise.all(artifacts.map((f) => readOutput(cwd, f)));
+  for (const [i, contents] of secondRun.entries()) {
+    assert.equal(
+      contents,
+      firstRun[i],
+      `${artifacts[i]} regenerates identically`,
+    );
+  }
+  // …and neither the settings entry nor the tsconfig include is duplicated.
+  const settingsRaw = await readOutput(cwd, ".vscode/settings.json");
+  assert.equal(
+    (settingsRaw.match(/auro\.html-custom-data\.json/gu) ?? []).length,
+    1,
+    "html.customData entry appears exactly once",
+  );
+  const tsconfig = JSON.parse(await readOutput(cwd, "tsconfig.json"));
+  assert.equal(
+    tsconfig.include.filter((entry: string) => entry === "auro-types").length,
+    1,
+    "the auro-types include appears exactly once",
+  );
+
+  // Remove the monorepo package, then regenerate: the removed component's tag
+  // disappears from *every* target while the standalone stays.
+  await rm(
+    path.join(cwd, "node_modules", "@aurodesignsystem", "auro-formkit"),
+    { recursive: true, force: true },
+  );
+  await runInit({ prefix: "myapp-", ...editorFlags });
+  const afterRemoval = await Promise.all(
+    artifacts.map((f) => readOutput(cwd, f)),
+  );
+  for (const [i, contents] of afterRemoval.entries()) {
+    assert.match(
+      contents,
+      /myapp-button/u,
+      `${artifacts[i]} keeps the standalone`,
+    );
+    assert.doesNotMatch(
+      contents,
+      /myapp-input/u,
+      `${artifacts[i]} drops the removed component`,
+    );
+  }
+
+  // A further run against the reduced deps reproduces each artifact exactly.
+  await runInit({ prefix: "myapp-", ...editorFlags });
+  const finalRun = await Promise.all(artifacts.map((f) => readOutput(cwd, f)));
+  for (const [i, contents] of finalRun.entries()) {
+    assert.equal(
+      contents,
+      afterRemoval[i],
+      `${artifacts[i]} post-removal regeneration is idempotent`,
+    );
+  }
+});
+
 test("--vscode still writes the artifact when settings.json is unparseable, and warns", async (t) => {
   const cwd = await tempCwd(t);
   await installRealPackage(cwd, "auro-button");
