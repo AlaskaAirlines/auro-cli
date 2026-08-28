@@ -246,3 +246,67 @@ test("applyReset leaves an unrelated .vscode sibling untouched and a second run 
   assert.equal(secondPlan.filesToRemove.length, 0);
   assert.equal(secondPlan.unmerges.length, 0);
 });
+
+test("planReset removes an Auro-created settings.json (only our entry) instead of leaving {}", async (t: TestContext) => {
+  const cwd = await tempCwd(t);
+  // settings.json holding ONLY our pointer — the shape `auro init` creates when it
+  // had to make the file. Un-merging empties it, so reset should delete the file.
+  seed(
+    cwd,
+    ".vscode/settings.json",
+    `${JSON.stringify({ "html.customData": [HTML_CUSTOM_DATA_SETTINGS_ENTRY] }, null, 2)}\n`,
+  );
+
+  const plan = planReset(cwd);
+  assert.ok(
+    plan.filesToRemove.includes(".vscode/settings.json"),
+    "empty-after-unmerge settings.json is removed, not un-merged",
+  );
+  assert.ok(
+    !plan.unmerges.some((u) => u.path === ".vscode/settings.json"),
+    "it is not left behind as a stray {} un-merge",
+  );
+});
+
+test("applyReset deletes the emptied settings.json and prunes a now-empty .vscode/", async (t: TestContext) => {
+  const cwd = await tempCwd(t);
+  seed(cwd, HTML_CUSTOM_DATA_PATH, "{}");
+  seed(
+    cwd,
+    ".vscode/settings.json",
+    `${JSON.stringify({ "html.customData": [HTML_CUSTOM_DATA_SETTINGS_ENTRY] }, null, 2)}\n`,
+  );
+
+  const report = applyReset(cwd, planReset(cwd));
+
+  assert.ok(!has(cwd, ".vscode/settings.json"), "stray settings.json is gone");
+  assert.ok(!has(cwd, ".vscode"), ".vscode/ is pruned once empty");
+  assert.ok(report.removed.includes(".vscode/settings.json"));
+  assert.ok(report.prunedDirs.includes(".vscode"));
+});
+
+test("applyReset keeps settings.json (only un-merges) when it holds other keys", async (t: TestContext) => {
+  const cwd = await tempCwd(t);
+  seed(
+    cwd,
+    ".vscode/settings.json",
+    `${JSON.stringify(
+      {
+        "editor.tabSize": 2,
+        "html.customData": [HTML_CUSTOM_DATA_SETTINGS_ENTRY],
+      },
+      null,
+      2,
+    )}\n`,
+  );
+
+  applyReset(cwd, planReset(cwd));
+
+  assert.ok(
+    has(cwd, ".vscode/settings.json"),
+    "file with user content survives",
+  );
+  const settings = read(cwd, ".vscode/settings.json");
+  assert.match(settings, /editor\.tabSize/, "user setting preserved");
+  assert.doesNotMatch(settings, /auro\.html-custom-data/, "our entry removed");
+});
