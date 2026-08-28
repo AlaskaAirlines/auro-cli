@@ -198,6 +198,20 @@ fixture + a `tsc` smoke).
 > That specifier won't resolve until formkit publishes a `types` export condition — a
 > pre-existing upstream gap, independent of this value-typing fix. It is now unused
 > (prop values come from `useCemTypes`), so it is harmless to the value contract.
+>
+> **DECISION UPDATE (resolved) — Svelte event handlers are emitted in BOTH Svelte 4
+> and Svelte 5 syntax.** `custom-element-svelte-integration` emits handlers only in
+> the Svelte 4 *directive* form (`"on:click"?: (e: CustomEvent<…>) => void;`, its
+> index.js:295). Svelte 5 replaced the `on:event` directive with plain event-handler
+> **properties** (`<el onclick={…}>`), so a Svelte 5 consumer writing `onclick={…}`
+> finds no matching member and the language server errors. `buildSvelteTypes`
+> post-processes the tool output ({@link addSvelte5EventHandlers} in
+> [svelteTypes.ts](../src/init/editors/svelteTypes.ts)): for each `"on:NAME"?: <handler>;`
+> line it emits a sibling `"onNAME"?: <handler>;` with the identical `CustomEvent`
+> signature, so both syntaxes resolve against the same event type. The `on` + verbatim
+> event-name convention matches what the JSX tool already emits; components with no
+> events pass through unchanged. Same post-processing seam as the module→global
+> `svelteHTML` rewrite — both compensate for output the community tool can't express.
 
 ## Task breakdown
 

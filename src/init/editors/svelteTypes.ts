@@ -16,6 +16,10 @@
  * other two tools this one returns `void` and only writes a file, so we point it
  * at a scratch dir and read the result back.
  *
+ * Two post-processing passes fix what the community tool can't express on its own:
+ * {@link addSvelte5EventHandlers} (Svelte 4 *and* 5 event syntax) and
+ * {@link globalizeSvelteNamespace} (global vs module-scoped augmentation).
+ *
  * @see docs/pt-m2-completion-plan.md → build-order step 2.
  */
 
@@ -54,6 +58,30 @@ const GLOBAL_SVELTE_NAMESPACE = `declare global {
     interface IntrinsicElements extends CustomElements {}
   }
 }`;
+
+/**
+ * The community tool emits every event handler in Svelte 4 *directive* form only
+ * — `"on:${event.name}"?: (e: CustomEvent<…>) => void;` (its index.js:295). Svelte
+ * 5 replaced the `on:event` directive with plain event-handler **properties**
+ * (`<el onclick={…}>`), so a Svelte 5 component that writes `onclick={…}` finds no
+ * matching member on the element type and the language server flags it.
+ *
+ * For each emitted `"on:NAME"?: <handler>;` line, emit an additional sibling
+ * `"onNAME"?: <handler>;` carrying the identical `CustomEvent` signature, so both
+ * the Svelte 4 directive and the Svelte 5 property form resolve against the same
+ * event type. The `on` + verbatim-name convention matches what the JSX tool
+ * already emits. Components with no events produce no matches and pass through
+ * unchanged, so this is a safe no-op when there is nothing to augment.
+ */
+const SVELTE4_EVENT_HANDLER = /^([ \t]*)"on:([^"]+)"(\?:.*=> void;)$/gmu;
+
+function addSvelte5EventHandlers(contents: string): string {
+  return contents.replace(
+    SVELTE4_EVENT_HANDLER,
+    (_match, indent, name, handler) =>
+      `${indent}"on:${name}"${handler}\n${indent}"on${name}"${handler}`,
+  );
+}
 
 /**
  * Wrap the tool's module-scoped `declare namespace svelteHTML` in `declare
@@ -106,6 +134,8 @@ export function buildSvelteTypes(
 
   return {
     filename: SVELTE_TYPES_PATH,
-    contents: ensureTrailingNewline(globalizeSvelteNamespace(contents)),
+    contents: ensureTrailingNewline(
+      globalizeSvelteNamespace(addSvelte5EventHandlers(contents)),
+    ),
   };
 }
