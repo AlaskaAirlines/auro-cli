@@ -38,20 +38,20 @@ type BaseProps = {
 type BaseEvents = {};
 
 type AuroButtonProps = {
-  /** Disables the button. */
+  /** 【myapp-button】 Disables the button. */
   disabled?: boolean;
-  /** Stretches to full width. */
+  /** 【myapp-button】 Stretches to full width. */
   fluid?: boolean;
-  /** Visual style variant. */
+  /** 【myapp-button】 Visual style variant. */
   variant?: "primary" | "secondary" | "tertiary" | "ghost" | "flat";
 
-  /** Fired on activation. */
+  /** 【myapp-button】 Fired on activation. */
   "on:click"?: (e: CustomEvent<never>) => void;
   "onclick"?: (e: CustomEvent<never>) => void;
 };
 
 type AuroInputProps = {
-  /** Marks the field as required. */
+  /** 【legacy-input】 Marks the field as required. */
   required?: boolean;
 };
 

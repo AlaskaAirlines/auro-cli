@@ -157,6 +157,20 @@ test("Svelte types fixture augments svelteHTML for resolved tags", () => {
     /"primary" \| "secondary" \| "tertiary" \| "ghost" \| "flat"/u,
     "CEM union inlined as a real type, not any",
   );
+
+  // Component-owned members are marked in their JSDoc with the registered tag so
+  // the flattened completion list distinguishes them from inherited global HTML
+  // attributes; BaseProps entries stay unmarked (labelComponentMembers).
+  assert.match(
+    SVELTE_TYPES,
+    /\/\*\* 【myapp-button】 /u,
+    "component members carry the registered-tag marker",
+  );
+  assert.doesNotMatch(
+    SVELTE_TYPES,
+    /【[^】]*】[^\n]*unique identifier for the element/u,
+    "inherited global HTML attributes are left unmarked",
+  );
 });
 
 // ---------------------------------------------------------------------------

@@ -178,6 +178,67 @@ test("Svelte emits both the Svelte 4 directive and Svelte 5 property event handl
 });
 
 // ---------------------------------------------------------------------------
+// Member labeling: the Svelte language server flattens each element's type into
+// one completion list where a component's own members are indistinguishable from
+// inherited global HTML attributes. buildSvelteTypes marks component members in
+// their JSDoc (docs pane) with the tag the consumer writes — the registered tag,
+// or the class name when the default tag was kept — while leaving BaseProps bare.
+// ---------------------------------------------------------------------------
+
+test("Svelte marks component-owned members with the registered tag, not inherited HTML attrs", () => {
+  const svelte = buildSvelteTypes(COMPONENTS, RESOLVED_TAGS).contents;
+
+  // Component members carry the marker using the *registered* tag (myapp-button,
+  // legacy-input), not the component's default auro-* tag.
+  assert.match(
+    svelte,
+    /\/\*\* 【myapp-button】 Visual style variant\. \*\//u,
+    "component attribute JSDoc is prefixed with the registered tag marker",
+  );
+  assert.match(
+    svelte,
+    /\/\*\* 【legacy-input】 Marks the field as required\. \*\//u,
+    "each component's members use that component's own registered tag",
+  );
+  // Events are component-owned too, so they are marked as well.
+  assert.match(
+    svelte,
+    /\/\*\* 【myapp-button】 Fired on activation\. \*\//u,
+    "component event JSDoc is marked",
+  );
+  // Inherited global HTML attributes (BaseProps) stay unmarked — they are the
+  // visual "other" group the marker distinguishes component members from.
+  assert.match(
+    svelte,
+    /\/\*\* A unique identifier for the element\. \*\/\s*\n\s*id\?: string;/u,
+    "inherited BaseProps attributes are left unmarked",
+  );
+  assert.doesNotMatch(
+    svelte,
+    /【[^】]*】[^\n]*unique identifier/u,
+    "no marker leaks onto inherited HTML attributes",
+  );
+});
+
+test("Svelte member marker falls back to the class name when the default tag is kept", () => {
+  // No custom registration: the resolved tag equals the component's default
+  // auro-* tag, so the marker should show the class name instead of echoing the
+  // obvious default tag.
+  const identityTags = new Map([[BUTTON.tagName, BUTTON.tagName]]);
+  const svelte = buildSvelteTypes([BUTTON], identityTags).contents;
+  assert.match(
+    svelte,
+    /\/\*\* 【AuroButton】 Visual style variant\. \*\//u,
+    "marker falls back to the class name for a default-tagged component",
+  );
+  assert.doesNotMatch(
+    svelte,
+    new RegExp(`【${BUTTON.tagName}】`, "u"),
+    "marker does not echo the default auro-* tag",
+  );
+});
+
+// ---------------------------------------------------------------------------
 // Value completion/validation: a string-literal union survives to every target
 // as a real union (not `any`), so editors complete + validate attribute values.
 // ---------------------------------------------------------------------------
