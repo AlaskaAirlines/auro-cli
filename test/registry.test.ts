@@ -398,7 +398,19 @@ test("planTagResolution: an explicit prefix is applied to every un-overridden co
     "the prefix replaces auro- for both standalone and monorepo tags",
   );
   assert.equal(plan.needsDefaultPrefix, false);
-  assert.deepEqual(plan.warnings, []);
+  // Each prefix-grounded tag has no register() in source corroborating it, so
+  // each gets a reconciliation advisory naming the call the app must make.
+  assert.equal(plan.warnings.length, 2);
+  assert.ok(
+    plan.warnings.every((w) => w.includes("was found in your source")),
+    "both components advise verifying the registration",
+  );
+  assert.ok(
+    plan.warnings.some((w) =>
+      w.includes("AuroButton.register('myapp-button')"),
+    ),
+    "the advisory names the exact register() call",
+  );
 });
 
 test("planTagResolution: a bare default keeps auro-* tags and warns", () => {
@@ -485,8 +497,57 @@ test("planTagResolution: a register() that ties to no component is warned and ig
 
   const plan = planTagResolution(components, { scan, prefix: "myapp-" });
   assert.equal(plan.resolvedTags.get("auro-button"), "myapp-button");
-  assert.equal(plan.warnings.length, 1);
-  assert.ok(plan.warnings[0].includes("could not tie it to an installed"));
+  assert.ok(
+    plan.warnings.some((w) => w.includes("could not tie it to an installed")),
+    "the unattributable registration is warned",
+  );
+  // auro-button itself has no matching registration, so it also draws the
+  // prefix-vs-registration reconciliation advisory.
+  assert.ok(
+    plan.warnings.some((w) => w.includes("was found in your source")),
+    "the prefixed component with no corroborating registration is advised",
+  );
+});
+
+test("planTagResolution: a prefix-grounded tag with no registration in source is advised", () => {
+  const components = [component("auro-button", "AuroButton")];
+
+  // No scan evidence at all (the auto-registration / side-effect-import case):
+  // the prefix grounds <myapp-button> but nothing confirms the app uses it.
+  const plan = planTagResolution(components, { prefix: "myapp-" });
+  assert.equal(plan.resolvedTags.get("auro-button"), "myapp-button");
+  const advisory = plan.warnings.find((w) =>
+    w.includes("was found in your source"),
+  );
+  assert.ok(advisory, "the unverified prefix grounding is surfaced");
+  assert.ok(advisory?.includes("<myapp-button>"), "names the grounded tag");
+  assert.ok(advisory?.includes("<auro-button>"), "names the default tag");
+  assert.ok(
+    advisory?.includes("AuroButton.register('myapp-button')"),
+    "names the exact register() call the app must make",
+  );
+});
+
+test("planTagResolution: a detected no-arg register() draws only the mismatch warning, not the advisory", () => {
+  const components = [component("auro-button", "AuroButton")];
+  const scan = {
+    matches: [],
+    defaultRegistrations: ["AuroButton"],
+    warnings: [],
+  };
+
+  // The default register() IS detected, so the specific app-vs-grounding
+  // mismatch warning fires — the generic "no registration found" advisory must
+  // not also fire (no double-warning for the same component).
+  const plan = planTagResolution(components, { scan, prefix: "myapp-" });
+  assert.ok(
+    plan.warnings.some((w) => w.includes("AuroButton.register()")),
+    "the specific mismatch warning fires",
+  );
+  assert.ok(
+    !plan.warnings.some((w) => w.includes("was found in your source")),
+    "the generic advisory is suppressed when a default register is detected",
+  );
 });
 
 test("planTagResolution: a default register() grounded under a prefix warns about the mismatch", () => {

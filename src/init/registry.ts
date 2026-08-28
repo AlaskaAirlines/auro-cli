@@ -492,7 +492,10 @@ export interface TagResolutionPlan {
   suggestedDefault?: string;
   /** True when existing registrations imply two or more distinct prefixes. */
   mixedPrefixes: boolean;
-  /** Non-fatal warnings (bare `auro-*` defaults, unresolvable registrations). */
+  /**
+   * Non-fatal warnings (bare `auro-*` defaults, unresolvable registrations, and
+   * prefix-grounded custom tags with no corroborating `register()` in source).
+   */
   warnings: string[];
 }
 
@@ -565,6 +568,19 @@ export function planTagResolution(
     if (resolved === tag) {
       warnings.push(
         `${tag}: no custom prefix — grounding it under its bare 'auro-*' tag. Pass a prefix to avoid registration collisions.`,
+      );
+    } else if (!reconciled.defaultRegistered.has(tag)) {
+      // The prefix produced a custom tag, but nothing in the consumer's source
+      // corroborates it — no scan match (those `continue` above) and no detected
+      // no-arg default register() (that case is warned specifically below). Auro
+      // components self-register their default `auro-*` tag on import, so a
+      // project that never calls register('<resolved>') runs `<auro-*>` at
+      // runtime while every generated artifact is keyed on `<resolved>` — the
+      // IntelliSense silently matches nothing. We cannot see auto-registration
+      // statically, so advise (never guess): name the exact call that makes the
+      // app agree with the grounding.
+      warnings.push(
+        `${tag}: grounded as '<${resolved}>' from the '${effectiveDefault}' prefix, but no register('${resolved}') was found in your source. If ${component.declaration.name} is registered under a different tag (e.g. the default '<${tag}>' from a side-effect import), IntelliSense will not match your markup — call ${component.declaration.name}.register('${resolved}') so your app matches the generated tags.`,
       );
     }
   }
