@@ -59,6 +59,7 @@ import {
   scanProject,
   type TagResolutionPlan,
 } from "#init/registry.js";
+import { applyReset, planReset, type ResetPlan } from "#init/reset.js";
 import { type ResolvedComponent, resolveInstalled } from "#init/resolver.js";
 import { checkOutdated, renderOutdatedBanner } from "#utils/outdated.js";
 
@@ -86,6 +87,12 @@ export interface InitOptions {
    * keeps the whole run network-free (useful in CI or air-gapped environments).
    */
   offline?: boolean;
+  /**
+   * Teardown mode: remove every file and config entry a previous `auro init` run
+   * produced instead of generating. A pure reverse operation — needs no installed
+   * components, prefix resolution, or network. See {@link runReset}.
+   */
+  reset?: boolean;
 }
 
 /**
@@ -331,6 +338,14 @@ async function reportOutdated(components: ResolvedComponent[]): Promise<void> {
 export async function runInit(options: InitOptions): Promise<void> {
   const cwd = process.cwd();
 
+  // Teardown short-circuit: reset is a pure reverse operation, so it runs before
+  // any detection/resolution/network — it must work even when no components are
+  // installed or the config is gone.
+  if (options.reset) {
+    await runReset(cwd, options);
+    return;
+  }
+
   const spinner = ora("Detecting installed Auro components...").start();
   const { components, duplicates } = await resolveInstalled();
 
@@ -471,6 +486,99 @@ export async function runInit(options: InitOptions): Promise<void> {
   }
 }
 
+/** True when a plan would remove or un-merge nothing (a no-op reset). */
+function isEmptyResetPlan(plan: ResetPlan): boolean {
+  return plan.filesToRemove.length === 0 && plan.unmerges.length === 0;
+}
+
+/**
+ * Teardown for `auro init --reset`: reverse a previous `auro init` run. Plans the
+ * removals read-only, shows them for an interactive confirm (skippable with
+ * `--yes`/`--non-interactive`/CI), then applies and summarizes. Signature-guarded
+ * files that could not be confirmed as ours are reported, not deleted; the one-way
+ * formkit migration is never reversed (a note says so). See `reset.ts`.
+ */
+async function runReset(cwd: string, options: InitOptions): Promise<void> {
+  const plan = planReset(cwd);
+
+  if (isEmptyResetPlan(plan)) {
+    // Nothing of ours on disk. Still surface skips (e.g. a hand-edited AGENTS.md)
+    // so the user understands why an expected file was left alone.
+    console.log("Nothing to reset — no `auro init` output found.");
+    for (const skip of plan.filesToSkip) {
+      console.error(`⚠ Left ${skip.path} in place: ${skip.reason}.`);
+    }
+    return;
+  }
+
+  // Show the exact teardown before touching disk.
+  console.log("`auro init --reset` will:");
+  for (const file of plan.filesToRemove) {
+    console.log(`  • remove ${file}`);
+  }
+  for (const unmerge of plan.unmerges) {
+    console.log(`  • remove the Auro entry from ${unmerge.path}`);
+  }
+  for (const dir of plan.dirsToPrune) {
+    console.log(`  • remove ${dir}/ if it is left empty`);
+  }
+  for (const skip of plan.filesToSkip) {
+    console.log(`  • keep ${skip.path} (${skip.reason})`);
+  }
+
+  if (!isNonInteractive(options)) {
+    const { confirm } = await inquirer.prompt<{ confirm: boolean }>([
+      {
+        type: "confirm",
+        name: "confirm",
+        message: "Remove these files and config entries?",
+        default: false,
+      },
+    ]);
+    if (!confirm) {
+      console.log("Reset aborted — nothing was changed.");
+      return;
+    }
+  }
+
+  const resetSpinner = ora("Removing `auro init` output...").start();
+  let report: ReturnType<typeof applyReset>;
+  try {
+    report = applyReset(cwd, plan);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    resetSpinner.fail(`Failed to reset: ${message}`);
+    process.exit(1);
+  }
+
+  const removedNote =
+    report.removed.length > 0
+      ? `Removed ${report.removed.length} file(s)`
+      : "Removed no files";
+  const unmergedNote =
+    report.unmerged.length > 0
+      ? `, un-merged ${report.unmerged.join(", ")}`
+      : "";
+  const prunedNote =
+    report.prunedDirs.length > 0
+      ? `, pruned ${report.prunedDirs.map((d) => `${d}/`).join(", ")}`
+      : "";
+  resetSpinner.succeed(`${removedNote}${unmergedNote}${prunedNote}.`);
+
+  for (const warning of report.warnings) {
+    console.error(`⚠ ${warning}`);
+  }
+  for (const skip of report.skipped) {
+    console.error(`⚠ Left ${skip.path} in place: ${skip.reason}.`);
+  }
+
+  // `--reset` never reverses the one-way formkit migration (package.json edits +
+  // import rewrites) — say so rather than leave the user assuming a clean slate.
+  console.error(
+    "ℹ Reset does not undo an `auro-formkit` migration. If you migrated a legacy standalone form package, revert those package.json and import changes with git.",
+  );
+}
+
 export default program
   .command("init")
   .description(
@@ -511,4 +619,9 @@ export default program
     "Generate VS Code CSS ::part() snippets (use --no-css-snippets to skip; default: auto-detect)",
   )
   .option("--no-css-snippets", "Skip the VS Code CSS ::part() snippets")
+  .option(
+    "--reset",
+    "Remove every file and config entry a previous `auro init` run created (does not undo an auro-formkit migration)",
+    false,
+  )
   .action(runInit);
