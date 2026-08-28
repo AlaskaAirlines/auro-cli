@@ -493,10 +493,20 @@ export interface TagResolutionPlan {
   /** True when existing registrations imply two or more distinct prefixes. */
   mixedPrefixes: boolean;
   /**
-   * Non-fatal warnings (bare `auro-*` defaults, unresolvable registrations, and
-   * prefix-grounded custom tags with no corroborating `register()` in source).
+   * Non-fatal warnings (bare `auro-*` defaults, unresolvable registrations, scan
+   * parse skips). Advisory only — the caller prints these as plain `⚠` lines.
    */
   warnings: string[];
+  /**
+   * The subset of advisories where a resolved/grounded tag may **not match the
+   * tag the app registers at runtime** — a prefix grounded a custom tag with no
+   * corroborating `register()` in source, or a detected default `register()` was
+   * grounded under a custom prefix. These silently break IntelliSense (the
+   * generated artifacts key on a tag the markup never uses), so the caller
+   * surfaces them in a prominent bordered banner rather than a plain line. See
+   * {@link renderWarningBanner}.
+   */
+  reconciliationWarnings: string[];
 }
 
 /**
@@ -541,6 +551,9 @@ export function planTagResolution(
   const persistOverrides: Record<string, string> = { ...configOverrides };
   const needingDefault: string[] = [];
   const warnings = [...(scan?.warnings ?? []), ...reconciled.warnings];
+  // App-vs-grounding tag mismatches — surfaced prominently, not inline (see the
+  // TagResolutionPlan.reconciliationWarnings doc).
+  const reconciliationWarnings: string[] = [];
 
   for (const component of components) {
     const tag = component.tagName;
@@ -579,7 +592,7 @@ export function planTagResolution(
       // IntelliSense silently matches nothing. We cannot see auto-registration
       // statically, so advise (never guess): name the exact call that makes the
       // app agree with the grounding.
-      warnings.push(
+      reconciliationWarnings.push(
         `${tag}: grounded as '<${resolved}>' from the '${effectiveDefault}' prefix, but no register('${resolved}') was found in your source. If ${component.declaration.name} is registered under a different tag (e.g. the default '<${tag}>' from a side-effect import), IntelliSense will not match your markup — call ${component.declaration.name}.register('${resolved}') so your app matches the generated tags.`,
       );
     }
@@ -592,7 +605,7 @@ export function planTagResolution(
   for (const [canonical, className] of reconciled.defaultRegistered) {
     const resolved = resolvedTags.get(canonical);
     if (resolved !== undefined && resolved !== canonical) {
-      warnings.push(
+      reconciliationWarnings.push(
         `${className}.register() uses the default '<${canonical}>' tag, but this project grounds it as '<${resolved}>'. Update the register() call to '${resolved}' so your app matches AGENTS.md.`,
       );
     }
@@ -624,5 +637,6 @@ export function planTagResolution(
     suggestedDefault: suggestion,
     mixedPrefixes: mixed,
     warnings,
+    reconciliationWarnings,
   };
 }

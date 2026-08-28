@@ -61,6 +61,7 @@ import {
 } from "#init/registry.js";
 import { applyReset, planReset, type ResetPlan } from "#init/reset.js";
 import { type ResolvedComponent, resolveInstalled } from "#init/resolver.js";
+import { renderWarningBanner } from "#utils/banner.js";
 import { checkOutdated, renderOutdatedBanner } from "#utils/outdated.js";
 
 /** Options accepted by the `init` action. */
@@ -475,6 +476,20 @@ export async function runInit(options: InitOptions): Promise<void> {
   for (const duplicate of duplicates) {
     console.error(
       `⚠ Tag <${duplicate.tagName}> is registered by multiple installed packages: ${duplicate.packages.join(", ")}. Grounded once — verify which package you intend to use.`,
+    );
+  }
+
+  // Tag-reconciliation advisories (a grounded tag that may not match what the app
+  // registers at runtime) silently break IntelliSense and are easy to miss among
+  // the plain warnings above — surface them in a prominent red bordered banner,
+  // the cousin of the outdated-release banner below.
+  if (plan.reconciliationWarnings.length > 0) {
+    console.error(
+      renderWarningBanner(
+        `⚠  ${plan.reconciliationWarnings.length} component tag(s) may not match your app's registered tags`,
+        plan.reconciliationWarnings,
+        "red",
+      ),
     );
   }
 

@@ -533,11 +533,11 @@ test("AST scan warns (never guesses) on default, computed, and auto-versioned re
   );
 
   const errors = stderr();
-  // Default no-arg register() vs the prefixed grounding: a mismatch to fix.
-  assert.match(
-    errors,
-    /AuroButton\.register\(\) uses the default '<auro-button>'/u,
-  );
+  // Default no-arg register() vs the prefixed grounding: a mismatch to fix. The
+  // reconciliation banner word-wraps, so assert on wrap-safe tokens (no internal
+  // spaces) rather than a multi-word phrase that a line break could split.
+  assert.match(errors, /AuroButton\.register\(\)/u);
+  assert.match(errors, /'<auro-button>'/u);
   assert.match(errors, /'<myapp-button>'/u);
   // Computed tag is warned and skipped, never guessed.
   assert.match(errors, /non-literal tag/u);
