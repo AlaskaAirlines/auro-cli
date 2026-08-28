@@ -17,6 +17,98 @@ import { join } from "node:path";
 import type { ResolvedComponent } from "#init/resolver.js";
 import type { CemDeclaration, Manifest } from "#utils/cem.js";
 
+/**
+ * True when every bracket pair (`()[]{}<>`) in `text` is balanced, treating a
+ * `=>` arrow as text rather than a generic close. The community JSX/Svelte tools
+ * splice a CEM `type.text` verbatim into generated TypeScript, so a truncated or
+ * garbled type — e.g. auro-formkit's `auroDropdown-idAdded` event ships the type
+ * `"Object<key"` — yields output no parser (prettier/tsc) can read. A cheap
+ * balance check is enough to catch these real-world defects without trying to be
+ * a TypeScript parser; anything that fails it is dropped so the generator falls
+ * back to its default handler/prop type.
+ */
+function hasBalancedDelimiters(text: string): boolean {
+  const closeToOpen: Record<string, string> = {
+    ")": "(",
+    "]": "[",
+    "}": "{",
+    ">": "<",
+  };
+  const stack: string[] = [];
+  let prev = "";
+  for (const ch of text) {
+    if (ch === ">" && prev === "=") {
+      // `=>` arrow — not a generic close.
+      prev = ch;
+      continue;
+    }
+    if (ch === "(" || ch === "[" || ch === "{" || ch === "<") {
+      stack.push(ch);
+    } else if (ch === ")" || ch === "]" || ch === "}" || ch === ">") {
+      if (stack.pop() !== closeToOpen[ch]) {
+        return false;
+      }
+    }
+    prev = ch;
+  }
+  return stack.length === 0;
+}
+
+/**
+ * Strip an entry's `type` when its `type.text` is present but malformed (see
+ * {@link hasBalancedDelimiters}), leaving a well-formed entry the generators can
+ * fall back to a default type for. A slightly looser type (`CustomEvent`,
+ * `unknown`) beats an artifact no compiler accepts.
+ */
+function withSafeType<T extends { type?: { text?: string } }>(entry: T): T {
+  const text = entry.type?.text;
+  if (typeof text === "string" && text !== "" && !hasBalancedDelimiters(text)) {
+    const { type: _dropped, ...rest } = entry;
+    return rest as T;
+  }
+  return entry;
+}
+
+/**
+ * Normalise a CEM declaration into something the community JSX/Svelte/HTML
+ * generators reliably accept:
+ *
+ * 1. Drop entries whose `name` is not a string from every named collection
+ *    (members, attributes, slots, events, css parts/properties). The schema
+ *    types these as required, but real manifests ship the odd nameless entry —
+ *    e.g. auro-formkit's `auro-menu` has a `{ kind: "field", type, default }`
+ *    member with no `name` — and the tools call `member.name.startsWith("#")`,
+ *    throwing mid-generation. A nameless member can't become a typed prop anyway.
+ *    (An empty-string name is kept — it is the valid default-slot name.)
+ * 2. Drop a malformed `type.text` from members/attributes/events (see
+ *    {@link withSafeType}) so a garbled type can't produce unparseable output.
+ *
+ * Everything else on the declaration is preserved verbatim.
+ */
+function withNamedEntriesPruned(declaration: CemDeclaration): CemDeclaration {
+  const hasName = (entry: { name?: unknown }): boolean =>
+    typeof entry.name === "string";
+  return {
+    ...declaration,
+    ...(declaration.members && {
+      members: declaration.members.filter(hasName).map(withSafeType),
+    }),
+    ...(declaration.attributes && {
+      attributes: declaration.attributes.filter(hasName).map(withSafeType),
+    }),
+    ...(declaration.slots && { slots: declaration.slots.filter(hasName) }),
+    ...(declaration.events && {
+      events: declaration.events.filter(hasName).map(withSafeType),
+    }),
+    ...(declaration.cssParts && {
+      cssParts: declaration.cssParts.filter(hasName),
+    }),
+    ...(declaration.cssProperties && {
+      cssProperties: declaration.cssProperties.filter(hasName),
+    }),
+  };
+}
+
 /** An editor artifact `auro init` writes: its project-root-relative path + body. */
 export interface EditorArtifact {
   /**
@@ -74,12 +166,12 @@ export function buildManifest(
   return {
     schemaVersion: "1.0.0",
     modules: components.map((component) => {
-      const declaration: CemDeclaration = {
+      const declaration: CemDeclaration = withNamedEntriesPruned({
         ...component.declaration,
         tagName: resolvedTags
           ? resolvedTagFor(component, resolvedTags)
           : component.tagName,
-      };
+      });
       return {
         kind: "javascript-module",
         path: component.importPath,
