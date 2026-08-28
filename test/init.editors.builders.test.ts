@@ -56,6 +56,24 @@ test("buildSvelteTypes reproduces the golden Svelte types byte-for-byte", () => 
   assert.equal(artifact.contents, fixture(basename(SVELTE_TYPES_PATH)));
 });
 
+test("buildSvelteTypes wraps the svelteHTML augmentation in `declare global`", () => {
+  // The tool emits a module-scoped `declare namespace svelteHTML`, which is
+  // inert in a module file — the Svelte language server reads the *global*
+  // namespace. buildSvelteTypes must globalize it, or element completion never
+  // appears. Regression guard for the wiring fix.
+  const svelte = buildSvelteTypes(COMPONENTS, RESOLVED_TAGS).contents;
+  assert.match(
+    svelte,
+    /declare global \{\s*namespace svelteHTML \{/u,
+    "svelteHTML augmentation must be wrapped in declare global",
+  );
+  assert.doesNotMatch(
+    svelte,
+    /^declare namespace svelteHTML/mu,
+    "no bare module-scoped declare namespace should remain",
+  );
+});
+
 test("every builder emits a single trailing newline", () => {
   for (const artifact of [
     buildHtmlCustomData(COMPONENTS, RESOLVED_TAGS),

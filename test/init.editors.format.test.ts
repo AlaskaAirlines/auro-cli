@@ -133,7 +133,11 @@ test("JSX types fixture augments JSX.IntrinsicElements for resolved tags", () =>
 // ---------------------------------------------------------------------------
 
 test("Svelte types fixture augments svelteHTML for resolved tags", () => {
-  assert.match(SVELTE_TYPES, /declare namespace svelteHTML/u);
+  // Global augmentation so the Svelte language server's global `svelteHTML`
+  // namespace merges these elements — a bare `declare namespace` in a module
+  // file is module-scoped and inert (globalizeSvelteNamespace in svelteTypes.ts).
+  assert.match(SVELTE_TYPES, /declare global/u);
+  assert.match(SVELTE_TYPES, /namespace svelteHTML/u);
   assert.match(SVELTE_TYPES, /interface IntrinsicElements/u);
 
   assert.match(SVELTE_TYPES, /"myapp-button":/u);
