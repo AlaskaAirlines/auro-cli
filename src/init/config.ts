@@ -51,6 +51,8 @@ export interface EditorsConfig {
   jsx?: boolean;
   /** Svelte type declarations (`auro-types/auro-svelte.d.ts`). */
   svelte?: boolean;
+  /** VS Code CSS `::part()` snippets (`.vscode/auro.code-snippets`). */
+  cssSnippets?: boolean;
 }
 
 /** The `init`-namespaced settings block. Future commands get sibling keys. */

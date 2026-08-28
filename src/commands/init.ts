@@ -73,6 +73,7 @@ export interface InitOptions {
   vscode?: boolean;
   jsx?: boolean;
   svelte?: boolean;
+  cssSnippets?: boolean;
 }
 
 /**
@@ -143,6 +144,10 @@ const EDITOR_TARGET_META: Record<
     label: "Svelte type declarations",
     artifact: "auro-types/auro-svelte.d.ts",
   },
+  cssSnippets: {
+    label: "CSS ::part() snippets",
+    artifact: ".vscode/auro.code-snippets",
+  },
 };
 
 /**
@@ -169,6 +174,7 @@ async function resolveEditorTargets(
     vscode: false,
     jsx: false,
     svelte: false,
+    cssSnippets: false,
   };
   const pending: Array<{
     type: "confirm";
@@ -450,4 +456,9 @@ export default program
     "Generate Svelte type declarations (use --no-svelte to skip; default: auto-detect)",
   )
   .option("--no-svelte", "Skip the Svelte type declarations")
+  .option(
+    "--css-snippets",
+    "Generate VS Code CSS ::part() snippets (use --no-css-snippets to skip; default: auto-detect)",
+  )
+  .option("--no-css-snippets", "Skip the VS Code CSS ::part() snippets")
   .action(runInit);

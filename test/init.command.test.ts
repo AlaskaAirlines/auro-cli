@@ -703,15 +703,21 @@ test("--vscode writes the HTML custom-data artifact and wires settings.json", as
     "./.vscode/auro.html-custom-data.json",
   ]);
 
-  // Only the VS Code target is on; jsx/svelte default off (no signal) and persist.
+  // Only the VS Code target is on; the others default off (no signal — no
+  // pre-existing .vscode/ at detection time, so cssSnippets is off too) and persist.
   const config = JSON.parse(await readOutput(cwd, "auro.config.json"));
   assert.deepEqual(config.init.editors, {
     vscode: true,
     jsx: false,
     svelte: false,
+    cssSnippets: false,
   });
   // The disabled targets create nothing.
   await assert.rejects(readOutput(cwd, "auro-types/auro-jsx.d.ts"), /ENOENT/u);
+  await assert.rejects(
+    readOutput(cwd, ".vscode/auro.code-snippets"),
+    /ENOENT/u,
+  );
 });
 
 test("--jsx writes the JSX types with resolved tags and installed import paths", async (t) => {
@@ -837,6 +843,37 @@ test("--svelte writes the Svelte types artifact", async (t) => {
   assert.equal(config.init.editors.svelte, true);
 });
 
+test("--css-snippets writes a ::part snippets file from the CEM cssParts", async (t) => {
+  const cwd = await tempCwd(t);
+  // auro-formkit's components ship real cssParts (auro-input: wrapper, label, …),
+  // so the snippets builder produces output for them.
+  await installRealPackage(cwd, "auro-formkit");
+  stubEditorRun(t, cwd);
+  captureWrite(t, process.stderr);
+
+  await runInit({ prefix: "myapp-", cssSnippets: true });
+
+  // The artifact is auto-discovered under .vscode/ — no settings.json entry.
+  const snippets = JSON.parse(
+    await readOutput(cwd, ".vscode/auro.code-snippets"),
+  ) as Record<string, { scope: string; prefix: string; body: string[] }>;
+  const input = snippets["Auro <myapp-input> ::part"];
+  assert.ok(input, "a snippet is emitted for the resolved auro-input tag");
+  assert.equal(input.scope, "css,scss,less");
+  assert.equal(input.prefix, "myapp-input::part");
+  assert.match(
+    input.body[0],
+    /myapp-input::part\(\$\{1\|/u,
+    "choice placeholder",
+  );
+
+  // No settings.json is written for this target (nothing to register).
+  await assert.rejects(readOutput(cwd, ".vscode/settings.json"), /ENOENT/u);
+
+  const config = JSON.parse(await readOutput(cwd, "auro.config.json"));
+  assert.equal(config.init.editors.cssSnippets, true);
+});
+
 test("--no-* flags write no editor artifacts even when signals are present", async (t) => {
   const cwd = await tempCwd(t);
   await installRealPackage(cwd, "auro-button");
@@ -858,6 +895,7 @@ test("--no-* flags write no editor artifacts even when signals are present", asy
     vscode: false,
     jsx: false,
     svelte: false,
+    cssSnippets: false,
   });
 
   await assert.rejects(
@@ -869,11 +907,16 @@ test("--no-* flags write no editor artifacts even when signals are present", asy
     readOutput(cwd, "auro-types/auro-svelte.d.ts"),
     /ENOENT/u,
   );
+  await assert.rejects(
+    readOutput(cwd, ".vscode/auro.code-snippets"),
+    /ENOENT/u,
+  );
   const config = JSON.parse(await readOutput(cwd, "auro.config.json"));
   assert.deepEqual(config.init.editors, {
     vscode: false,
     jsx: false,
     svelte: false,
+    cssSnippets: false,
   });
 });
 
@@ -885,7 +928,8 @@ test("a detected signal enables its target on a non-interactive run", async (t) 
   captureWrite(t, process.stderr);
 
   // No flags, no persisted config: the non-interactive run takes the detected
-  // default (VS Code on, the other two off) and records all three.
+  // default and records every target. The .vscode/ signal enables BOTH the VS
+  // Code and cssSnippets targets (they share it); jsx/svelte have no signal.
   await runInit({ prefix: "myapp-" });
 
   await readOutput(cwd, ".vscode/auro.html-custom-data.json"); // exists
@@ -894,7 +938,14 @@ test("a detected signal enables its target on a non-interactive run", async (t) 
     vscode: true,
     jsx: false,
     svelte: false,
+    cssSnippets: true,
   });
+  // cssSnippets is enabled, but this real package's CEM exposes no cssParts, so
+  // the builder returns null and no snippets file is written (empty-file guard).
+  await assert.rejects(
+    readOutput(cwd, ".vscode/auro.code-snippets"),
+    /ENOENT/u,
+  );
 });
 
 test("a persisted editor choice is honored without a flag", async (t) => {
@@ -940,7 +991,7 @@ test("interactive run prompts for unsettled targets, seeds detection defaults, a
           questions.map((q) => [q.name, q.default]),
         );
       }
-      return { vscode: false, jsx: true, svelte: false };
+      return { vscode: false, jsx: true, svelte: false, cssSnippets: false };
     },
   );
 
@@ -948,10 +999,11 @@ test("interactive run prompts for unsettled targets, seeds detection defaults, a
   // be prompted for.
   await runInit({ prefix: "myapp-" });
 
-  // Detection seeds each prompt's default (VS Code dir present; no JSX/Svelte).
+  // Detection seeds each prompt's default. The .vscode/ dir is present, so both
+  // the VS Code and cssSnippets confirms default true; JSX/Svelte have no signal.
   assert.deepEqual(
     askedDefaults,
-    { vscode: true, jsx: false, svelte: false },
+    { vscode: true, jsx: false, svelte: false, cssSnippets: true },
     "each confirm defaults to its detected signal",
   );
 
@@ -973,6 +1025,7 @@ test("interactive run prompts for unsettled targets, seeds detection defaults, a
     vscode: false,
     jsx: true,
     svelte: false,
+    cssSnippets: false,
   });
 });
 

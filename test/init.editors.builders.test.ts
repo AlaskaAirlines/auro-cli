@@ -3,9 +3,11 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { parse as parseJsonc } from "jsonc-parser";
+import { buildCssSnippets } from "../src/init/editors/cssSnippets.ts";
 import { buildHtmlCustomData } from "../src/init/editors/htmlCustomData.ts";
 import { buildJsxTypes } from "../src/init/editors/jsxTypes.ts";
 import {
+  CSS_SNIPPETS_PATH,
   HTML_CUSTOM_DATA_PATH,
   JSX_TYPES_PATH,
   SVELTE_TYPES_PATH,
@@ -54,6 +56,13 @@ test("buildSvelteTypes reproduces the golden Svelte types byte-for-byte", () => 
   const artifact = buildSvelteTypes(COMPONENTS, RESOLVED_TAGS);
   assert.equal(artifact.filename, SVELTE_TYPES_PATH);
   assert.equal(artifact.contents, fixture(basename(SVELTE_TYPES_PATH)));
+});
+
+test("buildCssSnippets reproduces the golden CSS snippets byte-for-byte", () => {
+  const artifact = buildCssSnippets(COMPONENTS, RESOLVED_TAGS);
+  assert.ok(artifact, "BUTTON exposes cssParts, so an artifact is produced");
+  assert.equal(artifact.filename, CSS_SNIPPETS_PATH);
+  assert.equal(artifact.contents, fixture(basename(CSS_SNIPPETS_PATH)));
 });
 
 test("buildSvelteTypes wraps the svelteHTML augmentation in `declare global`", () => {
@@ -236,6 +245,85 @@ test("Svelte member marker falls back to the class name when the default tag is 
     new RegExp(`【${BUTTON.tagName}】`, "u"),
     "marker does not echo the default auro-* tag",
   );
+});
+
+// ---------------------------------------------------------------------------
+// CSS `::part()` snippets: one choice-placeholder snippet per component that
+// exposes shadow parts, keyed and prefixed on the resolved tag. The ONLY target
+// that assists shadow-part styling (CSS custom-data can't enumerate part names).
+// ---------------------------------------------------------------------------
+
+/** Parse the snippets artifact as its `name → snippet` JSON map. */
+type Snippet = {
+  scope: string;
+  prefix: string;
+  body: string[];
+  description: string;
+};
+const cssSnippets = (contents: string): Record<string, Snippet> =>
+  JSON.parse(contents) as Record<string, Snippet>;
+
+test("buildCssSnippets keys the snippet, prefix, and body on the resolved tag", () => {
+  const artifact = buildCssSnippets(COMPONENTS, RESOLVED_TAGS);
+  assert.ok(artifact, "an artifact is produced when a component has parts");
+  const snippets = cssSnippets(artifact.contents);
+
+  // Keyed on the resolved tag (myapp-button), never the bare auro-button.
+  assert.deepEqual(Object.keys(snippets), ["Auro <myapp-button> ::part"]);
+  assert.ok(!("Auro <auro-button> ::part" in snippets), "bare tag not keyed");
+
+  const snippet = snippets["Auro <myapp-button> ::part"];
+  assert.equal(snippet.scope, "css,scss,less", "fires in CSS + SCSS + LESS");
+  assert.equal(snippet.prefix, "myapp-button::part");
+  // The body opens with a `::part(` selector whose choice placeholder lists the
+  // component's parts, in declared order. Asserted piecewise (a `$`-then-`{1|`
+  // choice, then the part list) so no literal snippet-choice syntax sits in a
+  // plain string; the exact bytes are pinned by the byte-exact golden above.
+  assert.equal(snippet.body.length, 3);
+  const choiceOpen = `${"$"}{1|`;
+  assert.equal(
+    snippet.body[0],
+    `myapp-button::part(${choiceOpen}button,contentWrapper,link,loader,text|}) {`,
+    "the selector opens with a choice of the part names in order",
+  );
+  assert.equal(snippet.body[1], "\t$0", "the block indents to the tab stop");
+  assert.equal(snippet.body[2], "}");
+  assert.match(
+    snippet.description,
+    /button, contentWrapper, link, loader, text/u,
+    "the description lists the part names",
+  );
+});
+
+test("buildCssSnippets flows an arbitrary override tag into the snippet", () => {
+  const override = new Map([["auro-button", "x-anything"]]);
+  const artifact = buildCssSnippets([BUTTON], override);
+  assert.ok(artifact);
+  const snippets = cssSnippets(artifact.contents);
+  assert.deepEqual(Object.keys(snippets), ["Auro <x-anything> ::part"]);
+  assert.equal(snippets["Auro <x-anything> ::part"].prefix, "x-anything::part");
+});
+
+test("buildCssSnippets omits components with no cssParts", () => {
+  // INPUT declares no cssParts, so the mixed set yields only the button snippet.
+  const artifact = buildCssSnippets(COMPONENTS, RESOLVED_TAGS);
+  assert.ok(artifact);
+  const snippets = cssSnippets(artifact.contents);
+  assert.equal(Object.keys(snippets).length, 1, "only the part-bearing button");
+  assert.ok(!("Auro <legacy-input> ::part" in snippets));
+});
+
+test("buildCssSnippets returns null when no component exposes any parts", () => {
+  // A partless component (INPUT) alone → nothing to write, so `init` skips it
+  // rather than emitting an empty `{}` snippets file.
+  assert.equal(buildCssSnippets([INPUT], RESOLVED_TAGS), null);
+});
+
+test("buildCssSnippets emits a single trailing newline", () => {
+  const artifact = buildCssSnippets(COMPONENTS, RESOLVED_TAGS);
+  assert.ok(artifact);
+  assert.equal(artifact.contents.endsWith("\n"), true);
+  assert.equal(artifact.contents.endsWith("\n\n"), false);
 });
 
 // ---------------------------------------------------------------------------

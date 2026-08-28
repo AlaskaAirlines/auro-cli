@@ -1054,16 +1054,26 @@ Reference: [docs/pt-m2-completion-plan.md](../docs/pt-m2-completion-plan.md),
 #### Two mechanisms — why one artifact can't cover all three apps
 
 This is the central fact of the manual pass: editor IntelliSense for web components
-comes from **two independent language-server subsystems**, so PT-M2 ships **three
+comes from **three independent language-server subsystems**, so PT-M2 ships **four
 emit targets over one resolved manifest**. Each app below is powered by a different
 server, so each must be verified in its **own** file type — a green HTML check says
-nothing about JSX or Svelte.
+nothing about JSX, Svelte, or CSS `::part()`.
 
 | App / file | Language server | Fed by | Artifact |
 | --- | --- | --- | --- |
 | Vanilla `.html` (+ HTML regions) | VS Code **HTML** server | `html.customData` JSON | `.vscode/auro.html-custom-data.json` |
 | React `.tsx`/`.jsx` | **TypeScript** service | `.d.ts` augmenting `JSX.IntrinsicElements` | `auro-types/auro-jsx.d.ts` |
 | Svelte `.svelte` | **Svelte** server | `.d.ts` augmenting `svelteHTML` | `auro-types/auro-svelte.d.ts` |
+| `.css`/`.scss`/`.less` (+ Svelte `<style>`) | VS Code **CSS** server (snippets) | auto-discovered `.code-snippets` | `.vscode/auro.code-snippets` |
+
+**Why a snippets file and not CSS custom-data.** Styling a shadow part
+(`myapp-button::part(⎸)`) is the one thing the other three targets structurally
+can't assist: `css.customData` has no field to enumerate an element's `::part()`
+names, and the JSX/Svelte `.d.ts` describe attributes, not CSS. A generated VS Code
+**snippets** file — one `${1|part,names|}` choice placeholder per component, keyed on
+the resolved tag — is the only mechanism that gives an editor pick-list for part
+names. VS Code **auto-discovers** `.vscode/*.code-snippets`, so this target needs
+**no `settings.json` wiring** at all (unlike html.customData).
 
 > **HTML hover ≠ HTML autocomplete for slots/events.** The `html.customData` format
 > models **tags and attributes** as first-class (both autocomplete *and* hover), but
@@ -1083,6 +1093,9 @@ network):
 - `auro-types/auro-jsx.d.ts` — its `import type { … }` specifiers resolved to the
   **installed** packages so they type-check from the consumer's `node_modules`.
 - `auro-types/auro-svelte.d.ts` — self-contained (no class imports).
+- `.vscode/auro.code-snippets` — CSS `::part()` snippets, **auto-discovered** by VS
+  Code (no `settings.json` entry). Written only when at least one installed component
+  has `cssParts`; an all-partless install writes no file even with the target enabled.
 
 The `auro-types/` dir is deliberately **non-dotted** so TypeScript's default `**/*`
 include picks it up with **zero** tsconfig edits; when a project has an explicit
@@ -1095,11 +1108,13 @@ New `auro init` options (tri-state, commander-negatable):
 | `--vscode` / `--no-vscode` | Force the HTML custom-data target on / off. |
 | `--jsx` / `--no-jsx` | Force the React/JSX `.d.ts` target on / off. |
 | `--svelte` / `--no-svelte` | Force the Svelte `.d.ts` target on / off. |
+| `--css-snippets` / `--no-css-snippets` | Force the CSS `::part()` snippets target on / off. |
 
 Per-target resolution precedence (frozen): **flag → persisted `auro.config.json`
 `init.editors.*` → detection → interactive confirm (TTY only)**. Detection defaults:
 `.vscode/` dir → VS Code; a `tsconfig.json` with `jsx` set **or** a `react` dep →
-JSX; a `svelte` dep or `svelte.config.*` → Svelte. Non-interactive/CI takes the
+JSX; a `svelte` dep or `svelte.config.*` → Svelte; the CSS snippets target reuses the
+`.vscode/` signal (it's a VS Code feature). Non-interactive/CI takes the
 detected default and **never** prompts or fails (an editor choice always has a safe
 default — unlike the PT-M1 prefix).
 
@@ -1133,8 +1148,8 @@ code .                      # open the folder in VS Code
 > the first thing to rule out.
 
 **Teardown:** discard the generated `.vscode/auro.html-custom-data.json`,
-`auro-types/`, and the `settings.json`/`tsconfig.json` merges (`git checkout`/`git
-clean`) rather than committing them.
+`.vscode/auro.code-snippets`, `auro-types/`, and the `settings.json`/`tsconfig.json`
+merges (`git checkout`/`git clean`) rather than committing them.
 
 #### Automated coverage & manual scope (PT-M2)
 
@@ -1157,7 +1172,8 @@ cite the test in sign-off instead.
 | `mergeVsCodeSettings` + `mergeTsconfigInclude`: empty / unrelated-keys+comments / string→array normalize / pre-existing entry / idempotent / unparseable→warn+skip; the four-branch `include` decision tree | [`init.editors.builders.test.ts`](init.editors.builders.test.ts) |
 | Detection heuristics — every branch of `detectVsCode`/`detectJsx`/`detectSvelte`/`detectEditorSignals`, negatives, never-throws | [`init.editors.detect.test.ts`](init.editors.detect.test.ts) |
 | JSX `.d.ts` type-checks under the project's own `tsc` (imports resolve; self-contained prop/element types valid) | [`init.editors.tsc-smoke.test.ts`](init.editors.tsc-smoke.test.ts) |
-| `auro init` integration: each `--<target>` writes its artifact + wiring with the resolved (prefixed) tag; `--no-*` writes nothing; detected signal enables non-interactively; persisted choice honored without a flag; interactive prompt seeds detection defaults + persists answers; flag overrides a conflicting persisted choice; malformed-CEM hardening; all-three idempotent regeneration + dependency removal | [`init.command.test.ts`](init.command.test.ts) |
+| `auro init` integration: each `--<target>` writes its artifact + wiring with the resolved (prefixed) tag; `--no-*` writes nothing; detected signal enables non-interactively; persisted choice honored without a flag; interactive prompt seeds detection defaults + persists answers; flag overrides a conflicting persisted choice; malformed-CEM hardening; all-three idempotent regeneration + dependency removal; `--css-snippets` writes `.vscode/auro.code-snippets` with the resolved tag and **no** `settings.json` merge, persisting `cssSnippets: true` | [`init.command.test.ts`](init.command.test.ts) |
+| CSS `::part()` snippets builder: byte-exact golden (a `${1...}` choice placeholder of part names, `scope` of `css,scss,less`, resolved-tag key/prefix/selector); components without `cssParts` omitted; an all-partless install returns `null` (no file); choice-breaking part names dropped | [`init.editors.builders.test.ts`](init.editors.builders.test.ts), [`init.editors.format.test.ts`](init.editors.format.test.ts) |
 
 **Manual scope — what automation structurally cannot cover.** Automation proves the
 artifacts are **correct**; only a human in an editor can prove the language servers
@@ -1177,6 +1193,9 @@ artifacts are **correct**; only a human in an editor can prove the language serv
 6. **Live wiring merge on a real editor config** (M2-6 smoke) — that a real
    pre-existing `.vscode/settings.json` / `tsconfig.json` keeps its comments/keys and
    the servers still activate.
+7. **Live CSS `::part()` snippet completion** (M2-7) — that typing `myapp-button::part`
+   in a `.css`/`.scss`/`.less` file expands to the generated part-name choice, driven
+   by the auto-discovered snippets file (no `settings.json`).
 
 Individual cases below are annotated **[Manual]**, **[Manual smoke]**, or
 **[Regression-covered]** accordingly.
@@ -1320,6 +1339,43 @@ still activates against a genuine pre-existing config.
      `.d.ts` **still written**, and the tsconfig left untouched (regression-covered;
      smoke only if verifying the live message).
 
+#### M2-7 — CSS `::part()` snippet completion — [Manual]
+
+The one target the automated suite can prove **correct** but not **consumed**: only a
+live editor shows the snippet firing. Use any of the three apps whose install has a
+component with real `cssParts` (e.g. **auro-formkit** → `auro-input` has
+`wrapper`/`label`/`helpText`/`input`/… parts; note the vendored `auro-button` CEM
+ships **empty** `cssParts`, so a button-only install writes no snippets file).
+
+1. Run `auro init --css-snippets` (or plain `auro init` — the `.vscode/` dir makes it a
+   detected default), then **Developer: Reload Window** so VS Code re-scans
+   `.vscode/*.code-snippets`. Confirm `.vscode/auro.code-snippets` was written and that
+   **no** `html.customData`/settings entry was added for it (`git diff` — snippets are
+   auto-discovered).
+2. **Plain CSS:** in a `.css` file, type `auro-input::part` (or your resolved tag).
+   - **Expect:** a snippet suggestion `Auro <auro-input> ::part`; accepting it inserts
+     `auro-input::part(⎸) { … }` with the cursor in a **choice dropdown** of that
+     component's part names, in CEM order. Picking one fills the selector; `Tab` lands
+     in the `{ }` block. Property/value completion inside the block is the standard CSS
+     service (not ours).
+3. **SCSS + LESS:** repeat in a `.scss` and a `.less` file — the `scope: css,scss,less`
+   fires in all three.
+4. **Resolved tag:** if the app was init'd with `--prefix myapp-`, the snippet is keyed
+   and inserts under `myapp-input::part(…)`, **not** `auro-input` — the resolved tag
+   flows into the snippet just like the other targets.
+5. **Svelte `<style>` — needs `:global(...)`:** in a `.svelte` file's `<style>` block
+   the snippet still fires (it's CSS-language), **but** Svelte's scoped-style compiler
+   drops selectors it thinks are unused; a shadow `::part()` selector must be wrapped
+   `:global(auro-input::part(input)) { … }` to survive. This is a **documented Svelte
+   requirement**, not a CLI bug — note it rather than filing it.
+6. **Documented non-blockers (do not file):**
+   - **CSS-in-JS** (styled-components / Emotion template literals) — the snippet won't
+     fire inside a JS/TS template string unless the editor has an embedded-CSS grammar
+     active for that library; VS Code doesn't by default. Out of scope for a snippets
+     file.
+   - **Inline `style=` attributes** cannot target pseudo-elements at all (a CSS
+     limitation, not editor tooling) — `::part()` styling must live in a stylesheet.
+
 ---
 
 ### Sign-off checklist (PT-M2 / AB#1628542)
@@ -1333,8 +1389,8 @@ still activates against a genuine pre-existing config.
 
 **Manual pass — only what automation can't reach (live language servers):**
 
-- [ ] `auro init` `--vscode`/`--jsx`/`--svelte` (+ `--no-*`) appear in `auro init
-      --help` and run from the packed/global install
+- [ ] `auro init` `--vscode`/`--jsx`/`--svelte`/`--css-snippets` (+ `--no-*`) appear in
+      `auro init --help` and run from the packed/global install
 - [ ] **M2-1** HTML: `<auro-` tag completion, attribute completion, hover shows
       slots/events/methods/CSS parts (vanilla app, `.html`)
 - [ ] **M2-2** React: typed `<auro-button` intrinsic completion, prop-type hover, a
@@ -1347,6 +1403,9 @@ still activates against a genuine pre-existing config.
       silent, CI default no-prompt/no-fail)
 - [ ] **M2-6** live smoke: real commented `settings.json` / `tsconfig.json` preserved
       and the server still activates
+- [ ] **M2-7** CSS `::part()` snippet: `auro-input::part` expands to the part-name
+      choice in `.css`/`.scss`/`.less` (resolved tag honored; Svelte `:global(...)`
+      caveat noted; auto-discovered, no `settings.json`)
 - [ ] Editor + versions recorded (VS Code build, Svelte extension version, React /
       TypeScript versions), plus CLI SHA, Node, OS
 

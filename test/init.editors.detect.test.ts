@@ -147,6 +147,8 @@ test("detectEditorSignals reports every target from a project with all signals",
     vscode: true,
     jsx: true,
     svelte: true,
+    // Shares the .vscode/ signal with the VS Code HTML custom-data target.
+    cssSnippets: true,
   });
 });
 
@@ -156,6 +158,7 @@ test("detectEditorSignals is all-false in a bare directory (no throw, no signal)
     vscode: false,
     jsx: false,
     svelte: false,
+    cssSnippets: false,
   });
 });
 
@@ -167,5 +170,6 @@ test("detectEditorSignals tolerates a malformed package.json without throwing", 
     vscode: false,
     jsx: false,
     svelte: false,
+    cssSnippets: false,
   });
 });

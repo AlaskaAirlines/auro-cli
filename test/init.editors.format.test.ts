@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 import { parse as parseJsonc } from "jsonc-parser";
 import type { AuroConfig } from "../src/init/config.ts";
 import {
+  CSS_SNIPPETS_FILENAME,
+  CSS_SNIPPETS_PATH,
   FRAMEWORK_TYPES_DIR,
   HTML_CUSTOM_DATA_FILENAME,
   HTML_CUSTOM_DATA_SETTINGS_ENTRY,
@@ -42,6 +44,7 @@ const fixture = (name: string): string =>
 const HTML_CUSTOM_DATA = fixture(HTML_CUSTOM_DATA_FILENAME);
 const JSX_TYPES = fixture(JSX_TYPES_FILENAME);
 const SVELTE_TYPES = fixture(SVELTE_TYPES_FILENAME);
+const CSS_SNIPPETS = fixture(CSS_SNIPPETS_FILENAME);
 
 // ---------------------------------------------------------------------------
 // Frozen filenames / paths / wiring keys (the shape step 1 pins)
@@ -57,6 +60,16 @@ test("editor artifact locations + wiring keys are frozen and self-consistent", (
     "settings entry is the project-root-relative path to the file we write",
   );
   assert.equal(HTML_CUSTOM_DATA_SETTINGS_ENTRY.startsWith("./"), true);
+
+  // CSS `::part()` snippets live under .vscode/ (auto-discovered by VS Code), so
+  // there is NO settings key/entry — the path is the whole wiring.
+  assert.equal(CSS_SNIPPETS_FILENAME, "auro.code-snippets");
+  assert.equal(CSS_SNIPPETS_PATH, `${VSCODE_DIR}/${CSS_SNIPPETS_FILENAME}`);
+  assert.equal(
+    CSS_SNIPPETS_FILENAME.endsWith(".code-snippets"),
+    true,
+    "the .code-snippets extension is what makes VS Code auto-discover it",
+  );
 
   // Framework .d.ts bundles live in a NON-dotted dir so TypeScript's default
   // `**/*` include (which skips dotfiles) picks them up with zero tsconfig edits.
@@ -171,6 +184,34 @@ test("Svelte types fixture augments svelteHTML for resolved tags", () => {
     /【[^】]*】[^\n]*unique identifier for the element/u,
     "inherited global HTML attributes are left unmarked",
   );
+});
+
+// ---------------------------------------------------------------------------
+// CSS ::part() snippets artifact (VS Code CSS language service)
+// ---------------------------------------------------------------------------
+
+test("CSS snippets fixture is a choice-placeholder ::part snippet on resolved tags", () => {
+  const snippets = JSON.parse(CSS_SNIPPETS) as Record<
+    string,
+    { scope: string; prefix: string; body: string[]; description: string }
+  >;
+
+  // Keyed on the resolved tag the consumer writes in a stylesheet, not auro-*.
+  const snippet = snippets["Auro <myapp-button> ::part"];
+  assert.ok(snippet, "the resolved-tag snippet is present");
+  assert.ok(
+    !("Auro <auro-button> ::part" in snippets),
+    "the bare auro-* tag is not keyed",
+  );
+
+  // Fires across CSS and the two preprocessors (and Svelte <style>, CSS-language).
+  assert.equal(snippet.scope, "css,scss,less");
+  assert.equal(snippet.prefix, "myapp-button::part");
+
+  // The body targets ::part( with a ${1|…|} choice of the component's parts.
+  const line = snippet.body[0];
+  assert.match(line, /myapp-button::part\(/u, "selects a shadow part");
+  assert.match(line, /\$\{1\|button,contentWrapper,link,loader,text\|\}/u);
 });
 
 // ---------------------------------------------------------------------------

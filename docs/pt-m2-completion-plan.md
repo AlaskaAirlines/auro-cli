@@ -230,6 +230,50 @@ fixture + a `tsc` smoke).
 > marker never just echoes the obvious default. `BaseProps` (inherited HTML attrs)
 > is matched by the block regex but filtered out by class name, so those stay
 > unmarked and remain the visual "other" group. Same seam as the two passes above.
+>
+> **DECISION UPDATE (resolved) — a fourth target, `cssSnippets`, generates CSS
+> `::part()` snippets, the only editor assist for shadow-part styling.** The three
+> original targets all describe **attributes** (HTML custom-data, JSX/Svelte
+> `.d.ts`); none help a developer who writes `myapp-button::part(⎸)` and needs the
+> valid part names. That gap genuinely cannot be closed by the existing artifacts:
+> VS Code **CSS custom-data** (`css.customData`) has no field to enumerate an
+> element's parts for `::part(...)` argument completion (it models properties,
+> at-directives, pseudo-classes, and pseudo-elements — not part names), and the
+> JSX/Svelte `.d.ts` don't apply because `::part()` is resolved by the CSS language
+> service, not the type system. The data already exists in the CEM: each declaration
+> carries `cssParts` (`{ name, description? }`, [cem.ts:62](../src/utils/cem.ts#L62)).
+> The new builder ([cssSnippets.ts](../src/init/editors/cssSnippets.ts)) emits **one
+> snippet per component** into `.vscode/auro.code-snippets`, keyed and prefixed on the
+> **resolved tag**, with a `${1|…|}` **choice placeholder** of that component's part
+> names (`scope: "css,scss,less"`). Key consequences that make this the *simplest*
+> target despite being net-new:
+>
+> - **No `settings.json` merge.** VS Code auto-discovers any `.vscode/*.code-snippets`
+>   file, so — unlike the html.customData target — there is **no settings key/entry**
+>   and no idempotent-merge step. The write path is null-safe write-only
+>   ([write.ts](../src/init/editors/write.ts)); [layout.ts](../src/init/editors/layout.ts)
+>   deliberately defines only `CSS_SNIPPETS_FILENAME`/`CSS_SNIPPETS_PATH`, no
+>   `_SETTINGS_KEY`/`_ENTRY`.
+> - **Components with no `cssParts` are omitted; an all-partless install writes
+>   nothing** (the builder returns `null` rather than an empty `{}` file). This is why
+>   the real `auro-button` fixture — whose CEM ships empty `cssParts` — produces no
+>   file even with the target enabled, while `auro-formkit` (real parts) does.
+> - **Cross-framework by scope, not per-target wiring.** The `css,scss,less` scope
+>   fires in plain CSS, SCSS, LESS, **and** Svelte `<style>` (CSS-language) blocks.
+>   The Svelte `:global(::part())` wrapper requirement and the two hard limits —
+>   CSS-in-JS (styled-components/Emotion) won't fire without an embedded-CSS grammar,
+>   and inline `style=` can't target pseudo-elements at all — are **documented
+>   limitations** (see [test/manual-testing-ai-tooling.md](../test/manual-testing-ai-tooling.md)),
+>   not solvable from a snippets file.
+> - **Detection reuses the `.vscode/` signal** (`detectCssSnippets` = `detectVsCode`):
+>   snippets are a VS Code feature, so default them on when the project already keeps
+>   VS Code workspace settings. Still only a default — `--css-snippets` /
+>   `--no-css-snippets` and persisted config override it. The config schema gains an
+>   additive `cssSnippets?: boolean` with **no version bump**.
+>
+> Adding `cssParts` to the `BUTTON` test fixture also enriched the *other three*
+> artifacts (parts now render in HTML/JSX/Svelte hover docs), which is desirable —
+> the golden fixtures were regenerated to capture it.
 
 ## Task breakdown
 

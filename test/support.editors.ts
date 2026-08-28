@@ -54,6 +54,15 @@ export const BUTTON: ResolvedComponent = {
     ],
     slots: [{ name: "", description: "Button label content." }],
     events: [{ name: "click", description: "Fired on activation." }],
+    // Shadow parts drive the CSS `::part()` snippets target (buildCssSnippets).
+    // INPUT deliberately declares none, so it exercises the omit path.
+    cssParts: [
+      { name: "button", description: "The native button element." },
+      { name: "contentWrapper", description: "Wraps the slotted label." },
+      { name: "link", description: "The anchor when rendered as a link." },
+      { name: "loader", description: "The loading indicator." },
+      { name: "text", description: "The button label text." },
+    ],
   },
 };
 
