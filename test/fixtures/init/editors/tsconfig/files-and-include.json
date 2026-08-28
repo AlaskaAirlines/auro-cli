@@ -1,0 +1,7 @@
+{
+  // Branch 2 — both `files` and `include` set: they combine, so APPEND
+  // "auro-types" to `include` and leave `files` untouched.
+  "compilerOptions": { "module": "ESNext" },
+  "files": ["src/main.ts"],
+  "include": ["src/**/*.ts"]
+}

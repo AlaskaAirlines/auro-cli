@@ -1,0 +1,10 @@
+{
+  // Branch 1 — project already sets `include`: APPEND "auro-types" to the array
+  // (its own sources stay listed, comment preserved).
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true
+  },
+  "include": ["src"]
+}
