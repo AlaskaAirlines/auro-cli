@@ -16,8 +16,10 @@
  * other two tools this one returns `void` and only writes a file, so we point it
  * at a scratch dir and read the result back.
  *
- * Two post-processing passes fix what the community tool can't express on its own:
- * {@link addSvelte5EventHandlers} (Svelte 4 *and* 5 event syntax) and
+ * Three post-processing passes fix what the community tool can't express on its
+ * own: {@link labelComponentMembers} (mark component-owned members so IntelliSense
+ * distinguishes them from inherited global HTML attributes),
+ * {@link addSvelte5EventHandlers} (Svelte 4 *and* 5 event syntax), and
  * {@link globalizeSvelteNamespace} (global vs module-scoped augmentation).
  *
  * @see docs/pt-m2-completion-plan.md → build-order step 2.
@@ -84,6 +86,76 @@ function addSvelte5EventHandlers(contents: string): string {
 }
 
 /**
+ * Matches one generated per-component props block —
+ * `type <ClassName>Props = {\n …members… \n};` — capturing the class-name stem
+ * (group 1, e.g. `AuroButton` from `AuroButtonProps`) and the block body (group
+ * 2). The trailing `\n};` at column 0 bounds the block; member lines are indented
+ * so the non-greedy body stops at the first closing brace. This also matches the
+ * fixed `BaseProps` block, which {@link labelComponentMembers} filters out by
+ * class name (`BaseEvents` has no `Props` suffix, so it never matches).
+ */
+const PROPS_BLOCK = /^type (\w+)Props = \{\n([\s\S]*?)\n\};$/gm;
+
+/** Start of every single-line JSDoc the tool emits for a component member. */
+const MEMBER_JSDOC_OPEN = /\/\*\* /g;
+
+/**
+ * The Svelte language server flattens each element's type
+ * (`Partial<<Name>Props & BaseProps & BaseEvents>`) into one alphabetized
+ * completion list with identical icons, so a component's own members (`variant`,
+ * `shape`) are visually indistinguishable from the inherited global HTML
+ * attributes (`id`, `class`, `title`). We can't change the icon or grouping (the
+ * language server owns those), but we *can* prefix a marker into the JSDoc that
+ * shows in the hover/completion docs pane.
+ *
+ * For every member inside a per-component `type <Name>Props` block, prefix
+ * `【<label>】 ` onto its JSDoc. `<label>` is the tag the consumer actually
+ * writes in markup — the registered tag when the project renamed it, falling back
+ * to the component class name when it kept the default `auro-*` tag (so the marker
+ * never just echoes the obvious default). `markerByClass` is keyed by class name
+ * (`declaration.name`), which is exactly the `<Name>` stem of each props block.
+ * Blocks whose stem is not a known component — `BaseProps` — are returned
+ * untouched, so inherited attributes stay unmarked and remain the visual "other"
+ * group. Members without JSDoc (e.g. the Svelte 5 `"onNAME"` handler sibling) have
+ * nothing to prefix and pass through unchanged.
+ */
+function labelComponentMembers(
+  contents: string,
+  markerByClass: ReadonlyMap<string, string>,
+): string {
+  return contents.replace(PROPS_BLOCK, (whole, className, body) => {
+    const label = markerByClass.get(className);
+    if (label === undefined) {
+      return whole;
+    }
+    const marked = body.replace(MEMBER_JSDOC_OPEN, `/** 【${label}】 `);
+    return `type ${className}Props = {\n${marked}\n};`;
+  });
+}
+
+/**
+ * Build the class-name → marker-label map {@link labelComponentMembers} consumes.
+ * The label is the registered tag (what the consumer writes in markup); when the
+ * project kept the component's default `auro-*` tag we fall back to the class name
+ * rather than repeat the obvious default. Keyed by `declaration.name` to match the
+ * `<Name>Props` block stems the tool emits.
+ */
+function markerLabelsByClass(
+  components: readonly ResolvedComponent[],
+  resolvedTags: ReadonlyMap<string, string>,
+): Map<string, string> {
+  return new Map(
+    components.map((component) => {
+      const defaultTag = component.tagName;
+      const resolvedTag = resolvedTags.get(defaultTag) ?? defaultTag;
+      const label =
+        resolvedTag === defaultTag ? component.declaration.name : resolvedTag;
+      return [component.declaration.name, label];
+    }),
+  );
+}
+
+/**
  * Wrap the tool's module-scoped `declare namespace svelteHTML` in `declare
  * global { … }` so it augments the global `svelteHTML` namespace the Svelte
  * language server reads — the same pattern auro-cli's own per-component
@@ -119,6 +191,7 @@ export function buildSvelteTypes(
   resolvedTags: ReadonlyMap<string, string>,
 ): EditorArtifact {
   const manifest = buildManifest(components, resolvedTags);
+  const markerByClass = markerLabelsByClass(components, resolvedTags);
 
   const contents = withTempDir((outdir) => {
     generateSvelteTypes(manifest, {
@@ -135,7 +208,9 @@ export function buildSvelteTypes(
   return {
     filename: SVELTE_TYPES_PATH,
     contents: ensureTrailingNewline(
-      globalizeSvelteNamespace(addSvelte5EventHandlers(contents)),
+      globalizeSvelteNamespace(
+        addSvelte5EventHandlers(labelComponentMembers(contents, markerByClass)),
+      ),
     ),
   };
 }

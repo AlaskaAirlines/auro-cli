@@ -212,6 +212,24 @@ fixture + a `tsc` smoke).
 > event-name convention matches what the JSX tool already emits; components with no
 > events pass through unchanged. Same post-processing seam as the module→global
 > `svelteHTML` rewrite — both compensate for output the community tool can't express.
+>
+> **DECISION UPDATE (resolved) — Svelte component members are labeled to stand out
+> from inherited global HTML attributes.** Each element's Svelte type is
+> `Partial<<Name>Props & BaseProps & BaseEvents>`; the language server flattens that
+> into one alphabetized completion list with identical icons, so a component's own
+> members (`variant`, `shape`) are visually indistinguishable from inherited global
+> HTML attributes (`id`, `class`, `title`). The language server owns list grouping
+> and icons — a custom sort/section or a distinct completion "kind" is not
+> achievable from the `.d.ts` — but the JSDoc *is* ours. A third post-process
+> ({@link labelComponentMembers} in [svelteTypes.ts](../src/init/editors/svelteTypes.ts))
+> prefixes a `【<label>】` marker onto the JSDoc of every member inside a
+> per-component `type <Name>Props` block, so the docs/hover pane shows which members are
+> component-owned. `<label>` is the tag the consumer writes in markup — the
+> **registered tag** when the project renamed it (`myapp-button`), falling back to
+> the **class name** (`AuroButton`) when the default `auro-*` tag was kept, so the
+> marker never just echoes the obvious default. `BaseProps` (inherited HTML attrs)
+> is matched by the block regex but filtered out by class name, so those stay
+> unmarked and remain the visual "other" group. Same seam as the two passes above.
 
 ## Task breakdown
 
