@@ -766,6 +766,63 @@ test("--jsx appends auro-types to an existing tsconfig include", async (t) => {
   );
 });
 
+test("--svelte appends auro-types to an existing jsconfig include", async (t) => {
+  // A JS-based Svelte project keeps a jsconfig.json (not tsconfig.json); its
+  // explicit `include` won't cover auro-types/ until init appends it. This is the
+  // manual jsconfig edit consumers had to make by hand before.
+  const cwd = await tempCwd(t);
+  await installRealPackage(cwd, "auro-button");
+  await writeFile(
+    path.join(cwd, "jsconfig.json"),
+    JSON.stringify(
+      { compilerOptions: { checkJs: true }, include: ["src/**/*"] },
+      null,
+      2,
+    ),
+  );
+  stubEditorRun(t, cwd);
+  captureWrite(t, process.stderr);
+
+  await runInit({ prefix: "myapp-", svelte: true });
+
+  const jsconfig = JSON.parse(await readOutput(cwd, "jsconfig.json"));
+  assert.deepEqual(
+    jsconfig.include,
+    ["src/**/*", "auro-types"],
+    "entry appended to jsconfig include",
+  );
+  assert.equal(
+    jsconfig.compilerOptions.checkJs,
+    true,
+    "pre-existing options preserved",
+  );
+});
+
+test("tsconfig wins over jsconfig when both exist", async (t) => {
+  // TypeScript ignores jsconfig.json when a tsconfig.json is present, so init
+  // wires the tsconfig and leaves the jsconfig untouched.
+  const cwd = await tempCwd(t);
+  await installRealPackage(cwd, "auro-button");
+  await writeFile(
+    path.join(cwd, "tsconfig.json"),
+    JSON.stringify({ include: ["src"] }, null, 2),
+  );
+  const jsconfigRaw = JSON.stringify({ include: ["js"] }, null, 2);
+  await writeFile(path.join(cwd, "jsconfig.json"), jsconfigRaw);
+  stubEditorRun(t, cwd);
+  captureWrite(t, process.stderr);
+
+  await runInit({ prefix: "myapp-", svelte: true });
+
+  const tsconfig = JSON.parse(await readOutput(cwd, "tsconfig.json"));
+  assert.deepEqual(tsconfig.include, ["src", "auro-types"], "tsconfig wired");
+  assert.equal(
+    await readOutput(cwd, "jsconfig.json"),
+    jsconfigRaw,
+    "jsconfig left byte-for-byte untouched",
+  );
+});
+
 test("--svelte writes the Svelte types artifact", async (t) => {
   const cwd = await tempCwd(t);
   await installRealPackage(cwd, "auro-button");

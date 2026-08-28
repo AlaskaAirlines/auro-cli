@@ -145,9 +145,10 @@ export function mergeVsCodeSettings(
 }
 
 /**
- * Put the framework types dir on the TypeScript program via `tsconfig.json`,
- * following the four-branch decision tree that keeps the default `**` + `/*`
- * include working:
+ * Put the framework types dir on the TypeScript program via a `tsconfig.json` or
+ * `jsconfig.json` (identical `include`/`files` schema — a JS Svelte/JSX project
+ * uses the `jsconfig.json` variant), following the four-branch decision tree that
+ * keeps the default `**` + `/*` include working:
  *  1. `include` present (array) → append the entry if missing.
  *  2. `files` present, no `include` → specifying `files` suppresses the default
  *     glob, so add `include: [entry]` to bring the types back in.
@@ -156,13 +157,15 @@ export function mergeVsCodeSettings(
  *  4. `include` present but not an array, or the file is unparseable → refuse
  *     and warn.
  *
- * Idempotent: an entry already in `include` is a no-op.
+ * `configName` is used only for the parse/refusal messages so they name the file
+ * actually being merged. Idempotent: an entry already in `include` is a no-op.
  */
 export function mergeTsconfigInclude(
   existing: string,
   entry: string = TSCONFIG_INCLUDE_ENTRY,
+  configName = "tsconfig.json",
 ): MergeResult {
-  const parsed = parseObject(existing, "tsconfig.json");
+  const parsed = parseObject(existing, configName);
   if ("warning" in parsed) {
     return { contents: existing, changed: false, warning: parsed.warning };
   }
@@ -188,7 +191,7 @@ export function mergeTsconfigInclude(
     return {
       contents: existing,
       changed: false,
-      warning: `tsconfig.json "${TSCONFIG_INCLUDE_KEY}" is not an array — leaving it untouched.`,
+      warning: `${configName} "${TSCONFIG_INCLUDE_KEY}" is not an array — leaving it untouched.`,
     };
   }
 
