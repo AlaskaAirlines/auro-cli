@@ -326,7 +326,21 @@ fixtures + the new dependencies, matching PT-M1's front-loading.
      `componentTypePath` imports), the Svelte `.d.ts`; plus merge fixtures for
      `settings.json` and `tsconfig.json` (empty / unrelated-keys / pre-existing entry).
      Freeze the filenames/paths/wiring-key shapes.
-2. **Build the three pure builders in `src/init/editors/`.**
+2. **Build the three pure builders in `src/init/editors/`.** ✅ **DONE** (AB#1628542,
+   uncommitted): shared plumbing in [manifest.ts](../src/init/editors/manifest.ts)
+   (`EditorArtifact`, `resolvedTagFor`, `buildManifest` pre-swap, `importPathsByClass`,
+   `withTempDir`); the three builders
+   ([htmlCustomData.ts](../src/init/editors/htmlCustomData.ts),
+   [jsxTypes.ts](../src/init/editors/jsxTypes.ts),
+   [svelteTypes.ts](../src/init/editors/svelteTypes.ts)) and both merges
+   ([settings.ts](../src/init/editors/settings.ts)). The three golden fixtures were
+   **regenerated from the builders** over the shared synthetic inputs
+   ([support.editors.ts](../test/support.editors.ts) — the same BUTTON/INPUT the PT-M1
+   AGENTS.md uses), making the builders the source of truth and shrinking the JSX
+   fixture 51 KB → 8.8 KB. Byte-exact golden + tag-swap/class-import/hover +
+   merge-scenario tests in
+   [init.editors.builders.test.ts](../test/init.editors.builders.test.ts) (27 cases).
+   Verify gate green — 192 tests, `tsc --noEmit`, scoped biome, build.
    - `buildHtmlCustomData` (synthetic-manifest tag swap → `getVsCodeHtmlCustomData`).
    - `buildJsxTypes` (`tagFormatter` + `componentTypePath` from `importPath`; use the
      returned string; discard the tool's temp write).

@@ -42,6 +42,14 @@ export const HTML_CUSTOM_DATA_SETTINGS_KEY = "html.customData";
  */
 export const HTML_CUSTOM_DATA_SETTINGS_ENTRY = `./${VSCODE_DIR}/${HTML_CUSTOM_DATA_FILENAME}`;
 
+/**
+ * The HTML custom-data artifact's path **relative to the project root** — the
+ * `filename` a builder returns and `init` writes. Same target as
+ * {@link HTML_CUSTOM_DATA_SETTINGS_ENTRY} without the leading `./` (a path to
+ * write vs. a settings-file entry). Forward slashes; `init` splits on `/` to join.
+ */
+export const HTML_CUSTOM_DATA_PATH = `${VSCODE_DIR}/${HTML_CUSTOM_DATA_FILENAME}`;
+
 // ---------------------------------------------------------------------------
 // Framework TypeScript types (TS + Svelte language-server targets)
 // ---------------------------------------------------------------------------
@@ -63,6 +71,20 @@ export const JSX_TYPES_FILENAME = "auro-jsx.d.ts";
 
 /** Svelte type declarations (augments Svelte element types). */
 export const SVELTE_TYPES_FILENAME = "auro-svelte.d.ts";
+
+/**
+ * The JSX `.d.ts` bundle's path **relative to the project root** — the `filename`
+ * its builder returns and `init` writes. Derived from the types dir + filename so
+ * it always lands where {@link TSCONFIG_INCLUDE_ENTRY} points. Forward slashes.
+ */
+export const JSX_TYPES_PATH = `${FRAMEWORK_TYPES_DIR}/${JSX_TYPES_FILENAME}`;
+
+/**
+ * The Svelte `.d.ts` bundle's path **relative to the project root** — the
+ * `filename` its builder returns and `init` writes. Derived from the types dir +
+ * filename so it always lands where {@link TSCONFIG_INCLUDE_ENTRY} points.
+ */
+export const SVELTE_TYPES_PATH = `${FRAMEWORK_TYPES_DIR}/${SVELTE_TYPES_FILENAME}`;
 
 /** The `tsconfig.json` key that puts declaration files on the TypeScript program. */
 export const TSCONFIG_INCLUDE_KEY = "include";
