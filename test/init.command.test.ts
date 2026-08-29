@@ -4,7 +4,9 @@ import path from "node:path";
 import process from "node:process";
 import { type TestContext, test } from "node:test";
 import inquirer from "inquirer";
+import { simpleGit } from "simple-git";
 import { runInit } from "../src/commands/init.ts";
+import { findIgnored } from "../src/init/gitignore.ts";
 import {
   captureWrite,
   ExitError,
@@ -1332,6 +1334,79 @@ test("warns with a yellow banner when the VS Code markup target is off", async (
     stderr(),
     /VS Code markup IntelliSense is off/u,
     "the yellow markup-off banner fires",
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Git-ignore reconciliation — every file init writes is meant to be committed,
+// so a `.gitignore` rule that silently drops one is surfaced (red banner) and,
+// with consent (`--yes`), un-ignored. Advisory: the run never fails over it.
+// See src/init/gitignore.ts and reconcileGitignore in runInit.
+// ---------------------------------------------------------------------------
+
+test("--yes un-ignores a .gitignore-hidden editor artifact and reports it", async (t) => {
+  const cwd = await tempCwd(t);
+  await installRealPackage(cwd, "auro-button");
+  // A real repo whose .gitignore drops the whole .vscode/ dir — the classic case
+  // where a --vscode artifact is written, works locally, and is never committed.
+  await simpleGit({ baseDir: cwd }).init();
+  await writeFile(path.join(cwd, ".gitignore"), ".vscode/\n");
+  t.mock.method(process, "cwd", () => cwd);
+  t.mock.method(process, "exit", () => {
+    throw new Error("git-ignore reconciliation must never exit the run");
+  });
+  const stderr = captureWrite(t, process.stderr);
+  t.mock.method(globalThis, "fetch", async () => {
+    throw new Error("init must not hit the network");
+  });
+
+  await runInit({ prefix: "myapp-", vscode: true, yes: true, offline: true });
+
+  // The artifact was written under the ignored dir…
+  const artifact = ".vscode/auro.html-custom-data.json";
+  await readOutput(cwd, artifact);
+  // …the red banner named it and the auto-fix reported success…
+  const err = stderr();
+  assert.match(err, /git-ignored and won't be committed/u);
+  assert.ok(err.includes(artifact), "the banner names the ignored artifact");
+  assert.match(err, /Un-ignored \d+ file\(s\)/u, "the fix reports success");
+  // …the negations landed in .gitignore…
+  const gitignore = await readOutput(cwd, ".gitignore");
+  assert.match(gitignore, /Added by auro init/u);
+  assert.match(gitignore, /!\.vscode\/auro\.html-custom-data\.json/u);
+  // …and git itself now agrees the file is no longer ignored.
+  assert.deepEqual(
+    await findIgnored(cwd, [artifact]),
+    [],
+    "the artifact is tracked-eligible after the fix",
+  );
+});
+
+test("no git-ignored banner when nothing init wrote is ignored", async (t) => {
+  const cwd = await tempCwd(t);
+  await installRealPackage(cwd, "auro-button");
+  // A repo whose .gitignore targets something unrelated — none of init's output
+  // is ignored, so the reconciliation is a silent no-op (no false positive).
+  await simpleGit({ baseDir: cwd }).init();
+  await writeFile(path.join(cwd, ".gitignore"), "node_modules/\n*.log\n");
+  t.mock.method(process, "cwd", () => cwd);
+  t.mock.method(process, "exit", () => {
+    throw new Error("should not exit on success");
+  });
+  const stderr = captureWrite(t, process.stderr);
+  t.mock.method(globalThis, "fetch", async () => {
+    throw new Error("init must not hit the network");
+  });
+
+  await runInit({ prefix: "myapp-", vscode: true, yes: true, offline: true });
+
+  await readOutput(cwd, ".vscode/auro.html-custom-data.json"); // written
+  const err = stderr();
+  assert.doesNotMatch(err, /git-ignored and won't be committed/u);
+  // The reconciliation never appended its header to the untouched .gitignore.
+  assert.doesNotMatch(
+    await readOutput(cwd, ".gitignore"),
+    /Added by auro init/u,
   );
 });
 
