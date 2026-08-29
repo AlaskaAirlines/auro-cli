@@ -1,6 +1,8 @@
 type BaseProps = {
   /** Defines the element's semantic role for accessibility APIs. */
   role?: string;
+  /** The position of the element in the sequential keyboard navigation order. */
+  tabindex?: number;
   /** Identifies the currently active descendant of a composite widget. */
   "aria-activedescendant"?: string;
   /** Whether assistive technologies present all, or only parts of, changed regions. */

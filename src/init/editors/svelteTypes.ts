@@ -24,11 +24,13 @@
  * set the JSX tool injects, in Svelte-4 `on:` directive form, lib.dom types only)
  * so those handlers type-check on every element.
  *
- * The tool's `BaseProps` omits `role`, `aria-*`, and `data-*`, and the generated
- * element type *replaces* the tag's intrinsic type — so `<auro-button
- * aria-label="Save" />` is flagged as an unknown prop. {@link injectGlobalAttributes}
- * (`role: true`, since Svelte's `BaseProps` lacks even `role`) splices the standard
- * ARIA / `data-*` set into `BaseProps`; the tool exposes no option for it.
+ * The tool's `BaseProps` omits `role`, `tabindex`, `aria-*`, and `data-*` (it spells
+ * tab order as React's camelCase `tabIndex`), and the generated element type
+ * *replaces* the tag's intrinsic type — so `<auro-button aria-label="Save" />` and
+ * `<auro-button tabindex="0" />` are flagged as unknown props.
+ * {@link injectGlobalAttributes} (`svelteGlobals: true`, since Svelte's `BaseProps`
+ * lacks even the lowercase `role` / `tabindex` HTML globals) splices those plus the
+ * standard ARIA / `data-*` set into `BaseProps`; the tool exposes no option for it.
  *
  * Post-processing passes fix what the community tool can't express on its own:
  * {@link labelComponentMembers} (mark component-owned members so IntelliSense
@@ -296,8 +298,9 @@ export function buildSvelteTypes(
           addSvelte5EventHandlers(
             labelComponentMembers(contents, markerByClass),
           ),
-          // Svelte's BaseProps lacks `role` too, so add it alongside the ARIA set.
-          { role: true },
+          // Svelte's BaseProps lacks the lowercase `role` / `tabindex` HTML
+          // globals too, so add them alongside the ARIA set.
+          { svelteGlobals: true },
         ),
       ),
     ),
