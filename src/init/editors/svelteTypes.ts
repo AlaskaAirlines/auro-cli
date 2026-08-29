@@ -167,6 +167,39 @@ function addSvelte5EventHandlers(contents: string): string {
 }
 
 /**
+ * A component's own CEM events must win over the shared native `BaseEvents` block.
+ *
+ * Every element is mapped as `Partial<<Name>Props & BaseProps & BaseEvents>`, and
+ * {@link NATIVE_DOM_EVENTS} folds 38 native handlers into `BaseEvents`. When a CEM
+ * declares an event whose name collides with a native one (`input`, `click`,
+ * `change`, `submit`, `load`, `error`, `scroll`, …), that name lives in BOTH
+ * `<Name>Props` (typed `(e: CustomEvent<…>) => void` from the manifest) and
+ * `BaseEvents` (typed `(e: Event | MouseEvent | …) => void`). An intersection of
+ * two object types intersects same-named members, so the mapped member becomes
+ * `((e: CustomEvent<…>) => void) & ((e: Event) => void)` — a handler must satisfy
+ * BOTH halves, and the intended CustomEvent handler is rejected by the native
+ * `Event` half (parameter contravariance). A legitimate handler becomes an error.
+ *
+ * Rewrite each mapping line so `BaseEvents` is `Omit`ted of the keys the component
+ * redeclares: `Partial<<Name>Props & BaseProps & Omit<BaseEvents, keyof <Name>Props>>`.
+ * The CEM's CustomEvent signature is then the sole member for a declared name, so
+ * the component's own event wins; native handlers stay intact for every name the
+ * component does NOT declare (a component with no CEM events is unaffected — its
+ * `keyof <Name>Props` names no event, so nothing is omitted). Only `BaseEvents` is
+ * omitted: `keyof <Name>Props` also names attribute keys, but `BaseEvents` holds
+ * only event keys, so attribute inheritance from `BaseProps` is untouched.
+ */
+const CUSTOM_ELEMENT_MAPPING =
+  /^(\s*"[^"]+": Partial<(\w+)Props & BaseProps &) BaseEvents(>;)$/gm;
+
+function overrideCollidingBaseEvents(contents: string): string {
+  return contents.replace(
+    CUSTOM_ELEMENT_MAPPING,
+    (_match, head, name, tail) => `${head} Omit<BaseEvents, keyof ${name}Props>${tail}`,
+  );
+}
+
+/**
  * Matches one generated per-component props block —
  * `type <ClassName>Props = {\n …members… \n};` — capturing the class-name stem
  * (group 1, e.g. `AuroButton` from `AuroButtonProps`) and the block body (group
@@ -294,13 +327,15 @@ export function buildSvelteTypes(
     filename: SVELTE_TYPES_PATH,
     contents: ensureTrailingNewline(
       globalizeSvelteNamespace(
-        injectGlobalAttributes(
-          addSvelte5EventHandlers(
-            labelComponentMembers(contents, markerByClass),
+        overrideCollidingBaseEvents(
+          injectGlobalAttributes(
+            addSvelte5EventHandlers(
+              labelComponentMembers(contents, markerByClass),
+            ),
+            // Svelte's BaseProps lacks the lowercase `role` / `tabindex` HTML
+            // globals too, so add them alongside the ARIA set.
+            { svelteGlobals: true },
           ),
-          // Svelte's BaseProps lacks the lowercase `role` / `tabindex` HTML
-          // globals too, so add them alongside the ARIA set.
-          { svelteGlobals: true },
         ),
       ),
     ),
