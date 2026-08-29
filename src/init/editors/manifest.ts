@@ -264,3 +264,163 @@ export function withTempDir<T>(fn: (dir: string) => T): T {
 export function ensureTrailingNewline(contents: string): string {
   return contents.endsWith("\n") ? contents : `${contents}\n`;
 }
+
+/**
+ * The standard WAI-ARIA state/property attributes plus a `data-*` catch-all — the
+ * accessibility/data global attributes the community JSX/Svelte tools omit from
+ * their hardcoded `BaseProps`. Each generated element type
+ * (`Partial<Props & BaseProps & BaseEvents>`) *replaces* the tag's intrinsic
+ * element type, so any attribute absent here is flagged as unknown — without this
+ * block `<auro-button aria-label="Save" />` errors as an unknown prop.
+ *
+ * Value types mirror React's `AriaAttributes`; boolean-ish unions are inlined
+ * (`boolean | "true" | "false"`) so the whole block is a single splice needing no
+ * extra top-level alias. The `data-*` entry is a **template-literal** index
+ * signature (not `[key: string]`), so it constrains only `data-*` keys and does
+ * not force the tools' existing `style` / `ref` / `tabIndex` members to conform.
+ * Lines are 2-space indented to match the tools' prettier output. `role` is not
+ * here — the JSX tool already emits it; {@link injectGlobalAttributes} prepends it
+ * for the Svelte target, whose `BaseProps` lacks it.
+ */
+const GLOBAL_ARIA_ATTRS = `  /** Identifies the currently active descendant of a composite widget. */
+  "aria-activedescendant"?: string;
+  /** Whether assistive technologies present all, or only parts of, changed regions. */
+  "aria-atomic"?: boolean | "true" | "false";
+  /** Whether inputting text triggers display of one or more predictions. */
+  "aria-autocomplete"?: "none" | "inline" | "list" | "both";
+  /** Defines a string value that labels the current element (braille). */
+  "aria-braillelabel"?: string;
+  /** Defines a human-readable, author-localized abbreviated role description (braille). */
+  "aria-brailleroledescription"?: string;
+  /** Whether an element is being modified and assistive technologies may wait. */
+  "aria-busy"?: boolean | "true" | "false";
+  /** The current "checked" state of checkboxes, radio buttons, and other widgets. */
+  "aria-checked"?: boolean | "false" | "mixed" | "true";
+  /** Defines the total number of columns in a table, grid, or treegrid. */
+  "aria-colcount"?: number;
+  /** Defines an element's column index or position within a table, grid, or treegrid. */
+  "aria-colindex"?: number;
+  /** A human-readable text alternative of aria-colindex. */
+  "aria-colindextext"?: string;
+  /** Defines the number of columns spanned by a cell or gridcell. */
+  "aria-colspan"?: number;
+  /** Identifies the element(s) whose contents or presence are controlled by this element. */
+  "aria-controls"?: string;
+  /** The element that represents the current item within a container or set. */
+  "aria-current"?: boolean | "false" | "true" | "page" | "step" | "location" | "date" | "time";
+  /** Identifies the element(s) that describes the object. */
+  "aria-describedby"?: string;
+  /** Defines a string value that describes or annotates the current element. */
+  "aria-description"?: string;
+  /** Identifies the element that provides a detailed, extended description. */
+  "aria-details"?: string;
+  /** Whether the element is perceivable but disabled, so not editable or operable. */
+  "aria-disabled"?: boolean | "true" | "false";
+  /** What functions can be performed when a dragged object is released. */
+  "aria-dropeffect"?: "none" | "copy" | "execute" | "link" | "move" | "popup";
+  /** Identifies the element that provides an error message for the object. */
+  "aria-errormessage"?: string;
+  /** Whether the element, or another grouping element it controls, is expanded. */
+  "aria-expanded"?: boolean | "true" | "false";
+  /** The next element(s) in an alternate reading order of content. */
+  "aria-flowto"?: string;
+  /** Whether an element is in a "grabbed" state in a drag-and-drop operation. */
+  "aria-grabbed"?: boolean | "true" | "false";
+  /** Indicates the availability and type of an interactive popup element. */
+  "aria-haspopup"?: boolean | "false" | "true" | "menu" | "listbox" | "tree" | "grid" | "dialog";
+  /** Whether the element is exposed to an accessibility API. */
+  "aria-hidden"?: boolean | "true" | "false";
+  /** Whether the entered value does not conform to the expected format. */
+  "aria-invalid"?: boolean | "false" | "true" | "grammar" | "spelling";
+  /** Keyboard shortcuts an author has implemented to activate or focus an element. */
+  "aria-keyshortcuts"?: string;
+  /** A string value that labels the current element. */
+  "aria-label"?: string;
+  /** Identifies the element(s) that labels the current element. */
+  "aria-labelledby"?: string;
+  /** Defines the hierarchical level of an element within a structure. */
+  "aria-level"?: number;
+  /** Indicates that an element will be updated, and how live updates are described. */
+  "aria-live"?: "off" | "assertive" | "polite";
+  /** Whether an element is modal when displayed. */
+  "aria-modal"?: boolean | "true" | "false";
+  /** Whether a text box accepts multiple lines of input or only a single line. */
+  "aria-multiline"?: boolean | "true" | "false";
+  /** Whether the user may select more than one item from the current selectable descendants. */
+  "aria-multiselectable"?: boolean | "true" | "false";
+  /** Whether the element's orientation is horizontal, vertical, or unknown/ambiguous. */
+  "aria-orientation"?: "horizontal" | "vertical";
+  /** Identifies an element in order to define a visual, functional, or contextual relationship. */
+  "aria-owns"?: string;
+  /** A short hint intended to aid the user with data entry when the control has no value. */
+  "aria-placeholder"?: string;
+  /** The number or position of an item in the current set of listitems or treeitems. */
+  "aria-posinset"?: number;
+  /** The current "pressed" state of toggle buttons. */
+  "aria-pressed"?: boolean | "false" | "mixed" | "true";
+  /** Whether the element is not editable but is otherwise operable. */
+  "aria-readonly"?: boolean | "true" | "false";
+  /** What notifications the user agent triggers when the accessibility tree is modified. */
+  "aria-relevant"?: "additions" | "additions removals" | "additions text" | "all" | "removals" | "removals additions" | "removals text" | "text" | "text additions" | "text removals";
+  /** Whether user input is required on the element before a form may be submitted. */
+  "aria-required"?: boolean | "true" | "false";
+  /** A human-readable, author-localized description for the role of an element. */
+  "aria-roledescription"?: string;
+  /** Defines the total number of rows in a table, grid, or treegrid. */
+  "aria-rowcount"?: number;
+  /** Defines an element's row index or position within a table, grid, or treegrid. */
+  "aria-rowindex"?: number;
+  /** A human-readable text alternative of aria-rowindex. */
+  "aria-rowindextext"?: string;
+  /** Defines the number of rows spanned by a cell or gridcell. */
+  "aria-rowspan"?: number;
+  /** The current "selected" state of various widgets. */
+  "aria-selected"?: boolean | "true" | "false";
+  /** Defines the number of items in the current set of listitems or treeitems. */
+  "aria-setsize"?: number;
+  /** Indicates if items in a table or grid are sorted in ascending or descending order. */
+  "aria-sort"?: "none" | "ascending" | "descending" | "other";
+  /** Defines the maximum allowed value for a range widget. */
+  "aria-valuemax"?: number;
+  /** Defines the minimum allowed value for a range widget. */
+  "aria-valuemin"?: number;
+  /** Defines the current value for a range widget. */
+  "aria-valuenow"?: number;
+  /** Defines the human-readable text alternative of aria-valuenow. */
+  "aria-valuetext"?: string;
+  /** Custom data-* attributes for the element. */
+  [key: \`data-\${string}\`]: string | number | boolean | null | undefined;
+`;
+
+/** Matches the opening of the tool-generated `BaseProps` block (JSX form is generic). */
+const BASE_PROPS_OPEN = /(type BaseProps(?:<[^>]*>)? = \{\n)/;
+
+/** The `role` member, prepended for the Svelte target whose `BaseProps` omits it. */
+const ROLE_MEMBER =
+  "  /** Defines the element's semantic role for accessibility APIs. */\n  role?: string;\n";
+
+/**
+ * Splice the standard ARIA / `data-*` global attributes ({@link GLOBAL_ARIA_ATTRS})
+ * into a generated file's `BaseProps` block, immediately after its opening brace —
+ * mirroring how `NATIVE_DOM_EVENTS` is folded into `BaseEvents`. Pass `role: true`
+ * for the Svelte target (its `BaseProps` lacks `role`); the JSX tool already emits
+ * `role`, so pass `role: false` there to avoid a duplicate member.
+ *
+ * Throws if the `BaseProps` opening is absent (e.g. an upstream reflow of the
+ * community tool) rather than returning the string unchanged — a silent no-op
+ * would ship element types that reject `aria-*`, so we surface the drift as a
+ * loud, test-caught failure, matching `globalizeSvelteNamespace`'s convention.
+ */
+export function injectGlobalAttributes(
+  contents: string,
+  { role }: { role: boolean },
+): string {
+  if (!BASE_PROPS_OPEN.test(contents)) {
+    throw new Error(
+      "the JSX/Svelte generator no longer emits a recognizable `type BaseProps = {` " +
+        "block; the global-attribute injection in manifest.ts must be updated to match.",
+    );
+  }
+  const block = `${role ? ROLE_MEMBER : ""}${GLOBAL_ARIA_ATTRS}`;
+  return contents.replace(BASE_PROPS_OPEN, `$1${block}`);
+}

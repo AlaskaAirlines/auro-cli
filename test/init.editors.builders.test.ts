@@ -210,6 +210,28 @@ test("Svelte includes native DOM events in both the directive and property form"
 });
 
 // ---------------------------------------------------------------------------
+// Global attributes: the generated element type REPLACES the tag's intrinsic
+// type, and the tools' hardcoded BaseProps omits aria-*/data-* (Svelte omits
+// `role` too). injectGlobalAttributes splices the standard ARIA + data-* set in,
+// so valid a11y markup (`aria-label`) type-checks without loosening component-prop
+// validation. Guards the injection beyond the opaque byte-exact golden.
+// ---------------------------------------------------------------------------
+
+test("JSX includes ARIA and data-* global attributes", () => {
+  const jsx = buildJsxTypes(COMPONENTS, RESOLVED_TAGS).contents;
+  assert.match(jsx, /"aria-label"\?: string;/u);
+  assert.match(jsx, /\[key: `data-\$\{string\}`\]:/u);
+});
+
+test("Svelte includes role, ARIA, and data-* global attributes", () => {
+  const svelte = buildSvelteTypes(COMPONENTS, RESOLVED_TAGS).contents;
+  // Svelte's BaseProps lacks `role` entirely, so the injection adds it too.
+  assert.match(svelte, /\n {2}role\?: string;/u);
+  assert.match(svelte, /"aria-label"\?: string;/u);
+  assert.match(svelte, /\[key: `data-\$\{string\}`\]:/u);
+});
+
+// ---------------------------------------------------------------------------
 // Member labeling: the Svelte language server flattens each element's type into
 // one completion list where a component's own members are indistinguishable from
 // inherited global HTML attributes. buildSvelteTypes marks component members in
