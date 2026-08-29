@@ -27,7 +27,7 @@ import type { CemAttribute, CemDeclaration, Manifest } from "#utils/cem.js";
  * a TypeScript parser; anything that fails it is dropped so the generator falls
  * back to its default handler/prop type.
  */
-function hasBalancedDelimiters(text: string): boolean {
+export function hasBalancedDelimiters(text: string): boolean {
   const closeToOpen: Record<string, string> = {
     ")": "(",
     "]": "[",
@@ -90,7 +90,7 @@ function withSafeType<T extends { type?: { text?: string } }>(entry: T): T {
  * @see docs/pt-m2-completion-plan.md → Risks/open questions, "Private-reflected
  *   attributes leak into autocomplete".
  */
-function isPrivateReflection(
+export function isPrivateReflection(
   attribute: CemAttribute,
   memberPrivacyByName: ReadonlyMap<string, string | undefined>,
 ): boolean {
