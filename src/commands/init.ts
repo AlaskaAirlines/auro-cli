@@ -11,8 +11,11 @@
  * planner deliberately excludes: the interactive prefix prompt/confirm and the
  * non-interactive TTY/CI guard.
  *
- * It never touches `.gitignore` — `auro.config.json` is a committed artifact so
- * regeneration is deterministic across a team and in CI.
+ * Its generated files are committed artifacts — `auro.config.json` and the rest
+ * are meant to be checked in so regeneration is deterministic across a team and in
+ * CI. To protect that, a post-write check asks git whether any file it wrote is
+ * ignored and, with consent, appends the `.gitignore` negations that keep it
+ * tracked (it never *adds* ignore rules). See `reconcileGitignore`/`gitignore.ts`.
  *
  * After writing, `init` runs the same best-effort **outdated-release check** as
  * `auro context`/`auro component` (a bordered banner on stderr for any installed
@@ -46,6 +49,7 @@ import {
   writeEditorArtifacts,
 } from "#init/editors/write.js";
 import { groundingFiles } from "#init/generator.js";
+import { findIgnored, unignore } from "#init/gitignore.js";
 import { AGENTS_FILENAME, CLAUDE_FILENAME } from "#init/layout.js";
 import {
   detectLegacyFormkit,
@@ -545,11 +549,98 @@ export async function runInit(options: InitOptions): Promise<void> {
     );
   }
 
+  // Git-ignore reconciliation. Every file above is meant to be committed so a team
+  // and CI share one deterministic set; a `.gitignore` rule (commonly `.vscode/`)
+  // silently drops one from version control. Detect any ignored path and — with
+  // consent — append the negations that keep it tracked. Advisory: never fails.
+  const touched = [
+    ...new Set([
+      AGENTS_FILENAME,
+      CLAUDE_FILENAME,
+      CONFIG_FILENAME,
+      ...editorReport.written,
+    ]),
+  ];
+  await reconcileGitignore(cwd, touched, options);
+
   // Advisory, network-dependent — mirror `auro context`. Warn last so it's the
   // final thing on screen, not scrolled off by the write summary and warnings.
   // `--offline` skips it, keeping the run fully network-free.
   if (!options.offline) {
     await reportOutdated(components);
+  }
+}
+
+/**
+ * Detect files `auro init` wrote that git would ignore (so they'd never be
+ * committed) and, with consent, append `.gitignore` negations to re-include them.
+ * A prominent red banner surfaces the problem; the fix is offered interactively
+ * (confirm, default yes) or applied straight away under `--yes`. A pure
+ * non-interactive/CI run without `--yes` only warns — it never edits `.gitignore`
+ * unprompted. Advisory throughout: never throws, never exits. See `gitignore.ts`.
+ */
+async function reconcileGitignore(
+  cwd: string,
+  touched: string[],
+  options: InitOptions,
+): Promise<void> {
+  const ignored = await findIgnored(cwd, touched);
+  if (ignored.length === 0) {
+    return;
+  }
+
+  console.error(
+    renderWarningBanner(
+      `⚠  ${ignored.length} file(s) auro init wrote are git-ignored and won't be committed`,
+      [
+        ...ignored,
+        "These are meant to be committed so your team and CI share the same grounding/IntelliSense.",
+      ],
+      "red",
+    ),
+  );
+
+  // Pure CI/non-interactive without --yes: warn only, never edit .gitignore unasked.
+  if (isNonInteractive(options) && !options.yes) {
+    console.error(
+      "⚠ Un-ignore them in .gitignore (or re-run with --yes) so they get committed.",
+    );
+    return;
+  }
+
+  // Interactive without --yes: confirm before touching .gitignore. --yes: proceed.
+  if (!options.yes) {
+    const { fix } = await inquirer.prompt<{ fix: boolean }>([
+      {
+        type: "confirm",
+        name: "fix",
+        message:
+          "Add entries to .gitignore so these files stay tracked (committed)?",
+        default: true,
+      },
+    ]);
+    if (!fix) {
+      return;
+    }
+  }
+
+  const { fixed, unfixable } = await unignore(cwd, ignored);
+  if (fixed.length > 0) {
+    console.error(
+      `✔ Un-ignored ${fixed.length} file(s) in .gitignore so they will be committed.`,
+    );
+  }
+  if (unfixable.length > 0) {
+    console.error(
+      renderWarningBanner(
+        `⚠  ${unfixable.length} file(s) are still git-ignored — un-ignore them by hand`,
+        [
+          ...unfixable,
+          "A parent directory is ignored by a rule auro init won't rewrite; edit .gitignore to re-include these paths.",
+        ],
+        "red",
+      ),
+    );
   }
 }
 
