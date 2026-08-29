@@ -15,7 +15,7 @@ TypeScript types** so the same three PT-M1 consumer apps (vanilla **and React JS
 and Svelte**) all get real IntelliSense, not just the HTML/vanilla one. This is a
 different mechanism from custom-data (see [Two mechanisms](#two-mechanisms-why-htmlcustomdata-isnt-enough)),
 so the ticket text and the ~1–2 ew estimate should be updated to match (see
-[Admin](#build-order--action-checklist), step 7). If the wider scope is rejected
+[Admin](#build-order--action-checklist), step 8). If the wider scope is rejected
 downstream, the framework-type steps are cleanly separable back into a follow-up
 milestone — they are additive emit targets over the same seam.
 
@@ -55,8 +55,11 @@ central architectural fact of the expanded PT-M2.
 `html.customData` is self-contained JSON consumed by the HTML server and **cannot**
 reach JSX or Svelte — those route through the TypeScript / Svelte language servers,
 which are driven by **generated TypeScript type declarations**, not custom-data. PT-M2
-therefore ships **three emit targets over one resolved manifest**: one custom-data
-JSON (HTML) and two `.d.ts` bundles (JSX, Svelte).
+therefore ships **four emit targets over one resolved manifest**: one custom-data
+JSON (HTML), two `.d.ts` bundles (JSX, Svelte), and — added by the fourth-target
+decision below — a CSS `::part()` snippets file for the CSS language service (the
+`::part()` gap the other three can't reach). The three original targets are the spine
+of this plan; the CSS-snippets target is documented in its own DECISION UPDATE.
 
 ## What PT-M1 already gives us (reuse inventory)
 
@@ -544,10 +547,65 @@ fixtures + the new dependencies, matching PT-M1's front-loading.
      persisted `vscode:true` and re-persists, pinning the frozen flag → persisted ordering.
    - Verify gate green — **227 tests** (204 → +19 detect +1 interactive +3 second-pass),
      `tsc --noEmit`, scoped biome, build.
-6. **Manual verification.** Extend
-   [test/manual-testing-ai-tooling.md](../test/manual-testing-ai-tooling.md) with a
-   **PT-M2 / AB#1628542** section proving the live editor experience across the three
-   real consumer apps (the one thing automation can't assert — task #5):
+6. **Editor-type completeness, correctness hardening, and init UX.** ✅ **DONE**
+   (AB#1628542) — a run of post-audit refinements that took the emitted types from
+   "attributes present" to a faithful, framework-correct element contract, plus the
+   init-command UX/robustness the ticket's *detect-or-prompt / idempotent* intent
+   implies. The mechanism-level *why* for most of these is captured in the DECISION
+   UPDATE blocks under [Proposed architecture](#proposed-architecture); this step is
+   the build-order record that they landed and are gate-green.
+   - **Value types inlined from the CEM** ([`26c68d5`](../)) — attributes carry their
+     real `type.text` unions instead of degrading to `any` (see DECISION UPDATE).
+   - **Private-reflected, description-less attrs dropped** ([`a6ef422`](../)) —
+     internal-state reflections (`data-hover`, `hasValue`, …) no longer surface as
+     public props (see resolved Risk *Private-reflected attributes leak*).
+   - **svelteHTML augmentation globalized** ([`90ae1fa`](../)) — the module-scoped
+     `svelteHTML` block is rewritten to a global augmentation so Svelte completion
+     actually fires (the post-process seam the DECISION UPDATEs reference).
+   - **Global HTML surface added to both frameworks** ([`c1c980b`](../),
+     [`2b8c2c1`](../), [`74552ab`](../)) — `BaseProps` carries ARIA / `role` / `data-*`
+     / lowercase `tabindex`; `BaseEvents` carries the native DOM events — so a consumer
+     gets inherited-attribute and native-event completions alongside a component's own
+     members, in **both** JSX and Svelte.
+   - **Base-member collisions resolved asymmetrically** ([`56fdec1`](../),
+     [`2b8deed`](../)) — `overrideCollidingBaseMembers`: for an event a component
+     redeclares under a native name the **component wins**
+     (`Omit<BaseEvents, keyof <Name>Props>` — its `CustomEvent` signature is strictly
+     more precise); for a global attribute (e.g. `auro-button`'s `tabindex: string`)
+     the **base wins** (`Omit<<Name>Props, keyof BaseProps>` — the global's
+     coercion-aware `number` is what svelte2tsx needs, since a raw CEM `string` would
+     intersect to `never`/`undefined` and reject a valid `tabindex="0"`). Regression-
+     pinned in
+     [init.editors.svelte-event-collision.test.ts](../test/init.editors.svelte-event-collision.test.ts).
+   - **Svelte 5 handler properties** ([`adb2f66`](../)), **component-member labeling**
+     ([`97ffd5b`](../)), and **jsconfig wiring** ([`e1b23d0`](../)) — see their
+     DECISION UPDATEs / the jsconfig Frozen decision.
+   - **CSS `::part()` snippets** ([`00acf2b`](../)) — the fourth emit target (see
+     DECISION UPDATE); [cssSnippets.ts](../src/init/editors/cssSnippets.ts) +
+     [write.ts](../src/init/editors/write.ts).
+   - **Per-component custom tag prompt** ([`23ca3d0`](../)) — tag resolution now
+     prompts **per component**, not only for one uniform default prefix, so a mixed
+     install can rename each tag independently (extends task #4's UI surface).
+   - **`.gitignore` reconciliation** ([`72e9cda`](../)) — resolves the open question
+     below: generated artifacts stay tracked via negation entries even under a blanket
+     `.vscode/` / `auro-types/` ignore.
+   - **Post-write wiring verification** ([`fec7cc3`](../)) —
+     [verify.ts](../src/init/editors/verify.ts) re-reads `settings.json` /
+     `tsconfig.json` / `jsconfig.json` after writing and confirms the wiring actually
+     landed, surfacing the manual one-liner if not
+     ([init.editors.verify.test.ts](../test/init.editors.verify.test.ts)).
+   - **Warning banners + robustness flags** ([`289aa19`](../), [`7318466`](../),
+     [`929d325`](../), [`c700066`](../), [`a280f4e`](../)) — bordered tag-mismatch and
+     yellow no-prefix banners; a warning when a prefixed tag has no matching
+     `register()`; outdated-release warnings with `--offline` to skip; and `--reset` to
+     remove files a prior run created.
+   - Verify gate green — **300 tests**, `tsc --noEmit`, scoped biome, build.
+7. **Manual verification.** ✅ **DONE** (section authored; live IDE sign-off is the
+   remaining human pass). Extended
+   [test/manual-testing-ai-tooling.md](../test/manual-testing-ai-tooling.md) with the
+   **[AB#1628542 — PT-M2](../test/manual-testing-ai-tooling.md)** section (all four
+   targets, three real consumer apps, automated-vs-manual split) proving the live
+   editor experience — the one thing automation can't assert (task #5):
    - **Vanilla / HTML** (`html.customData`, HTML server): in an `.html` file/region,
      `<auro-` → tag completion; attribute completion; hover → description with
      slots/events/methods/CSS parts.
@@ -557,9 +615,10 @@ fixtures + the new dependencies, matching PT-M1's front-loading.
    - Verify a **custom-registered tag** (e.g. `--prefix myapp-`) completes/hovers under
      its custom name in each. Use the automated-vs-manual split: the artifact *contents*
      and the merges are regression-covered; only the live IDE behavior is manual.
-7. **Admin.** Update the ticket title/estimate to reflect the expanded scope (HTML +
-   framework types, ~2–4 ew total); ticket is already **Active** and assigned; on
-   merge/verify → Resolved, ticking the PT-M2 line on parent story
+8. **Admin.** Update the ticket title/estimate to reflect the expanded scope (HTML +
+   framework types + CSS `::part()` snippets, ~2–4 ew total); ticket is already
+   **Active** and assigned; on merge/verify → Resolved, ticking the PT-M2 line on
+   parent story
    [AB#1628539](https://itsals.visualstudio.com/E_Retain_Content/_workitems/edit/1628539).
    (Gates on the PR merging.)
 
@@ -704,15 +763,21 @@ offline/deterministic; `fetch` unused since detection is local):
   SolidJS, JetBrains) is **out of scope** for PT-M2 and is a natural follow-up — the
   same cem-tools family has `custom-element-vuejs-integration`,
   `custom-element-jet-brains-integration`, etc., over the identical resolver seam.
-- ❓ **Should `.vscode/auro.code-snippets` be excluded from the consumer's
-  `.gitignore`?** Open. Many projects gitignore `.vscode/` wholesale, which would keep the
-  generated CSS `::part()` snippets out of version control — so each contributor would have
-  to re-run `auro init` to get them locally rather than sharing one committed artifact.
-  Decide whether `auro init` should (a) leave `.gitignore` untouched (consistent with the
-  **"Never auto-gitignore `.vscode/`"** frozen decision), (b) add a negation entry
-  (`!.vscode/auro.code-snippets`) so the artifact is tracked even under a blanket
-  `.vscode/` ignore, or (c) just document the tradeoff and let the consumer decide. Applies
-  equally to the other `.vscode/` artifacts (`auro.html-custom-data.json`, `settings.json`).
+- ✅ **Should `.vscode/auro.code-snippets` be excluded from the consumer's
+  `.gitignore`?** **Resolved** — chose option (b): `auro init` now **reconciles
+  `.gitignore`** ([`72e9cda`](../)) so every generated artifact stays **tracked** even
+  under a blanket ignore. Many projects gitignore `.vscode/` (and could a generated
+  `auro-types/`) wholesale, which would keep the CSS `::part()` snippets — and the
+  html-custom-data JSON and the framework `.d.ts` — out of version control, forcing each
+  contributor to re-run `auro init` locally instead of sharing one committed artifact.
+  Rather than leave `.gitignore` untouched (option a) or only document it (option c), the
+  command adds **negation entries** (`!.vscode/auro.html-custom-data.json`,
+  `!.vscode/auro.code-snippets`, `!auro-types/`, …) for exactly the files it owns, so a
+  blanket `.vscode/` / `auro-types/` ignore keeps hiding the consumer's own files while the
+  Auro-generated ones are shared. Non-destructive/idempotent like the other merges — it
+  only adds the negations it owns and never re-adds them. This deliberately **refines the
+  "Never auto-gitignore" frozen decision**: the CLI still never *adds* an ignore for these
+  dirs, it only ensures its own generated files aren't caught by a pre-existing one.
 - ❓ **Internal sub-components leak into the grounding (and get broken import
   paths).** Open. *Moved here from the PT-M1 plan:* the leak first surfaced while
   reviewing PT-M1's init grounding, but it will be **fixed as PT-M2 work** — the same
@@ -750,6 +815,34 @@ offline/deterministic; `fetch` unused since detection is local):
   Decide: gate on the exports map (recommended), ship a curated internal-tag denylist,
   or leave as-is. Applies to both the `AGENTS.md` table/API sections and the editor
   artifacts (JSX/Svelte/VS Code), which share the same resolver output.
+- ❓ **Add an automated, manifest-driven per-component invariant test over the full
+  resolved set (deferred).** The manual Svelte probe
+  (`AuroIntellisenseProbe.svelte` in the consumer test app) is organized by
+  **diagnostic category** (union validation, name casing, spreads, events, bindings,
+  inherited attrs, tag-level, control-flow) and uses `auro-button` + `auro-input` as
+  representative fixtures. That is the correct axis: each category is a property of the
+  **generator** (`svelteTypes.ts` + the language server), not of an individual
+  component — generation is uniform, so a category proven for one component of a given
+  *shape* holds for all. Enumerating **every component × every failure combination** in
+  the hand-authored probe would be O(components × categories) of near-duplicate lines,
+  each needing a human/`svelte-check` verdict *and* a `[fail->…]` attribution bucket —
+  high maintenance (the probe already version-pins its CEMs), low marginal signal, and
+  false confidence from re-testing the same code paths. **Where per-component
+  completeness belongs instead:** a deterministic auro-cli test that iterates the full
+  resolved component set (the builders already generate over it) and asserts
+  **invariants** on the emitted `.d.ts` — every CEM attribute with a `type.text` union
+  appears as that union (guards the `variant`-widening class of bug); every element
+  mapping is `Omit<BaseEvents, keyof <Name>Props>`; `BaseProps` carries
+  aria/`data-*`/role/`tabindex`; every declared event appears in both `on:` and `on…`
+  forms. Zero eyeballing, grows with the CEMs automatically. Keep the probe as a
+  category-driven, representative-by-shape editor confirmation (expand it only for a
+  genuinely new *shape*, e.g. a boolean-union attr or an event whose `CustomEvent`
+  carries a real `detail` type); push exhaustive per-component coverage into this
+  automated test. **This invariant/generation engine is the keystone of the follow-up
+  [CEM contract-enforcement proposal](cem-contract-enforcement.md)** — the same builders
+  plus the `tsc` smoke, surfaced as an `auro cem-check` CLI and run as a **blocking CI gate in
+  the component repos** so a CEM change that breaks the tooling turns into a red PR in
+  the *producer* instead of silent degradation in the consumer.
 
 ## Done when
 
@@ -766,6 +859,9 @@ installed CEM with no network call:
   completion + hover + type-checking;
 - `auro-types/auro-svelte.d.ts`, likewise on the TS program — `.svelte` markup gets
   typed element completion + hover;
+- `.vscode/auro.code-snippets` (for components that ship `cssParts`) — CSS / SCSS / LESS
+  and Svelte `<style>` blocks get a `::part()` choice-placeholder snippet per component,
+  auto-discovered by VS Code with no settings merge;
 
 all **including components registered under a custom tag name** (not just default
 `auro-*`); with existing settings/tsconfig preserved (comments/keys intact via
