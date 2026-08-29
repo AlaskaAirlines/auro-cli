@@ -167,35 +167,55 @@ function addSvelte5EventHandlers(contents: string): string {
 }
 
 /**
- * A component's own CEM events must win over the shared native `BaseEvents` block.
+ * Resolve name collisions between a component's CEM members and the shared
+ * `BaseProps`/`BaseEvents` blocks — ASYMMETRICALLY, because the right winner
+ * differs for events vs global attributes.
  *
- * Every element is mapped as `Partial<<Name>Props & BaseProps & BaseEvents>`, and
- * {@link NATIVE_DOM_EVENTS} folds 38 native handlers into `BaseEvents`. When a CEM
- * declares an event whose name collides with a native one (`input`, `click`,
- * `change`, `submit`, `load`, `error`, `scroll`, …), that name lives in BOTH
- * `<Name>Props` (typed `(e: CustomEvent<…>) => void` from the manifest) and
- * `BaseEvents` (typed `(e: Event | MouseEvent | …) => void`). An intersection of
- * two object types intersects same-named members, so the mapped member becomes
- * `((e: CustomEvent<…>) => void) & ((e: Event) => void)` — a handler must satisfy
- * BOTH halves, and the intended CustomEvent handler is rejected by the native
- * `Event` half (parameter contravariance). A legitimate handler becomes an error.
+ * Every element is mapped as `Partial<<Name>Props & BaseProps & BaseEvents>`.
+ * `BaseProps` carries the inherited global HTML attributes (`tabindex`, `id`,
+ * `role`, …) and {@link NATIVE_DOM_EVENTS} folds 38 native handlers into
+ * `BaseEvents`. A TypeScript intersection of object types intersects SAME-NAMED
+ * members, so any name a component redeclares collides with the base copy — and a
+ * bare intersection breaks a legitimate value two different ways:
  *
- * Rewrite each mapping line so `BaseEvents` is `Omit`ted of the keys the component
- * redeclares: `Partial<<Name>Props & BaseProps & Omit<BaseEvents, keyof <Name>Props>>`.
- * The CEM's CustomEvent signature is then the sole member for a declared name, so
- * the component's own event wins; native handlers stay intact for every name the
- * component does NOT declare (a component with no CEM events is unaffected — its
- * `keyof <Name>Props` names no event, so nothing is omitted). Only `BaseEvents` is
- * omitted: `keyof <Name>Props` also names attribute keys, but `BaseEvents` holds
- * only event keys, so attribute inheritance from `BaseProps` is untouched.
+ *   • Events — a CEM event named like a native one (`input`, `click`, `change`,
+ *     `submit`, `load`, `error`, `scroll`, …) is in both `<Name>Props` (typed
+ *     `(e: CustomEvent<…>) => void`) and `BaseEvents` (typed `(e: Event | …) =>
+ *     void`). The member becomes `((e: CustomEvent) => void) & ((e: Event) =>
+ *     void)`; a handler must satisfy BOTH, and the intended CustomEvent handler is
+ *     rejected by the native half (parameter contravariance).
+ *   • Attributes — a CEM attribute whose type differs from the injected global
+ *     (auro-button documents `tabindex` as a `string` for its `.tabindex` property
+ *     form, while the global `tabindex` is deliberately `number` — svelte2tsx
+ *     coerces the literal in `tabindex="0"` to a number; see {@link
+ *     injectGlobalAttributes}). The member becomes `string & number` = `never`,
+ *     which under `Partial<>` is `undefined`, so even a valid `tabindex="0"` is
+ *     rejected.
+ *
+ * The winner differs by kind:
+ *
+ *   • For EVENTS the component wins — its CEM `CustomEvent` signature is strictly
+ *     more precise than the generic native handler, so `BaseEvents` yields the
+ *     colliding name: `Omit<BaseEvents, keyof <Name>Props>`.
+ *   • For global ATTRIBUTES the base wins — the global carries the framework's
+ *     coercion-aware typing (`tabindex: number`), which a CEM restating the
+ *     attribute as a raw `string` would only degrade, so the component's props
+ *     yield the colliding global names: `Omit<<Name>Props, keyof BaseProps>`.
+ *
+ * Net mapping:
+ * `Partial<Omit<<Name>Props, keyof BaseProps> & BaseProps & Omit<BaseEvents, keyof <Name>Props>>`.
+ * A component-only attribute (`variant`, `shape`, …) is in neither base block, so
+ * it is untouched; a component that redeclares nothing collides on nothing.
  */
 const CUSTOM_ELEMENT_MAPPING =
-  /^(\s*"[^"]+": Partial<(\w+)Props & BaseProps &) BaseEvents(>;)$/gm;
+  /^(\s*"[^"]+": Partial<)(\w+)Props & BaseProps & BaseEvents(>;)$/gm;
 
-function overrideCollidingBaseEvents(contents: string): string {
+function overrideCollidingBaseMembers(contents: string): string {
   return contents.replace(
     CUSTOM_ELEMENT_MAPPING,
-    (_match, head, name, tail) => `${head} Omit<BaseEvents, keyof ${name}Props>${tail}`,
+    (_match, head, name, tail) =>
+      `${head}Omit<${name}Props, keyof BaseProps> & BaseProps &` +
+      ` Omit<BaseEvents, keyof ${name}Props>${tail}`,
   );
 }
 
@@ -327,7 +347,7 @@ export function buildSvelteTypes(
     filename: SVELTE_TYPES_PATH,
     contents: ensureTrailingNewline(
       globalizeSvelteNamespace(
-        overrideCollidingBaseEvents(
+        overrideCollidingBaseMembers(
           injectGlobalAttributes(
             addSvelte5EventHandlers(
               labelComponentMembers(contents, markerByClass),
