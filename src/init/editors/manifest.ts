@@ -278,9 +278,10 @@ export function ensureTrailingNewline(contents: string): string {
  * extra top-level alias. The `data-*` entry is a **template-literal** index
  * signature (not `[key: string]`), so it constrains only `data-*` keys and does
  * not force the tools' existing `style` / `ref` / `tabIndex` members to conform.
- * Lines are 2-space indented to match the tools' prettier output. `role` is not
- * here — the JSX tool already emits it; {@link injectGlobalAttributes} prepends it
- * for the Svelte target, whose `BaseProps` lacks it.
+ * Lines are 2-space indented to match the tools' prettier output. `role` and
+ * `tabindex` are not here — the JSX tool already emits them (as `role` / camelCase
+ * `tabIndex`); {@link injectGlobalAttributes} prepends the lowercase Svelte forms
+ * ({@link SVELTE_GLOBAL_MEMBERS}) for the Svelte target, whose `BaseProps` lacks them.
  */
 const GLOBAL_ARIA_ATTRS = `  /** Identifies the currently active descendant of a composite widget. */
   "aria-activedescendant"?: string;
@@ -395,16 +396,30 @@ const GLOBAL_ARIA_ATTRS = `  /** Identifies the currently active descendant of a
 /** Matches the opening of the tool-generated `BaseProps` block (JSX form is generic). */
 const BASE_PROPS_OPEN = /(type BaseProps(?:<[^>]*>)? = \{\n)/;
 
-/** The `role` member, prepended for the Svelte target whose `BaseProps` omits it. */
-const ROLE_MEMBER =
-  "  /** Defines the element's semantic role for accessibility APIs. */\n  role?: string;\n";
+/**
+ * Lowercase HTML global attributes the Svelte tool omits or React-cases, prepended
+ * for the Svelte target only. Svelte markup uses the native lowercase attribute
+ * names (`role`, `tabindex`), but the tool's `BaseProps` lacks `role` entirely and
+ * spells tab order as React's camelCase `tabIndex` — so `<auro-button tabindex="0">`
+ * is flagged as an unknown prop. The JSX tool already emits both `role` and
+ * `tabIndex`, so these are not prepended there (see {@link injectGlobalAttributes}).
+ * `tabindex` is typed `number`, matching the tool's `tabIndex`; svelte2tsx coerces
+ * the string literal in `tabindex="0"` to it.
+ */
+const SVELTE_GLOBAL_MEMBERS =
+  "  /** Defines the element's semantic role for accessibility APIs. */\n" +
+  "  role?: string;\n" +
+  "  /** The position of the element in the sequential keyboard navigation order. */\n" +
+  "  tabindex?: number;\n";
 
 /**
  * Splice the standard ARIA / `data-*` global attributes ({@link GLOBAL_ARIA_ATTRS})
  * into a generated file's `BaseProps` block, immediately after its opening brace —
- * mirroring how `NATIVE_DOM_EVENTS` is folded into `BaseEvents`. Pass `role: true`
- * for the Svelte target (its `BaseProps` lacks `role`); the JSX tool already emits
- * `role`, so pass `role: false` there to avoid a duplicate member.
+ * mirroring how `NATIVE_DOM_EVENTS` is folded into `BaseEvents`. Pass
+ * `svelteGlobals: true` for the Svelte target, whose `BaseProps` also lacks the
+ * lowercase HTML globals ({@link SVELTE_GLOBAL_MEMBERS} — `role`, `tabindex`); the
+ * JSX tool already emits those, so pass `svelteGlobals: false` there to avoid
+ * duplicate members.
  *
  * Throws if the `BaseProps` opening is absent (e.g. an upstream reflow of the
  * community tool) rather than returning the string unchanged — a silent no-op
@@ -413,7 +428,7 @@ const ROLE_MEMBER =
  */
 export function injectGlobalAttributes(
   contents: string,
-  { role }: { role: boolean },
+  { svelteGlobals }: { svelteGlobals: boolean },
 ): string {
   if (!BASE_PROPS_OPEN.test(contents)) {
     throw new Error(
@@ -421,6 +436,6 @@ export function injectGlobalAttributes(
         "block; the global-attribute injection in manifest.ts must be updated to match.",
     );
   }
-  const block = `${role ? ROLE_MEMBER : ""}${GLOBAL_ARIA_ATTRS}`;
+  const block = `${svelteGlobals ? SVELTE_GLOBAL_MEMBERS : ""}${GLOBAL_ARIA_ATTRS}`;
   return contents.replace(BASE_PROPS_OPEN, `$1${block}`);
 }
