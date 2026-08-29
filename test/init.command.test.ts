@@ -5,7 +5,7 @@ import process from "node:process";
 import { type TestContext, test } from "node:test";
 import inquirer from "inquirer";
 import { simpleGit } from "simple-git";
-import { runInit } from "../src/commands/init.ts";
+import { isValidCustomTag, runInit } from "../src/commands/init.ts";
 import { findIgnored } from "../src/init/gitignore.ts";
 import {
   captureWrite,
@@ -1434,4 +1434,169 @@ test("a fully-wired vscode run emits no markup-off or wiring-incomplete banner",
   const err = stderr();
   assert.doesNotMatch(err, /VS Code markup IntelliSense is off/u);
   assert.doesNotMatch(err, /wiring is incomplete/u);
+});
+
+// ---------------------------------------------------------------------------
+// Per-component custom tag prompt
+// ---------------------------------------------------------------------------
+
+/**
+ * Answer inquirer for a custom-tag run: opt into customization, apply `tagFor`
+ * to each per-component input (return the calculated `default` to mimic Enter),
+ * and say no to every editor-target / gitignore confirm so output stays minimal.
+ */
+function mockCustomTagPrompts(
+  t: TestContext,
+  opts: {
+    customize: boolean;
+    tagFor?: (message: string, dflt: string) => string;
+  },
+): void {
+  t.mock.method(
+    inquirer,
+    "prompt",
+    async (
+      questions: Array<{
+        name?: string;
+        type?: string;
+        message?: string;
+        default?: string;
+      }>,
+    ) => {
+      const qs = Array.isArray(questions) ? questions : [questions];
+      const answers: Record<string, unknown> = {};
+      for (const q of qs) {
+        const name = q.name ?? "";
+        if (name === "customize") {
+          answers.customize = opts.customize;
+        } else if (name === "tag") {
+          answers.tag = opts.tagFor
+            ? opts.tagFor(q.message ?? "", q.default ?? "")
+            : (q.default ?? "");
+        } else {
+          answers[name] = false; // editor-target confirms, gitignore fix, etc.
+        }
+      }
+      return answers;
+    },
+  );
+}
+
+test("interactive: a typed custom tag becomes a per-component override", async (t) => {
+  const cwd = await tempCwd(t);
+  await installRealPackage(cwd, "auro-button");
+  t.mock.method(process, "cwd", () => cwd);
+  t.mock.method(process, "exit", () => {
+    throw new Error("should not exit on success");
+  });
+  captureWrite(t, process.stderr);
+  t.mock.method(globalThis, "fetch", async () => {
+    throw new Error("init must not hit the network");
+  });
+  forceInteractive(t);
+  // Opt in, then rename auro-button's tag to `nav-menu`; Enter (default) otherwise.
+  mockCustomTagPrompts(t, {
+    customize: true,
+    tagFor: (message, dflt) =>
+      message.includes("auro-button") ? "nav-menu" : dflt,
+  });
+
+  await runInit({ prefix: "myapp-", offline: true });
+
+  const agents = await readOutput(cwd, "AGENTS.md");
+  assert.match(agents, /<nav-menu>/u, "grounding uses the typed tag");
+  assert.doesNotMatch(agents, /<myapp-button>/u, "prefix tag did not win");
+  const config = JSON.parse(await readOutput(cwd, "auro.config.json"));
+  assert.equal(
+    config.init.prefix.overrides["auro-button"],
+    "nav-menu",
+    "typed tag persisted as an override",
+  );
+});
+
+test("interactive: keeping every calculated tag (Enter) writes no overrides", async (t) => {
+  const cwd = await tempCwd(t);
+  await installRealPackage(cwd, "auro-button");
+  await installRealPackage(cwd, "auro-formkit");
+  t.mock.method(process, "cwd", () => cwd);
+  t.mock.method(process, "exit", () => {
+    throw new Error("should not exit on success");
+  });
+  captureWrite(t, process.stderr);
+  t.mock.method(globalThis, "fetch", async () => {
+    throw new Error("init must not hit the network");
+  });
+  forceInteractive(t);
+  // Opt in but accept the calculated default for every component (tagFor omitted).
+  mockCustomTagPrompts(t, { customize: true });
+
+  await runInit({ prefix: "myapp-", offline: true });
+
+  const agents = await readOutput(cwd, "AGENTS.md");
+  assert.match(
+    agents,
+    /<myapp-button>/u,
+    "prefix tag kept when Enter is pressed",
+  );
+  const config = JSON.parse(await readOutput(cwd, "auro.config.json"));
+  assert.deepEqual(
+    config.init.prefix.overrides,
+    {},
+    "an unchanged component is not pinned as an override",
+  );
+});
+
+test("interactive: declining customization leaves the prefixed tags untouched", async (t) => {
+  const cwd = await tempCwd(t);
+  await installRealPackage(cwd, "auro-button");
+  t.mock.method(process, "cwd", () => cwd);
+  t.mock.method(process, "exit", () => {
+    throw new Error("should not exit on success");
+  });
+  captureWrite(t, process.stderr);
+  t.mock.method(globalThis, "fetch", async () => {
+    throw new Error("init must not hit the network");
+  });
+  forceInteractive(t);
+  mockCustomTagPrompts(t, { customize: false });
+
+  await runInit({ prefix: "myapp-", offline: true });
+
+  const agents = await readOutput(cwd, "AGENTS.md");
+  assert.match(agents, /<myapp-button>/u);
+  const config = JSON.parse(await readOutput(cwd, "auro.config.json"));
+  assert.deepEqual(config.init.prefix.overrides, {});
+});
+
+test("non-interactive runs never issue the custom-tag prompt", async (t) => {
+  const cwd = await tempCwd(t);
+  await installRealPackage(cwd, "auro-button");
+  t.mock.method(process, "cwd", () => cwd);
+  t.mock.method(process, "exit", () => {
+    throw new Error("should not exit on success");
+  });
+  captureWrite(t, process.stderr);
+  t.mock.method(globalThis, "fetch", async () => {
+    throw new Error("init must not hit the network");
+  });
+  // No forceInteractive → non-TTY runner is non-interactive. Any prompt is a bug.
+  t.mock.method(inquirer, "prompt", async () => {
+    throw new Error("must not prompt in a non-interactive run");
+  });
+
+  await runInit({ prefix: "myapp-", offline: true });
+
+  const config = JSON.parse(await readOutput(cwd, "auro.config.json"));
+  assert.deepEqual(config.init.prefix.overrides, {});
+});
+
+test("isValidCustomTag accepts valid custom-element names and rejects the rest", () => {
+  assert.equal(isValidCustomTag("nav-menu"), true);
+  assert.equal(isValidCustomTag("auro-button"), true);
+  assert.equal(isValidCustomTag("x-y-z"), true);
+  // Uppercase, no hyphen, leading non-letter, and spaces are all rejected (string).
+  assert.equal(typeof isValidCustomTag("MyButton"), "string");
+  assert.equal(typeof isValidCustomTag("button"), "string");
+  assert.equal(typeof isValidCustomTag("1-thing"), "string");
+  assert.equal(typeof isValidCustomTag("nav menu"), "string");
 });

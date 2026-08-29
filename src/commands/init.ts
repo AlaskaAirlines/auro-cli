@@ -36,7 +36,7 @@ import process from "node:process";
 import { program } from "commander";
 import inquirer from "inquirer";
 import ora from "ora";
-import { CONFIG_FILENAME } from "#init/config.js";
+import { type AuroConfig, CONFIG_FILENAME } from "#init/config.js";
 import {
   detectEditorSignals,
   EDITOR_TARGETS,
@@ -57,6 +57,7 @@ import {
   migrateToFormkit,
 } from "#init/migrateFormkit.js";
 import {
+  emptyConfig,
   loadConfig,
   planTagResolution,
   RegistryError,
@@ -150,6 +151,96 @@ async function promptDefaultPrefix(plan: TagResolutionPlan): Promise<string> {
     },
   ]);
   return String(prefix).trim();
+}
+
+/**
+ * Validate a user-entered custom-element tag (inquirer `validate` contract:
+ * `true` when acceptable, else the error string to show). A conservative subset
+ * of the HTML custom-element name grammar — lowercase, must start with an ASCII
+ * letter and contain at least one hyphen — enough to reject typos like
+ * `MyButton` or a bare `button` that would generate IntelliSense keyed on a tag
+ * the markup never uses.
+ */
+export function isValidCustomTag(tag: string): true | string {
+  const trimmed = tag.trim();
+  if (!/^[a-z][a-z0-9-]*$/.test(trimmed)) {
+    return "Use a lowercase tag starting with a letter (letters, digits, and hyphens only).";
+  }
+  if (!trimmed.includes("-")) {
+    return "A custom-element tag must contain a hyphen (e.g. nav-menu).";
+  }
+  return true;
+}
+
+/**
+ * Optionally let the user name any installed component's tag explicitly. Gated
+ * behind one confirm (default no); on yes, prompts once per component with the
+ * prefix-calculated tag as the editable default — Enter keeps it, a typed value
+ * replaces it. Returns only the entries the user actually changed (canonical
+ * `auro-*` tag → typed custom tag), so an unchanged component stays driven by the
+ * prefix machinery (a later `--prefix` still propagates to it) rather than being
+ * pinned as an override. Interactive TTY only — the caller guards on that.
+ */
+async function promptCustomTags(
+  components: readonly ResolvedComponent[],
+  resolvedTags: ReadonlyMap<string, string>,
+): Promise<Record<string, string>> {
+  const { customize } = await inquirer.prompt<{ customize: boolean }>([
+    {
+      type: "confirm",
+      name: "customize",
+      message:
+        "Define a custom tag name for any installed component? (you'll be prompted per component; Enter keeps the calculated name)",
+      default: false,
+    },
+  ]);
+  if (!customize) {
+    return {};
+  }
+
+  const overrides: Record<string, string> = {};
+  for (const component of components) {
+    const canonical = component.tagName;
+    const calculated = resolvedTags.get(canonical) ?? canonical;
+    const { tag } = await inquirer.prompt<{ tag: string }>([
+      {
+        type: "input",
+        name: "tag",
+        message: `Tag for ${component.declaration.name} (<${canonical}>):`,
+        default: calculated,
+        validate: isValidCustomTag,
+      },
+    ]);
+    const entered = String(tag).trim();
+    if (entered !== calculated) {
+      overrides[canonical] = entered;
+    }
+  }
+  return overrides;
+}
+
+/**
+ * Build the config to re-plan against after the per-component prompt: the loaded
+ * config's default + overrides, merged with the user's typed customs (which win).
+ * Falls back to an empty config when the project had none. Pure — the returned
+ * config feeds {@link planTagResolution}, which re-derives resolved tags and
+ * warnings and yields the authoritative config to persist.
+ */
+function withUserOverrides(
+  config: AuroConfig | null,
+  overrides: Record<string, string>,
+): AuroConfig {
+  const base = config ?? emptyConfig();
+  return {
+    ...base,
+    init: {
+      ...base.init,
+      prefix: {
+        default: base.init.prefix.default,
+        overrides: { ...base.init.prefix.overrides, ...overrides },
+      },
+    },
+  };
 }
 
 /** Human-facing label + artifact path for each editor target's confirm prompt. */
@@ -410,6 +501,9 @@ export async function runInit(options: InitOptions): Promise<void> {
     options.prefix !== undefined || config?.init.prefix.default !== undefined;
   const needsDecision =
     !defaultSettled && (plan.needsDefaultPrefix || plan.mixedPrefixes);
+  // The effective default prefix, tracked so a later re-plan (custom tags, below)
+  // reuses the same one the user just settled instead of re-deriving it.
+  let resolvedPrefix = options.prefix;
   if (needsDecision) {
     if (isNonInteractive(options)) {
       const reason = plan.needsDefaultPrefix
@@ -420,8 +514,12 @@ export async function runInit(options: InitOptions): Promise<void> {
       );
       process.exit(1);
     }
-    const chosen = await promptDefaultPrefix(plan);
-    plan = planTagResolution(components, { config, scan, prefix: chosen });
+    resolvedPrefix = await promptDefaultPrefix(plan);
+    plan = planTagResolution(components, {
+      config,
+      scan,
+      prefix: resolvedPrefix,
+    });
   }
 
   // Defensive: a resolved prefix must clear needsDefaultPrefix before we persist.
@@ -430,6 +528,22 @@ export async function runInit(options: InitOptions): Promise<void> {
       "Unable to resolve a default prefix for every component. Re-run with --prefix <prefix>.",
     );
     process.exit(1);
+  }
+
+  // Per-component custom tags (interactive only). Every component now has a
+  // prefix-calculated tag; offer to override any of them with an explicit name.
+  // Typed customs become `overrides` — the highest-precedence input — so a re-plan
+  // re-derives resolved tags, reconciliation/no-prefix warnings, and the config to
+  // persist. Non-interactive/CI runs skip this, keeping regeneration deterministic.
+  if (!isNonInteractive(options)) {
+    const customTags = await promptCustomTags(components, plan.resolvedTags);
+    if (Object.keys(customTags).length > 0) {
+      plan = planTagResolution(components, {
+        config: withUserOverrides(config, customTags),
+        scan,
+        prefix: resolvedPrefix,
+      });
+    }
   }
 
   // Settle the editor targets (may prompt) before the spinner so the confirm UI
