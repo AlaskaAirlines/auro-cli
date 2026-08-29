@@ -18,6 +18,14 @@
  * ship unresolvable class declarations — so values would never complete/validate.
  * The class import the tool still emits is then unused but harmless.
  *
+ * `includeDefaultDOMEvents: true` folds the tool's built-in native DOM event
+ * handlers (`onClick`, `onFocus`, `onKeyDown`, … — all lib.dom event types) into
+ * the shared `BaseEvents` type every element intersects. A CEM only declares a
+ * component's *own* events, so without this native handlers are absent and
+ * `<auro-button onFocus={…} />` is flagged as an unknown prop. No collision with
+ * a CEM `click` event: React camelCase `onClick` never clashes with the custom
+ * event's `onclick`.
+ *
  * `generateJsxTypes` both writes a file to `outdir` and returns the source; we
  * discard the write (scratch dir) and keep the returned string.
  *
@@ -61,6 +69,10 @@ export function buildJsxTypes(
         // Inline CEM `type.text` for props instead of `Component['prop']`, which
         // resolves to `any` against the packages' unresolvable class .d.ts.
         useCemTypes: true,
+        // Fold native DOM event handlers (onClick/onFocus/…) into BaseEvents; a
+        // CEM only declares a component's own events, so without this they are
+        // absent and native handlers flag as unknown props.
+        includeDefaultDOMEvents: true,
       },
     ),
   );

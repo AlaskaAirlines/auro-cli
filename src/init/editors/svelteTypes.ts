@@ -16,10 +16,19 @@
  * other two tools this one returns `void` and only writes a file, so we point it
  * at a scratch dir and read the result back.
  *
+ * A CEM only declares a component's *own* events, so native DOM event handlers
+ * (`on:click`, `on:focus`, …) would otherwise be absent from every element type.
+ * Unlike the JSX tool there is no `includeDefaultDOMEvents` flag here — its only
+ * lever is `globalEvents`, a string spliced verbatim into the shared
+ * `type BaseEvents = { … }`. We pass {@link NATIVE_DOM_EVENTS} (the same 38-event
+ * set the JSX tool injects, in Svelte-4 `on:` directive form, lib.dom types only)
+ * so those handlers type-check on every element.
+ *
  * Three post-processing passes fix what the community tool can't express on its
  * own: {@link labelComponentMembers} (mark component-owned members so IntelliSense
  * distinguishes them from inherited global HTML attributes),
- * {@link addSvelte5EventHandlers} (Svelte 4 *and* 5 event syntax), and
+ * {@link addSvelte5EventHandlers} (Svelte 4 *and* 5 event syntax — this also
+ * derives the Svelte-5 property form of the native events above), and
  * {@link globalizeSvelteNamespace} (global vs module-scoped augmentation).
  *
  * @see docs/pt-m2-completion-plan.md → build-order step 2.
@@ -60,6 +69,68 @@ const GLOBAL_SVELTE_NAMESPACE = `declare global {
     interface IntrinsicElements extends CustomElements {}
   }
 }`;
+
+/**
+ * Native DOM event handlers to fold into the shared `BaseEvents` type via the
+ * tool's `globalEvents` option (spliced verbatim inside `type BaseEvents = {…}`).
+ * Mirrors the 38 events `@wc-toolkit/jsx-types` injects with
+ * `includeDefaultDOMEvents`, translated to real DOM event names in Svelte-4
+ * `"on:<name>"` directive form; {@link addSvelte5EventHandlers} then derives the
+ * Svelte-5 `"on<name>"` property sibling for each. All handler types are lib.dom
+ * globals, so the artifact stays self-contained (no `svelte/elements` import).
+ *
+ * Ends with a trailing newline and 2-space indentation so it slots cleanly
+ * between the tool's `type BaseEvents = {` and `};`.
+ */
+const NATIVE_DOM_EVENTS = `
+  // Mouse events
+  "on:click"?: (e: MouseEvent) => void;
+  "on:contextmenu"?: (e: MouseEvent) => void;
+  "on:dblclick"?: (e: MouseEvent) => void;
+  "on:mousedown"?: (e: MouseEvent) => void;
+  "on:mouseenter"?: (e: MouseEvent) => void;
+  "on:mouseleave"?: (e: MouseEvent) => void;
+  "on:mousemove"?: (e: MouseEvent) => void;
+  "on:mouseout"?: (e: MouseEvent) => void;
+  "on:mouseover"?: (e: MouseEvent) => void;
+  "on:mouseup"?: (e: MouseEvent) => void;
+  // Drag events
+  "on:drag"?: (e: DragEvent) => void;
+  "on:dragend"?: (e: DragEvent) => void;
+  "on:dragenter"?: (e: DragEvent) => void;
+  "on:dragexit"?: (e: DragEvent) => void;
+  "on:dragleave"?: (e: DragEvent) => void;
+  "on:dragover"?: (e: DragEvent) => void;
+  "on:dragstart"?: (e: DragEvent) => void;
+  "on:drop"?: (e: DragEvent) => void;
+  // Keyboard events
+  "on:keydown"?: (e: KeyboardEvent) => void;
+  "on:keyup"?: (e: KeyboardEvent) => void;
+  "on:keypress"?: (e: KeyboardEvent) => void;
+  // Focus events
+  "on:focus"?: (e: FocusEvent) => void;
+  "on:blur"?: (e: FocusEvent) => void;
+  // Form events
+  "on:change"?: (e: Event) => void;
+  "on:input"?: (e: Event) => void;
+  "on:submit"?: (e: Event) => void;
+  "on:reset"?: (e: Event) => void;
+  // Scroll / wheel events
+  "on:scroll"?: (e: UIEvent) => void;
+  "on:wheel"?: (e: WheelEvent) => void;
+  // Animation / transition events
+  "on:animationstart"?: (e: AnimationEvent) => void;
+  "on:animationend"?: (e: AnimationEvent) => void;
+  "on:animationiteration"?: (e: AnimationEvent) => void;
+  "on:transitionend"?: (e: TransitionEvent) => void;
+  // Resource events
+  "on:load"?: (e: Event) => void;
+  "on:error"?: (e: Event) => void;
+  // Clipboard events
+  "on:copy"?: (e: ClipboardEvent) => void;
+  "on:cut"?: (e: ClipboardEvent) => void;
+  "on:paste"?: (e: ClipboardEvent) => void;
+`;
 
 /**
  * The community tool emits every event handler in Svelte 4 *directive* form only
@@ -198,6 +269,10 @@ export function buildSvelteTypes(
       outdir,
       fileName: SVELTE_TYPES_FILENAME,
       hideLogs: true,
+      // Fold native DOM event handlers into the shared BaseEvents type; a CEM
+      // only declares a component's own events, so without this native handlers
+      // are absent. addSvelte5EventHandlers derives the Svelte-5 property form.
+      globalEvents: NATIVE_DOM_EVENTS,
       // No `componentTypePath`: inline the CEM's `type.text` (real unions) instead
       // of `Component['field']`, which resolves to `any` against the packages'
       // unresolvable class .d.ts. See the module header for the full rationale.

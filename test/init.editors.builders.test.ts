@@ -187,6 +187,29 @@ test("Svelte emits both the Svelte 4 directive and Svelte 5 property event handl
 });
 
 // ---------------------------------------------------------------------------
+// Native DOM events: a CEM only declares a component's OWN events, so native
+// handlers (onClick/onFocus/…) must be folded in explicitly — JSX via the tool's
+// includeDefaultDOMEvents flag, Svelte via the NATIVE_DOM_EVENTS globalEvents
+// splice. Guards the option wiring beyond the opaque byte-exact golden.
+// ---------------------------------------------------------------------------
+
+test("JSX includes native DOM event handlers on every element", () => {
+  const jsx = buildJsxTypes(COMPONENTS, RESOLVED_TAGS).contents;
+  // A representative native handler absent from any Auro CEM, typed to the DOM
+  // event (not a CustomEvent) — proves includeDefaultDOMEvents is wired.
+  assert.match(jsx, /onFocus\?: \(event: FocusEvent\) => void;/u);
+  assert.match(jsx, /onKeyDown\?: \(event: KeyboardEvent\) => void;/u);
+});
+
+test("Svelte includes native DOM events in both the directive and property form", () => {
+  const svelte = buildSvelteTypes(COMPONENTS, RESOLVED_TAGS).contents;
+  // Svelte 4 directive form (what NATIVE_DOM_EVENTS injects) …
+  assert.match(svelte, /"on:focus"\?: \(e: FocusEvent\) => void;/u);
+  // … and the Svelte 5 property sibling addSvelte5EventHandlers derives from it.
+  assert.match(svelte, /"onfocus"\?: \(e: FocusEvent\) => void;/u);
+});
+
+// ---------------------------------------------------------------------------
 // Member labeling: the Svelte language server flattens each element's type into
 // one completion list where a component's own members are indistinguishable from
 // inherited global HTML attributes. buildSvelteTypes marks component members in
