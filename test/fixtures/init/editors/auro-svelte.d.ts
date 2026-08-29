@@ -272,7 +272,7 @@ export type CustomElements = {
    * - **loader** - The loading indicator.
    * - **text** - The button label text.
    */
-  "myapp-button": Partial<AuroButtonProps & BaseProps & Omit<BaseEvents, keyof AuroButtonProps>>;
+  "myapp-button": Partial<Omit<AuroButtonProps, keyof BaseProps> & BaseProps & Omit<BaseEvents, keyof AuroButtonProps>>;
 
   /**
    * A text input field with built-in validation.
@@ -282,7 +282,7 @@ export type CustomElements = {
    * ### **Slots:**
    *  - **label** - The field label.
    */
-  "legacy-input": Partial<AuroInputProps & BaseProps & Omit<BaseEvents, keyof AuroInputProps>>;
+  "legacy-input": Partial<Omit<AuroInputProps, keyof BaseProps> & BaseProps & Omit<BaseEvents, keyof AuroInputProps>>;
 };
 
 declare global {
