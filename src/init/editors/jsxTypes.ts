@@ -26,6 +26,12 @@
  * a CEM `click` event: React camelCase `onClick` never clashes with the custom
  * event's `onclick`.
  *
+ * The tool's `BaseProps` covers `role` but no `aria-*` or `data-*` attributes, and
+ * the generated element type *replaces* the tag's intrinsic type — so
+ * {@link injectGlobalAttributes} splices the standard ARIA / `data-*` set into
+ * `BaseProps` (no tool option exposes it; `allowUnknownProps` would disable all
+ * prop validation). `role: false` here — the tool already emits `role`.
+ *
  * `generateJsxTypes` both writes a file to `outdir` and returns the source; we
  * discard the write (scratch dir) and keep the returned string.
  *
@@ -39,6 +45,7 @@ import {
   type EditorArtifact,
   ensureTrailingNewline,
   importPathsByClass,
+  injectGlobalAttributes,
   withTempDir,
 } from "#init/editors/manifest.js";
 import type { ResolvedComponent } from "#init/resolver.js";
@@ -85,6 +92,9 @@ export function buildJsxTypes(
 
   return {
     filename: JSX_TYPES_PATH,
-    contents: ensureTrailingNewline(contents),
+    // The tool already emits `role`, so inject ARIA / data-* only (role: false).
+    contents: ensureTrailingNewline(
+      injectGlobalAttributes(contents, { role: false }),
+    ),
   };
 }

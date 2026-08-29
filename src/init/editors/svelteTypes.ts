@@ -24,11 +24,18 @@
  * set the JSX tool injects, in Svelte-4 `on:` directive form, lib.dom types only)
  * so those handlers type-check on every element.
  *
- * Three post-processing passes fix what the community tool can't express on its
- * own: {@link labelComponentMembers} (mark component-owned members so IntelliSense
+ * The tool's `BaseProps` omits `role`, `aria-*`, and `data-*`, and the generated
+ * element type *replaces* the tag's intrinsic type — so `<auro-button
+ * aria-label="Save" />` is flagged as an unknown prop. {@link injectGlobalAttributes}
+ * (`role: true`, since Svelte's `BaseProps` lacks even `role`) splices the standard
+ * ARIA / `data-*` set into `BaseProps`; the tool exposes no option for it.
+ *
+ * Post-processing passes fix what the community tool can't express on its own:
+ * {@link labelComponentMembers} (mark component-owned members so IntelliSense
  * distinguishes them from inherited global HTML attributes),
  * {@link addSvelte5EventHandlers} (Svelte 4 *and* 5 event syntax — this also
- * derives the Svelte-5 property form of the native events above), and
+ * derives the Svelte-5 property form of the native events above),
+ * {@link injectGlobalAttributes} (ARIA / `data-*` into `BaseProps`), and
  * {@link globalizeSvelteNamespace} (global vs module-scoped augmentation).
  *
  * @see docs/pt-m2-completion-plan.md → build-order step 2.
@@ -45,6 +52,7 @@ import {
   buildManifest,
   type EditorArtifact,
   ensureTrailingNewline,
+  injectGlobalAttributes,
   withTempDir,
 } from "#init/editors/manifest.js";
 import type { ResolvedComponent } from "#init/resolver.js";
@@ -284,7 +292,13 @@ export function buildSvelteTypes(
     filename: SVELTE_TYPES_PATH,
     contents: ensureTrailingNewline(
       globalizeSvelteNamespace(
-        addSvelte5EventHandlers(labelComponentMembers(contents, markerByClass)),
+        injectGlobalAttributes(
+          addSvelte5EventHandlers(
+            labelComponentMembers(contents, markerByClass),
+          ),
+          // Svelte's BaseProps lacks `role` too, so add it alongside the ARIA set.
+          { role: true },
+        ),
       ),
     ),
   };
