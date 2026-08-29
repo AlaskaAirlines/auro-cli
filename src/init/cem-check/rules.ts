@@ -1,0 +1,383 @@
+/**
+ * The static half of `auro cem-check`: read the **raw** CEM declarations and
+ * *report* what auro-cli's defensive prune ([manifest.ts](../editors/manifest.ts)
+ * `buildManifest`) would otherwise drop in silence. The prune is a safety net that
+ * keeps generation working but hides the defect from the component team; these
+ * rules surface the same conditions as a producer-visible signal.
+ *
+ * Every rule that mirrors a prune reuses the **exact predicate the prune uses**
+ * (`hasBalancedDelimiters`, `isPrivateReflection`), so the check and the silent
+ * drop can never disagree — if the check passes, nothing gets pruned, and vice
+ * versa.
+ *
+ * @see docs/cem-contract-enforcement.md → "Build the contract as an executable
+ *   check" (the static-validation rule set).
+ */
+
+import {
+  hasBalancedDelimiters,
+  isPrivateReflection,
+} from "#init/editors/manifest.js";
+import type {
+  CemAttribute,
+  CemDeclaration,
+  CemEvent,
+  CemMember,
+  Manifest,
+} from "#utils/cem.js";
+
+/** Severity of a contract finding: `error` fails the check, `warn` is advisory. */
+export type CemSeverity = "error" | "warn";
+
+/** One contract violation found in a CEM. */
+export interface CemFinding {
+  /** Stable rule id (e.g. `name-required`) for `--json` consumers and docs. */
+  rule: string;
+  /** `error` blocks the PR; `warn` is advisory unless `--strict`. */
+  severity: CemSeverity;
+  /** The registered element the finding belongs to (its tag), when applicable. */
+  element?: string;
+  /** A dotted locator within the declaration (e.g. `attributes[2].type.text`). */
+  path?: string;
+  /** Human-readable description of what is wrong and why it matters. */
+  message: string;
+}
+
+/**
+ * Attribute names conventionally backed by a fixed value set. When one is typed as
+ * a bare `"string"` (no union) every value is accepted and nothing completes — the
+ * `variant`-widening class of bug. Warn-only for now (curated set is deliberately
+ * conservative); a future slice may make a core subset fatal once the
+ * enumerated-attr scope is settled.
+ *
+ * @see docs/cem-contract-enforcement.md → Open questions, "Union-rule scope".
+ */
+export const ENUMERATED_ATTRS: ReadonlySet<string> = new Set([
+  "variant",
+  "shape",
+  "size",
+  "type",
+  "appearance",
+]);
+
+/**
+ * Lowercase JS / JSDoc spellings that are **not** valid TypeScript types — the
+ * `variant` → `Cannot find name 'array'` class seen across auro-formkit. Inlined
+ * verbatim by the JSX/Svelte builders (`useCemTypes`), they make the emitted
+ * `.d.ts` fail to compile. Value = the fix to suggest. (`string`/`number`/
+ * `boolean`/`object`/`symbol`/`bigint`/`null`/`undefined`/`void`/`any`/`unknown`/
+ * `never` are real lowercase TS types and are deliberately absent.)
+ */
+const INVALID_PRIMITIVE_TYPES: ReadonlyMap<string, string> = new Map([
+  ["array", "use `unknown[]`, `T[]`, or `Array<T>`"],
+  ["function", "use `Function` or an explicit call signature `(…) => …`"],
+]);
+
+/**
+ * Generic built-ins that require a type argument — a **bare** `type.text` of one of
+ * these (`Array`, not `Array<string>`) fails to compile (`Generic type 'Array<T>'
+ * requires 1 type argument(s)`). Value = the shape to suggest.
+ */
+const BARE_GENERIC_TYPES: ReadonlyMap<string, string> = new Map([
+  ["Array", "Array<T>"],
+  ["ReadonlyArray", "ReadonlyArray<T>"],
+  ["Promise", "Promise<T>"],
+  ["Map", "Map<K, V>"],
+  ["WeakMap", "WeakMap<K, V>"],
+  ["Set", "Set<T>"],
+  ["WeakSet", "WeakSet<T>"],
+  ["Record", "Record<K, V>"],
+]);
+
+/**
+ * Valid-but-uninformative object types: they compile, but expose no properties so
+ * nothing completes in the editor — an advisory, not a generation break.
+ */
+const VAGUE_OBJECT_TYPES: ReadonlySet<string> = new Set(["object", "Object"]);
+
+/**
+ * A bad token to scan for inside a `type.text`, with its compiled matcher and the
+ * fix to suggest. The token is matched as a **whole word** so `myArray`/`ReadonlyArray`
+ * never trip the `Array` rule; the trailing lookahead excludes legitimate uses:
+ *  - primitives (`array`/`function`) skip a following `:` — a property **key** named
+ *    `array` (`{ array: string }`) is valid, only a type **position** is not;
+ *  - generics skip a following `<` (already parameterised, e.g. `Array<string>`) and
+ *    `:` (a property key).
+ */
+interface BadTypeToken {
+  token: string;
+  re: RegExp;
+  fix: string;
+}
+
+const INVALID_PRIMITIVE_RULES: readonly BadTypeToken[] = [
+  ...INVALID_PRIMITIVE_TYPES,
+].map(([token, fix]) => ({
+  token,
+  fix,
+  re: new RegExp(`\\b${token}\\b(?!\\s*:)`, "u"),
+}));
+
+const BARE_GENERIC_RULES: readonly BadTypeToken[] = [...BARE_GENERIC_TYPES].map(
+  ([token, shape]) => ({
+    token,
+    fix: shape,
+    re: new RegExp(`\\b${token}\\b(?!\\s*[<:])`, "u"),
+  }),
+);
+
+/**
+ * Blank out string/template-literal contents so a quoted `"array"` (a valid
+ * string-literal type member) or `'function'` isn't misread as a bad type token.
+ * Replaced with a space to preserve the word boundaries the scanners rely on.
+ */
+function withoutStringLiterals(text: string): string {
+  return text.replace(/(['"`])(?:\\.|(?!\1)[\s\S])*\1/gu, " ");
+}
+
+/** Phrase the locator: `is \`X\`` when the whole type is the token, else `uses \`X\``. */
+function describeType(text: string, token: string): string {
+  return text === token
+    ? `\`type.text\` is \`${token}\``
+    : `\`type.text\` (${JSON.stringify(text)}) uses \`${token}\``;
+}
+
+/**
+ * The registered custom elements in a manifest — the exact set the builders
+ * process (mirrors `registeredElements` in [resolver.ts](../resolver.ts)): a
+ * declaration counts only when it is `customElement` with a `tagName`.
+ */
+function registeredElements(manifest: Manifest): CemDeclaration[] {
+  return (manifest.modules ?? [])
+    .flatMap((module) => module.declarations ?? [])
+    .filter((decl) => decl.customElement && decl.tagName);
+}
+
+/** True when `value` is a usable string identity (name/tag) — non-empty string. */
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value !== "";
+}
+
+/**
+ * Push a `name-required` error for every entry in `entries` whose `name` is not a
+ * string. Empty-string names are allowed (the valid default-slot name), matching
+ * the prune's `hasName = typeof entry.name === "string"` guard.
+ */
+function checkNames(
+  findings: CemFinding[],
+  element: string,
+  collection: string,
+  entries: readonly { name?: unknown }[] | undefined,
+): void {
+  entries?.forEach((entry, index) => {
+    if (typeof entry.name !== "string") {
+      findings.push({
+        rule: "name-required",
+        severity: "error",
+        element,
+        path: `${collection}[${index}].name`,
+        message: `${collection}[${index}] has no string \`name\` — community generators call \`.name.startsWith(…)\` and throw mid-generation.`,
+      });
+    }
+  });
+}
+
+/**
+ * Push a `type-parseable` error when `type.text` is a non-empty string with
+ * unbalanced delimiters — the exact condition the prune's `withSafeType` strips,
+ * which would otherwise splice unparseable TypeScript into the emitted `.d.ts`.
+ */
+function checkType(
+  findings: CemFinding[],
+  element: string,
+  path: string,
+  entry: { type?: { text?: string } },
+): void {
+  const text = entry.type?.text;
+  if (typeof text === "string" && text !== "" && !hasBalancedDelimiters(text)) {
+    findings.push({
+      rule: "type-parseable",
+      severity: "error",
+      element,
+      path: `${path}.type.text`,
+      message: `\`type.text\` has unbalanced delimiters: ${JSON.stringify(text)} — the generated \`.d.ts\` would not parse.`,
+    });
+  }
+}
+
+/**
+ * Push a finding when `type.text` contains a JS/JSDoc spelling that is not valid
+ * TypeScript — a lowercase primitive (`array`, `function` → **error**) or a bare
+ * generic missing its type argument (`Array`, `Promise`, … → **error**) — or, as a
+ * whole, is a valid-but-uninformative object type (`object`/`Object` → **warn**).
+ * These are the same defects the generation smoke catches, but reported with a
+ * precise per-entry locator (`attributes[N].type.text`) instead of buried in bundled
+ * `tsc` output.
+ *
+ * The bad-token scan matches whole words **inside** the type (so `"Array | null"`
+ * and `"string | array"` are caught, not just the whole-string forms), after blanking
+ * string literals — a quoted `"array"` member or a property key `{ array: string }`
+ * is left untouched, keeping the rule free of false positives.
+ */
+function checkPrimitiveType(
+  findings: CemFinding[],
+  element: string,
+  path: string,
+  entry: { type?: { text?: string } },
+): void {
+  const raw = entry.type?.text;
+  if (typeof raw !== "string") {
+    return;
+  }
+  const text = raw.trim();
+  if (text === "") {
+    return;
+  }
+  const scannable = withoutStringLiterals(text);
+
+  for (const { token, re, fix } of INVALID_PRIMITIVE_RULES) {
+    if (re.test(scannable)) {
+      findings.push({
+        rule: "type-not-typescript",
+        severity: "error",
+        element,
+        path: `${path}.type.text`,
+        message: `${describeType(text, token)}, which is not a TypeScript type — ${fix}. The generated \`.d.ts\` would not compile.`,
+      });
+      return;
+    }
+  }
+
+  for (const { token, re, fix } of BARE_GENERIC_RULES) {
+    if (re.test(scannable)) {
+      findings.push({
+        rule: "type-not-typescript",
+        severity: "error",
+        element,
+        path: `${path}.type.text`,
+        message: `${describeType(text, token)}, a generic that requires a type argument — write \`${fix}\`. The generated \`.d.ts\` would not compile.`,
+      });
+      return;
+    }
+  }
+
+  if (VAGUE_OBJECT_TYPES.has(text)) {
+    findings.push({
+      rule: "type-imprecise",
+      severity: "warn",
+      element,
+      path: `${path}.type.text`,
+      message: `\`type.text\` is \`${text}\` — a valid type, but it exposes no properties so nothing completes. Prefer an explicit shape (e.g. \`{ id: string }\`).`,
+    });
+  }
+}
+
+/** Run every static contract rule over one registered element. */
+function checkDeclaration(findings: CemFinding[], decl: CemDeclaration): void {
+  const element = isNonEmptyString(decl.tagName) ? decl.tagName : "<unknown>";
+
+  // The declaration itself must carry a string class `name` (used as the export /
+  // import-type identity); a non-string one breaks generation for this element.
+  if (typeof decl.name !== "string") {
+    findings.push({
+      rule: "name-required",
+      severity: "error",
+      element,
+      path: "name",
+      message:
+        "registered element has no string `name` — its generated import/export identity is undefined.",
+    });
+  }
+
+  const members: readonly CemMember[] = decl.members ?? [];
+  const attributes: readonly CemAttribute[] = decl.attributes ?? [];
+  const events: readonly CemEvent[] = decl.events ?? [];
+
+  // Rule: name-required — every named collection.
+  checkNames(findings, element, "members", members);
+  checkNames(findings, element, "attributes", attributes);
+  checkNames(findings, element, "slots", decl.slots);
+  checkNames(findings, element, "events", events);
+  checkNames(findings, element, "cssParts", decl.cssParts);
+  checkNames(findings, element, "cssProperties", decl.cssProperties);
+
+  // Rules: type-parseable (delimiters) + type-not-typescript / type-imprecise
+  // (invalid or vague `type.text`) — members, attributes, events carry a `type.text`.
+  members.forEach((m, i) => {
+    checkType(findings, element, `members[${i}]`, m);
+    checkPrimitiveType(findings, element, `members[${i}]`, m);
+  });
+  attributes.forEach((a, i) => {
+    checkType(findings, element, `attributes[${i}]`, a);
+    checkPrimitiveType(findings, element, `attributes[${i}]`, a);
+  });
+  events.forEach((e, i) => {
+    checkType(findings, element, `events[${i}]`, e);
+    checkPrimitiveType(findings, element, `events[${i}]`, e);
+  });
+
+  // Backing-member privacy, keyed by name (built from raw members with a string
+  // name — a nameless member can't be a `fieldName` target). Feeds both the
+  // private-reflection warn below and mirrors the prune's own map.
+  const memberPrivacyByName = new Map<string, string | undefined>(
+    members
+      .filter((m): m is CemMember => typeof m.name === "string")
+      .map((m) => [m.name, m.privacy]),
+  );
+
+  attributes.forEach((attribute, index) => {
+    // Rule: enumerated-union (warn) — a conventionally-enumerated attribute typed
+    // as bare `"string"` accepts every value and completes nothing.
+    if (
+      isNonEmptyString(attribute.name) &&
+      ENUMERATED_ATTRS.has(attribute.name) &&
+      attribute.type?.text === "string"
+    ) {
+      findings.push({
+        rule: "enumerated-union",
+        severity: "warn",
+        element,
+        path: `attributes[${index}].type.text`,
+        message: `\`${attribute.name}\` is typed as bare \`"string"\` — an enumerated attribute should carry a string-literal union (e.g. \`"primary" | "secondary"\`) so values validate and complete.`,
+      });
+    }
+
+    // Rule: private-reflection (warn) — an undescribed attribute reflected from a
+    // private/omitted member leaks internal state into editor autocomplete.
+    if (isPrivateReflection(attribute, memberPrivacyByName)) {
+      findings.push({
+        rule: "private-reflection",
+        severity: "warn",
+        element,
+        path: `attributes[${index}]`,
+        message: `\`${attribute.name ?? "<unnamed>"}\` reflects a private/omitted member and has no description — it leaks into editor autocomplete as a settable attribute (add a description if it is genuinely public).`,
+      });
+    }
+  });
+}
+
+/**
+ * Run the static contract rules over a parsed CEM, returning every finding (errors
+ * and warnings). Pure and side-effect-free — the caller decides how findings map to
+ * an exit code (see the `cem-check` command's exit contract).
+ */
+export function runContractRules(manifest: Manifest): CemFinding[] {
+  const findings: CemFinding[] = [];
+
+  // Rule: schema-version (warn) — a missing version means the generators can't
+  // know which CEM shape they're reading.
+  if (!isNonEmptyString(manifest.schemaVersion)) {
+    findings.push({
+      rule: "schema-version",
+      severity: "warn",
+      message:
+        "manifest has no `schemaVersion` — declare the CEM schema version it targets.",
+    });
+  }
+
+  for (const decl of registeredElements(manifest)) {
+    checkDeclaration(findings, decl);
+  }
+
+  return findings;
+}

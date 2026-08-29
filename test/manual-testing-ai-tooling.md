@@ -1419,6 +1419,137 @@ ships **empty** `cssParts`, so a button-only install writes no snippets file).
 
 ---
 
+### CEM contract enforcement — `auro cem-check [path]` (layer 1)
+
+The keystone of the [CEM contract-enforcement effort](../docs/cem-contract-enforcement.md):
+an executable that validates a component's `custom-elements.json` against the
+contract auro-cli's editor-type generation depends on. It exists to convert the
+generators' **silent** defensive pruning (nameless members, unbalanced `type.text`,
+private reflections — dropped without a word in
+[manifest.ts](../src/init/editors/manifest.ts)) into a **producer-visible signal**,
+so a component team learns at PR time that a CEM change broke the editor tooling.
+
+It checks the CEM two complementary ways:
+
+- **Static rules** ([rules.ts](../src/init/cem-check/rules.ts)) read the raw
+  declarations and *report* what the prune would silently drop, reusing the exact
+  same predicates so the check and the prune can never disagree.
+- **Generation smoke** ([smoke.ts](../src/init/cem-check/smoke.ts)) runs the real
+  editor-type builders (`buildJsxTypes` / `buildSvelteTypes`) plus the project-pinned
+  `tsc --noEmit` against the CEM — the authoritative consumer-path check that catches
+  breaks the static rules can't foresee (e.g. a balanced-but-unresolvable `type.text`).
+
+**Rules and severities:**
+
+| Rule | Severity | Fires when |
+| --- | --- | --- |
+| `name-required` | **error** | a registered declaration, or any member/attribute/slot/event/cssPart/cssProperty, has a non-string `name` |
+| `type-parseable` | **error** | a non-empty `type.text` has unbalanced `()[]{}<>` delimiters (the generated `.d.ts` would not parse) |
+| `type-not-typescript` | **error** | a `type.text` contains a JS/JSDoc spelling that is not valid TS — a lowercase primitive (`array`, `function`) or a bare generic missing its type argument (`Array`, `Promise`, `Map`, …), matched as a whole word inside the type (so `Array \| null`, `string \| array`) after string literals are ignored |
+| `generation-smoke` | **error** | the real builders' output fails to type-check under `tsc` |
+| `generation-build` | **error** | a builder throws while generating types for the CEM |
+| `schema-version` | warn | `manifest.schemaVersion` is missing |
+| `type-imprecise` | warn | a whole-string `type.text` is a valid but uninformative object type (`object`/`Object`) — it compiles, but exposes no properties so nothing completes |
+| `enumerated-union` | warn | a conventionally-enumerated attr (`variant`/`shape`/`size`/`type`/`appearance`) is typed as bare `"string"` |
+| `private-reflection` | warn | an undescribed, private-backed reflected attribute would be pruned |
+
+**Exit-code contract:** `0` when there are no `error`-severity findings; `1` when
+there is ≥1 error, or — under `--strict` — ≥1 warning. Warnings alone never fail
+without `--strict`.
+
+**Path argument:** optional — defaults to `custom-elements.json` in the directory the
+command runs from, so `auro cem-check` with no argument checks the CEM at a component
+repo's root. Pass an explicit path to check a CEM elsewhere. A missing/unreadable
+target exits 1 before any rule runs.
+
+**Flags:**
+
+- `--json` — emit the findings array to **stdout** as JSON (human text otherwise goes
+  to **stderr**, so stdout stays machine-parseable for the `/auro` pr/code-review
+  skills). Exit code is unchanged.
+- `--strict` — promote warnings to failures (any finding then exits 1).
+
+#### Manual smoke
+
+Run against the globally installed local package (Step 3 above). No network needed —
+the generation smoke stubs every import and uses the pinned `tsc`.
+
+```bash
+# 1. A clean CEM → exit 0, "CEM contract clean".
+cat > /tmp/clean.json <<'JSON'
+{"schemaVersion":"1.0.0","modules":[{"kind":"javascript-module","path":"x.js",
+"declarations":[{"kind":"class","name":"AuroButton","tagName":"auro-button",
+"customElement":true,"attributes":[{"name":"label","type":{"text":"string"}}],
+"slots":[],"events":[]}],"exports":[{"kind":"custom-element-definition",
+"name":"auro-button","declaration":{"name":"AuroButton"}}]}]}
+JSON
+auro cem-check /tmp/clean.json ; echo "exit=$?"
+
+# 2. A hand-broken CEM (nameless member + truncated type.text) → exit 1, both errors.
+cat > /tmp/broken.json <<'JSON'
+{"schemaVersion":"1.0.0","modules":[{"kind":"javascript-module","path":"x.js",
+"declarations":[{"kind":"class","name":"AuroBad","tagName":"auro-bad",
+"customElement":true,"members":[{"kind":"field","type":{"text":"string"}}],
+"attributes":[{"name":"config","type":{"text":"Object<key"}}],"slots":[],
+"events":[]}],"exports":[{"kind":"custom-element-definition","name":"auro-bad",
+"declaration":{"name":"AuroBad"}}]}]}
+JSON
+auro cem-check /tmp/broken.json ; echo "exit=$?"
+
+# 3. Machine-readable: stdout is a parseable JSON array; human text stays on stderr.
+auro cem-check /tmp/broken.json --json 2>/dev/null | node -e \
+  'process.stdin.pipe(require("stream").Writable({write(c,e,cb){this.b=(this.b||"")+c;cb()},final(cb){console.log("rules:",JSON.parse(this.b).map(f=>f.rule).join(","));cb()}}))'
+
+# 4. --strict turns a warn-only CEM into a failure.
+cat > /tmp/warn.json <<'JSON'
+{"schemaVersion":"1.0.0","modules":[{"kind":"javascript-module","path":"x.js",
+"declarations":[{"kind":"class","name":"AuroButton","tagName":"auro-button",
+"customElement":true,"attributes":[{"name":"variant","type":{"text":"string"}}],
+"slots":[],"events":[]}],"exports":[{"kind":"custom-element-definition",
+"name":"auro-button","declaration":{"name":"AuroButton"}}]}]}
+JSON
+auro cem-check /tmp/warn.json          ; echo "warn exit=$?"   # exit 0, ⚠ enumerated-union
+auro cem-check /tmp/warn.json --strict ; echo "strict exit=$?" # exit 1
+
+# 5. Default path: with no argument it checks ./custom-elements.json in the cwd.
+mkdir -p /tmp/cc-root && cp /tmp/clean.json /tmp/cc-root/custom-elements.json
+( cd /tmp/cc-root && auro cem-check ; echo "default exit=$?" )        # exit 0
+( cd /tmp && auro cem-check ; echo "missing exit=$?" )                # exit 1, ENOENT
+
+# 5. Help lists the flags.
+auro cem-check --help
+```
+
+- **Expect (1):** `✔ CEM contract clean — no violations.`, `exit=0`.
+- **Expect (2):** `✖ CEM contract failed — 2 errors, 0 warnings.`, then a
+  `[name-required]` line and a `[type-parseable]` line; `exit=1`.
+- **Expect (3):** `rules: name-required,type-parseable` (stdout was valid JSON).
+- **Expect (4):** `warn exit=0` with a `⚠ [enumerated-union]` line; `strict exit=1`.
+- **Expect (5):** usage shows `<path>`, `--json`, and `--strict`.
+
+#### Sign-off checklist (`auro cem-check`)
+
+**Automated — `npm test` covers the contract:**
+
+- [ ] `npm test` passes — the command tests
+      ([cem-check.command.test.ts](cem-check.command.test.ts): clean exit 0; nameless
+      member and unbalanced `type.text` each exit 1; enumerated bare-`string` warns
+      but exits 0; `--strict` flips it to exit 1; `--json` stdout parses; unreadable
+      path exits 1) and the generation-smoke tests
+      ([cem-check.smoke.test.ts](cem-check.smoke.test.ts): clean set compiles;
+      empty set is a no-op; a balanced-but-unresolvable `type.text` fails the smoke)
+
+**Manual pass — only what automation can't reach (the packed/global bin end-to-end):**
+
+- [ ] `auro cem-check --help` lists `<path>`, `--json`, `--strict`
+- [ ] Steps 1–5 above produce the expected exit codes and output from the
+      packed/global install
+- [ ] Optional: run against a real published `custom-elements.json` (e.g. from an
+      installed `@aurodesignsystem/*` package) → exit 0, no violations
+- [ ] CLI SHA, packed version, Node, OS recorded
+
+---
+
 ### Milestones pending (to be expanded later)
 
 - **PT-M3…M4 — `auro init`** downstream tooling and later surfaces: test sections
