@@ -35,7 +35,93 @@ type BaseProps = {
   translate?: "yes" | "no";
 };
 
-type BaseEvents = {};
+type BaseEvents = {
+  // Mouse events
+  "on:click"?: (e: MouseEvent) => void;
+  "onclick"?: (e: MouseEvent) => void;
+  "on:contextmenu"?: (e: MouseEvent) => void;
+  "oncontextmenu"?: (e: MouseEvent) => void;
+  "on:dblclick"?: (e: MouseEvent) => void;
+  "ondblclick"?: (e: MouseEvent) => void;
+  "on:mousedown"?: (e: MouseEvent) => void;
+  "onmousedown"?: (e: MouseEvent) => void;
+  "on:mouseenter"?: (e: MouseEvent) => void;
+  "onmouseenter"?: (e: MouseEvent) => void;
+  "on:mouseleave"?: (e: MouseEvent) => void;
+  "onmouseleave"?: (e: MouseEvent) => void;
+  "on:mousemove"?: (e: MouseEvent) => void;
+  "onmousemove"?: (e: MouseEvent) => void;
+  "on:mouseout"?: (e: MouseEvent) => void;
+  "onmouseout"?: (e: MouseEvent) => void;
+  "on:mouseover"?: (e: MouseEvent) => void;
+  "onmouseover"?: (e: MouseEvent) => void;
+  "on:mouseup"?: (e: MouseEvent) => void;
+  "onmouseup"?: (e: MouseEvent) => void;
+  // Drag events
+  "on:drag"?: (e: DragEvent) => void;
+  "ondrag"?: (e: DragEvent) => void;
+  "on:dragend"?: (e: DragEvent) => void;
+  "ondragend"?: (e: DragEvent) => void;
+  "on:dragenter"?: (e: DragEvent) => void;
+  "ondragenter"?: (e: DragEvent) => void;
+  "on:dragexit"?: (e: DragEvent) => void;
+  "ondragexit"?: (e: DragEvent) => void;
+  "on:dragleave"?: (e: DragEvent) => void;
+  "ondragleave"?: (e: DragEvent) => void;
+  "on:dragover"?: (e: DragEvent) => void;
+  "ondragover"?: (e: DragEvent) => void;
+  "on:dragstart"?: (e: DragEvent) => void;
+  "ondragstart"?: (e: DragEvent) => void;
+  "on:drop"?: (e: DragEvent) => void;
+  "ondrop"?: (e: DragEvent) => void;
+  // Keyboard events
+  "on:keydown"?: (e: KeyboardEvent) => void;
+  "onkeydown"?: (e: KeyboardEvent) => void;
+  "on:keyup"?: (e: KeyboardEvent) => void;
+  "onkeyup"?: (e: KeyboardEvent) => void;
+  "on:keypress"?: (e: KeyboardEvent) => void;
+  "onkeypress"?: (e: KeyboardEvent) => void;
+  // Focus events
+  "on:focus"?: (e: FocusEvent) => void;
+  "onfocus"?: (e: FocusEvent) => void;
+  "on:blur"?: (e: FocusEvent) => void;
+  "onblur"?: (e: FocusEvent) => void;
+  // Form events
+  "on:change"?: (e: Event) => void;
+  "onchange"?: (e: Event) => void;
+  "on:input"?: (e: Event) => void;
+  "oninput"?: (e: Event) => void;
+  "on:submit"?: (e: Event) => void;
+  "onsubmit"?: (e: Event) => void;
+  "on:reset"?: (e: Event) => void;
+  "onreset"?: (e: Event) => void;
+  // Scroll / wheel events
+  "on:scroll"?: (e: UIEvent) => void;
+  "onscroll"?: (e: UIEvent) => void;
+  "on:wheel"?: (e: WheelEvent) => void;
+  "onwheel"?: (e: WheelEvent) => void;
+  // Animation / transition events
+  "on:animationstart"?: (e: AnimationEvent) => void;
+  "onanimationstart"?: (e: AnimationEvent) => void;
+  "on:animationend"?: (e: AnimationEvent) => void;
+  "onanimationend"?: (e: AnimationEvent) => void;
+  "on:animationiteration"?: (e: AnimationEvent) => void;
+  "onanimationiteration"?: (e: AnimationEvent) => void;
+  "on:transitionend"?: (e: TransitionEvent) => void;
+  "ontransitionend"?: (e: TransitionEvent) => void;
+  // Resource events
+  "on:load"?: (e: Event) => void;
+  "onload"?: (e: Event) => void;
+  "on:error"?: (e: Event) => void;
+  "onerror"?: (e: Event) => void;
+  // Clipboard events
+  "on:copy"?: (e: ClipboardEvent) => void;
+  "oncopy"?: (e: ClipboardEvent) => void;
+  "on:cut"?: (e: ClipboardEvent) => void;
+  "oncut"?: (e: ClipboardEvent) => void;
+  "on:paste"?: (e: ClipboardEvent) => void;
+  "onpaste"?: (e: ClipboardEvent) => void;
+};
 
 type AuroButtonProps = {
   /** 【myapp-button】 Disables the button. */
