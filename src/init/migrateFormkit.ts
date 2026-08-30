@@ -145,6 +145,15 @@ function escapeRegExp(value: string): string {
 }
 
 /**
+ * Normalize an OS path to forward slashes so the report reads identically across
+ * platforms — `path.relative` yields `\` separators on Windows, which would make
+ * `filesChanged`/`deepImports` (and the tests asserting them) platform-dependent.
+ */
+function toPosix(p: string): string {
+  return p.split(path.sep).join("/");
+}
+
+/**
  * Rewrite one source file's legacy specifiers to formkit subpaths. An exact bare
  * specifier (`"@aurodesignsystem/auro-input"`, any quote style) is rewritten; a deep
  * specifier (`"@aurodesignsystem/auro-input/…"`) is left in place and returned as a
@@ -262,7 +271,7 @@ export function migrateToFormkit(
       continue; // unreadable file — skip, mirrors the scanner's tolerance
     }
     const { next, rewrites, deep } = rewriteSource(source, legacyPkgs);
-    const rel = path.relative(cwd, file);
+    const rel = toPosix(path.relative(cwd, file));
     for (const specifier of deep) {
       report.deepImports.push({ file: rel, specifier });
     }
