@@ -284,6 +284,8 @@ test("regeneration after removing a dependency drops it and stays idempotent", a
     {
       recursive: true,
       force: true,
+      maxRetries: 10,
+      retryDelay: 100,
     },
   );
   await runInit({ offline: true });
@@ -1118,7 +1120,7 @@ test("all three editor targets regenerate byte-identically and drop a removed de
   // disappears from *every* target while the standalone stays.
   await rm(
     path.join(cwd, "node_modules", "@aurodesignsystem", "auro-formkit"),
-    { recursive: true, force: true },
+    { recursive: true, force: true, maxRetries: 10, retryDelay: 100 },
   );
   await runInit({ prefix: "myapp-", ...editorFlags, offline: true });
   const afterRemoval = await Promise.all(
