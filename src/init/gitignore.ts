@@ -90,7 +90,14 @@ function appendGitignore(cwd: string, lines: string[], dedupe = true): void {
   }
   // Separate the appended block from prior content when the file lacks a final \n.
   const prefix = current === "" || current.endsWith("\n") ? "" : "\n";
-  appendFileSync(gitignoreAbs, `${prefix}${toAdd.join("\n")}\n`, "utf-8");
+  try {
+    appendFileSync(gitignoreAbs, `${prefix}${toAdd.join("\n")}\n`, "utf-8");
+  } catch {
+    // Advisory and non-throwing (see the module doc): a failed .gitignore write
+    // must never break an `init` whose main artifacts already landed. The path
+    // simply stays ignored and surfaces to the caller as `unfixable` via the git
+    // re-check in `unignore`, rather than crashing the command.
+  }
 }
 
 /**

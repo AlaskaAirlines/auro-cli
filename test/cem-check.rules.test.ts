@@ -125,6 +125,33 @@ test("string-literal members that contain `array` are not flagged (literals are 
   );
 });
 
+test("a string-literal member containing a bracket char is not a type-parseable error (literals are ignored)", () => {
+  // `">"` and `"none"` are a valid string-literal union; the `>` lives inside a
+  // quoted literal, not as an unbalanced delimiter. `hasBalancedDelimiters` must
+  // blank literals before its bracket scan or this trips a false `type-parseable`
+  // error — an error-severity false positive that would fail the CEM gate on a
+  // legitimate manifest.
+  const findings = findingsFor([
+    { name: "comparison", type: { text: '">" | "none"' } },
+  ]);
+  assert.ok(
+    !findings.some((f) => f.rule === "type-parseable"),
+    "a bracket inside a string literal must not be read as an unbalanced delimiter",
+  );
+});
+
+test("a genuinely unbalanced delimiter outside any literal is still a type-parseable error", () => {
+  // The blanking must not mask a real defect: `Object<key` (auro-formkit's actual
+  // truncated `type.text`) has no closing `>` and no string literal to hide in.
+  const findings = findingsFor([
+    { name: "config", type: { text: "Object<key" } },
+  ]);
+  assert.ok(
+    findings.some((f) => f.rule === "type-parseable" && f.severity === "error"),
+    "an unbalanced delimiter in bare type text must still be flagged",
+  );
+});
+
 test("a property key named `array` is not flagged (only a type position is invalid)", () => {
   const findings = findingsFor([
     { name: "config", type: { text: "{ array: string }" } },

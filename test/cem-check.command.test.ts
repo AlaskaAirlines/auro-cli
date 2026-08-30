@@ -161,3 +161,39 @@ test("an unreadable CEM path exits 1 before any rule runs", async (t) => {
     (err: ExitError) => err.code === 1,
   );
 });
+
+test("valid JSON that is not a CEM object (top-level null) exits 1 cleanly", async (t) => {
+  // `null` parses without throwing but has no `.modules`; without the object
+  // guard, resolveComponents throws an uncaught TypeError instead of exiting 1.
+  mockExit(t);
+  captureError(t);
+  const cemPath = await writeCem(t, null);
+  await assert.rejects(
+    runCemCheck(cemPath, {}),
+    (err: ExitError) => err.code === 1,
+  );
+});
+
+test("in --json mode a non-object CEM exits 1 with the message on stderr", async (t) => {
+  // The JSON path suppresses the spinner, so the guard's message lands on
+  // console.error (stderr) — and stdout carries no payload, matching the
+  // parse-failure contract.
+  mockExit(t);
+  const stderr = captureError(t);
+  const cemPath = await writeCem(t, null);
+  await assert.rejects(
+    runCemCheck(cemPath, { json: true }),
+    (err: ExitError) => err.code === 1,
+  );
+  assert.match(stderr(), /not a CEM object/);
+});
+
+test("a top-level JSON array is rejected as not a CEM object (exit 1)", async (t) => {
+  mockExit(t);
+  captureError(t);
+  const cemPath = await writeCem(t, []);
+  await assert.rejects(
+    runCemCheck(cemPath, {}),
+    (err: ExitError) => err.code === 1,
+  );
+});

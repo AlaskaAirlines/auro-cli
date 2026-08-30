@@ -18,14 +18,28 @@ import type { ResolvedComponent } from "#init/resolver.js";
 import type { CemAttribute, CemDeclaration, Manifest } from "#utils/cem.js";
 
 /**
+ * Blank out string/template-literal contents (replacing each with a space to keep
+ * surrounding offsets stable) so a bracket **inside** a quoted string-literal type
+ * member — e.g. the `>` in `'">" | "none"'`, a perfectly valid union — isn't
+ * mistaken for an unbalanced delimiter. Shared by {@link hasBalancedDelimiters}
+ * and the `cem-check` type rules so the *check* and the silent *prune* judge the
+ * same text.
+ */
+export function withoutStringLiterals(text: string): string {
+  return text.replace(/(['"`])(?:\\.|(?!\1)[\s\S])*\1/gu, " ");
+}
+
+/**
  * True when every bracket pair (`()[]{}<>`) in `text` is balanced, treating a
- * `=>` arrow as text rather than a generic close. The community JSX/Svelte tools
- * splice a CEM `type.text` verbatim into generated TypeScript, so a truncated or
- * garbled type — e.g. auro-formkit's `auroDropdown-idAdded` event ships the type
- * `"Object<key"` — yields output no parser (prettier/tsc) can read. A cheap
- * balance check is enough to catch these real-world defects without trying to be
- * a TypeScript parser; anything that fails it is dropped so the generator falls
- * back to its default handler/prop type.
+ * `=>` arrow as text rather than a generic close and ignoring brackets that live
+ * **inside** string/template literals (a quoted `">"` is a valid literal member,
+ * not an unbalanced close). The community JSX/Svelte tools splice a CEM
+ * `type.text` verbatim into generated TypeScript, so a truncated or garbled type —
+ * e.g. auro-formkit's `auroDropdown-idAdded` event ships the type `"Object<key"` —
+ * yields output no parser (prettier/tsc) can read. A cheap balance check is enough
+ * to catch these real-world defects without trying to be a TypeScript parser;
+ * anything that fails it is dropped so the generator falls back to its default
+ * handler/prop type.
  */
 export function hasBalancedDelimiters(text: string): boolean {
   const closeToOpen: Record<string, string> = {
@@ -36,7 +50,7 @@ export function hasBalancedDelimiters(text: string): boolean {
   };
   const stack: string[] = [];
   let prev = "";
-  for (const ch of text) {
+  for (const ch of withoutStringLiterals(text)) {
     if (ch === ">" && prev === "=") {
       // `=>` arrow — not a generic close.
       prev = ch;
