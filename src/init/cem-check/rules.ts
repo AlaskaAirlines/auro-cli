@@ -428,7 +428,7 @@ function splitTopLevelUnion(text: string): string[] {
     } else if (ch === ")" || ch === "]" || ch === "}") {
       depth--;
     } else if (ch === ">") {
-      if (text[i - 1] !== "=") depth--; // ignore the `>` of an arrow `=>`
+      if (i > 0 && text[i - 1] !== "=") depth--; // ignore the `>` of an arrow `=>`
     } else if (ch === "|" && depth === 0) {
       members.push(text.slice(start, i).trim());
       start = i + 1;

@@ -67,7 +67,26 @@ type PackageJson = {
 const PACKAGE_JSON = "package.json";
 
 /** Read and parse `<cwd>/package.json`, or `null` when it is absent. */
-function readPackageJson(cwd: string): PackageJson | null {
+/**
+ * The indentation of `raw`'s first indented line, as a `JSON.stringify` spec
+ * (the indent string — `"  "`, `"    "`, `"\t"`), or `2` when none is discernible
+ * (a single-line or empty object). Lets a rewrite match the consumer's own style.
+ */
+function detectJsonIndent(raw: string): string | number {
+  const match = raw.match(/\n([ \t]+)\S/u);
+  return match ? match[1] : 2;
+}
+
+/**
+ * Read and parse `<cwd>/package.json`, returning the parsed object alongside the
+ * file's detected indentation so a rewrite preserves the consumer's style
+ * (2-space, 4-space, tabs) rather than normalising it — keeping the migration's
+ * `git diff` to the dependency changes alone. Returns `null` when the file is
+ * absent; throws on malformed JSON.
+ */
+function readPackageJson(
+  cwd: string,
+): { pkgJson: PackageJson; indent: string | number } | null {
   let raw: string;
   try {
     raw = readFileSync(path.join(cwd, PACKAGE_JSON), "utf-8");
@@ -78,7 +97,10 @@ function readPackageJson(cwd: string): PackageJson | null {
     throw error;
   }
   try {
-    return JSON.parse(raw) as PackageJson;
+    return {
+      pkgJson: JSON.parse(raw) as PackageJson,
+      indent: detectJsonIndent(raw),
+    };
   } catch {
     throw new Error(`${PACKAGE_JSON}: invalid JSON.`);
   }
@@ -92,10 +114,11 @@ function readPackageJson(cwd: string): PackageJson | null {
  * Returns `[]` when there is no `package.json`; throws on malformed JSON.
  */
 export function detectLegacyFormkit(cwd: string): LegacyDependency[] {
-  const pkgJson = readPackageJson(cwd);
-  if (!pkgJson) {
+  const parsed = readPackageJson(cwd);
+  if (!parsed) {
     return [];
   }
+  const { pkgJson } = parsed;
 
   const found: LegacyDependency[] = [];
   const fields: LegacyDependency["field"][] = [
@@ -188,8 +211,9 @@ export function migrateToFormkit(
   }
 
   // 1. package.json — swap the legacy deps for auro-formkit.
-  const pkgJson = readPackageJson(cwd);
-  if (pkgJson) {
+  const parsed = readPackageJson(cwd);
+  if (parsed) {
+    const { pkgJson, indent } = parsed;
     for (const field of ["dependencies", "devDependencies"] as const) {
       const block = pkgJson[field];
       if (!block) {
@@ -218,7 +242,7 @@ export function migrateToFormkit(
 
     writeFileSync(
       path.join(cwd, PACKAGE_JSON),
-      `${JSON.stringify(pkgJson, null, 2)}\n`,
+      `${JSON.stringify(pkgJson, null, indent)}\n`,
       "utf-8",
     );
   }
