@@ -211,12 +211,32 @@ const CUSTOM_ELEMENT_MAPPING =
   /^(\s*"[^"]+": Partial<)(\w+)Props & BaseProps & BaseEvents(>;)$/gm;
 
 function overrideCollidingBaseMembers(contents: string): string {
-  return contents.replace(
+  let matched = false;
+  const next = contents.replace(
     CUSTOM_ELEMENT_MAPPING,
-    (_match, head, name, tail) =>
-      `${head}Omit<${name}Props, keyof BaseProps> & BaseProps &` +
-      ` Omit<BaseEvents, keyof ${name}Props>${tail}`,
+    (_match, head, name, tail) => {
+      matched = true;
+      return (
+        `${head}Omit<${name}Props, keyof BaseProps> & BaseProps &` +
+        ` Omit<BaseEvents, keyof ${name}Props>${tail}`
+      );
+    },
   );
+  // A silent no-op would ship the un-rewritten `Partial<<Name>Props & BaseProps &
+  // BaseEvents>` form, whose same-named members collapse (a native-named CEM event
+  // to an unsatisfiable intersection, a restated global attribute to `never`) —
+  // invisibly, until a consumer hits it. Mirror globalizeSvelteNamespace: if the
+  // expected element mapping isn't present, the upstream format drifted, so fail
+  // loudly here rather than downstream in the tsc smoke.
+  if (!matched) {
+    throw new Error(
+      "custom-element-svelte-integration no longer emits the expected " +
+        "`Partial<<Name>Props & BaseProps & BaseEvents>` element mapping; the " +
+        "base-member collision rewrite in svelteTypes.ts must be updated to " +
+        "match the new output.",
+    );
+  }
+  return next;
 }
 
 /**

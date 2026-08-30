@@ -19,6 +19,9 @@ import {
   isPrivateReflection,
   withoutStringLiterals,
 } from "#init/editors/manifest.js";
+// Reuse the resolver's element filter so the check and the resolver can never
+// disagree on which declarations count as registered elements.
+import { registeredElements } from "#init/resolver.js";
 import type {
   CemAttribute,
   CemDeclaration,
@@ -256,17 +259,6 @@ function checkDeprecationDetail(
         "`deprecated` is set but carries no message — editors show a strikethrough with no migration target. Prefer `@deprecated <what to use instead>`.",
     });
   }
-}
-
-/**
- * The registered custom elements in a manifest — the exact set the builders
- * process (mirrors `registeredElements` in [resolver.ts](../resolver.ts)): a
- * declaration counts only when it is `customElement` with a `tagName`.
- */
-function registeredElements(manifest: Manifest): CemDeclaration[] {
-  return (manifest.modules ?? [])
-    .flatMap((module) => module.declarations ?? [])
-    .filter((decl) => decl.customElement && decl.tagName);
 }
 
 /** True when `value` is a usable string identity (name/tag) — non-empty string. */

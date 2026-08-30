@@ -71,7 +71,7 @@ export interface ResolveResult {
  * yet carry no tag. Module and declaration order is preserved for deterministic
  * output.
  */
-function registeredElements(manifest: Manifest): CemDeclaration[] {
+export function registeredElements(manifest: Manifest): CemDeclaration[] {
   return (manifest.modules ?? [])
     .flatMap((module) => module.declarations ?? [])
     .filter((decl) => decl.customElement && decl.tagName);
