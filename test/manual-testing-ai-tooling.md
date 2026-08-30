@@ -1468,7 +1468,10 @@ It checks the CEM two complementary ways:
 | `generation-build` | **error** | a builder throws while generating types for the CEM |
 | `schema-version` | warn | `manifest.schemaVersion` is missing |
 | `type-imprecise` | warn | a whole-string `type.text` is a valid but uninformative object type (`object`/`Object`) — it compiles, but exposes no properties so nothing completes |
-| `enumerated-union` | warn | a conventionally-enumerated attr (`variant`/`shape`/`size`/`type`/`appearance`) is typed as bare `"string"` |
+| `enumerated-union` | warn | a conventionally-enumerated attr (`variant`/`shape`/`size`/`type`/`appearance`) is typed as a bare uninformative string — `"string"`, capital `"String"`, or `"any"` — so no value validates or completes |
+| `attribute-name-not-lowercase` | warn | an attribute `name` has uppercase letters (e.g. `buttonHref`) — the browser lowercases HTML attribute names, so it never binds as written; the camelCase property name belongs in `fieldName` |
+| `union-widened-by-string` | warn | a `type.text` unions string literals with a bare `string`/`String` (e.g. `"default" \| "inverse" \| string`) — the bare member widens the whole type back to `string`, so the literals stop validating and completing |
+| `missing-description` | warn | the component, an attribute, or an event has neither a `description` nor a `summary` — editors show no hover documentation for it |
 | `private-reflection` | warn | an undescribed, private-backed reflected attribute would be pruned |
 | `deprecated-prose-unflagged` | warn | a real class member (attribute/property/field/method) reads as deprecated in its description/summary (a leading, bracketed, or bolded `deprecated`, or an inline `@deprecated`) but has no structural `deprecated` field — **author-fixable** by adding an `@deprecated` JSDoc tag, which surfaces in the generated JSX/Svelte types (not in VS Code HTML custom-data, which has no deprecation field) |
 | `deprecated-prose-unsupported` | warn | an event or slot reads as deprecated in prose but has no `deprecated` field — **not** author-fixable: the analyzer (v0.11.0) never emits `deprecated` for inline `@event`/`@fires`/`@slot` tags, so editors cannot surface it (distinct id so it can be suppressed independently) |

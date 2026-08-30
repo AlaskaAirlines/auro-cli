@@ -63,6 +63,19 @@ export const ENUMERATED_ATTRS: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * `type.text` spellings that carry no value information — a curated enumerated
+ * attribute typed as any of these accepts every value and completes nothing. Covers
+ * the lowercase TS `string`, the capitalized boxed `String` (valid TS, so
+ * `type-not-typescript` ignores it — the shape most auro CEMs actually ship), and
+ * `any`. Compared after trimming.
+ */
+const UNINFORMATIVE_STRING_TYPES: ReadonlySet<string> = new Set([
+  "string",
+  "String",
+  "any",
+]);
+
+/**
  * Lowercase JS / JSDoc spellings that are **not** valid TypeScript types — the
  * `variant` → `Cannot find name 'array'` class seen across auro-formkit. Inlined
  * verbatim by the JSX/Svelte builders (`useCemTypes`), they make the emitted
@@ -383,6 +396,105 @@ function checkPrimitiveType(
   }
 }
 
+/**
+ * Split a `type.text` on its **top-level** `|` union separators, ignoring any `|`
+ * inside quotes or nested `()[]{}<>` (so `"a|b" | Array<x | y>` yields two members,
+ * not four). Arrow `=>` is not treated as a closing angle. Members are trimmed and
+ * empties dropped.
+ */
+function splitTopLevelUnion(text: string): string[] {
+  const members: string[] = [];
+  let depth = 0;
+  let quote: string | null = null;
+  let start = 0;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (quote !== null) {
+      if (ch === quote && text[i - 1] !== "\\") {
+        quote = null;
+      }
+    } else if (ch === '"' || ch === "'" || ch === "`") {
+      quote = ch;
+    } else if (ch === "(" || ch === "[" || ch === "{" || ch === "<") {
+      depth++;
+    } else if (ch === ")" || ch === "]" || ch === "}") {
+      depth--;
+    } else if (ch === ">") {
+      if (text[i - 1] !== "=") depth--; // ignore the `>` of an arrow `=>`
+    } else if (ch === "|" && depth === 0) {
+      members.push(text.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  members.push(text.slice(start).trim());
+  return members.filter((member) => member !== "");
+}
+
+/** True when a union member is a string literal (`"x"` / `'x'` / `` `x` ``). */
+function isStringLiteralMember(member: string): boolean {
+  return /^(['"`]).*\1$/u.test(member);
+}
+
+/**
+ * Push a `union-widened-by-string` warning when a `type.text` unions one or more
+ * string literals with a bare `string`/`String` — the bare member widens the whole
+ * type back to `string`, so the literals stop validating and completing (the
+ * auro-tabs `"default" | "inverse" | string` class). Warn-only: the emitted `.d.ts`
+ * still compiles, it just loses the completion the literals were meant to give.
+ */
+function checkWidenedUnion(
+  findings: CemFinding[],
+  element: string,
+  path: string,
+  entry: { type?: { text?: string } },
+): void {
+  const text = entry.type?.text?.trim();
+  if (typeof text !== "string" || !text.includes("|")) {
+    return;
+  }
+  const members = splitTopLevelUnion(text);
+  const hasLiteral = members.some(isStringLiteralMember);
+  const hasBareString = members.some((m) => m === "string" || m === "String");
+  if (hasLiteral && hasBareString) {
+    findings.push({
+      rule: "union-widened-by-string",
+      severity: "warn",
+      element,
+      path: `${path}.type.text`,
+      message: `\`type.text\` (${JSON.stringify(text)}) unions string literals with a bare \`string\`, which widens the whole type back to \`string\` — drop the \`string\` member so the literals validate and complete.`,
+    });
+  }
+}
+
+/** True when a text field is absent or blank (nothing to drive an editor hover). */
+function isMissingText(text: string | undefined): boolean {
+  return typeof text !== "string" || text.trim() === "";
+}
+
+/**
+ * Push a `missing-description` warning when neither `description` nor `summary`
+ * carries text — editors then show no hover documentation for the entry. Warn-only;
+ * applied to the component and its attributes/events (the surfaces the IntelliSense
+ * audit measures). `kind` names the surface in the message.
+ */
+function checkDescription(
+  findings: CemFinding[],
+  element: string,
+  kind: string,
+  path: string | undefined,
+  entry: { description?: string; summary?: string },
+): void {
+  if (isMissingText(entry.description) && isMissingText(entry.summary)) {
+    findings.push({
+      rule: "missing-description",
+      severity: "warn",
+      element,
+      ...(path === undefined ? {} : { path }),
+      message: `${kind} has no description or summary — editors show no hover documentation for it. Add a JSDoc description.`,
+    });
+  }
+}
+
 /** Run every static contract rule over one registered element. */
 function checkDeclaration(findings: CemFinding[], decl: CemDeclaration): void {
   const element = isNonEmptyString(decl.tagName) ? decl.tagName : "<unknown>";
@@ -399,6 +511,9 @@ function checkDeclaration(findings: CemFinding[], decl: CemDeclaration): void {
         "registered element has no string `name` — its generated import/export identity is undefined.",
     });
   }
+
+  // Rule: missing-description (warn) — the component itself carries no hover docs.
+  checkDescription(findings, element, "this component", undefined, decl);
 
   const members: readonly CemMember[] = decl.members ?? [];
   const attributes: readonly CemAttribute[] = decl.attributes ?? [];
@@ -424,12 +539,15 @@ function checkDeclaration(findings: CemFinding[], decl: CemDeclaration): void {
   attributes.forEach((a, i) => {
     checkType(findings, element, `attributes[${i}]`, a);
     checkPrimitiveType(findings, element, `attributes[${i}]`, a);
+    checkWidenedUnion(findings, element, `attributes[${i}]`, a);
+    checkDescription(findings, element, "attribute", `attributes[${i}]`, a);
     checkMemberDeprecation(findings, element, `attributes[${i}]`, a);
     checkDeprecationDetail(findings, element, `attributes[${i}]`, a);
   });
   events.forEach((e, i) => {
     checkType(findings, element, `events[${i}]`, e);
     checkPrimitiveType(findings, element, `events[${i}]`, e);
+    checkDescription(findings, element, "event", `events[${i}]`, e);
     checkEventSlotDeprecation(findings, element, "event", `events[${i}]`, e);
     checkDeprecationDetail(findings, element, `events[${i}]`, e);
   });
@@ -448,19 +566,34 @@ function checkDeclaration(findings: CemFinding[], decl: CemDeclaration): void {
   );
 
   attributes.forEach((attribute, index) => {
-    // Rule: enumerated-union (warn) — a conventionally-enumerated attribute typed
-    // as bare `"string"` accepts every value and completes nothing.
+    // Rule: attribute-name-not-lowercase (warn) — the browser lowercases HTML
+    // attribute names, so a camelCase `name` (e.g. `buttonHref`) never binds as
+    // written. The JS property name lives in `fieldName`/the backing member; only
+    // the reflected attribute `name` must be lowercase.
+    if (isNonEmptyString(attribute.name) && /[A-Z]/u.test(attribute.name)) {
+      findings.push({
+        rule: "attribute-name-not-lowercase",
+        severity: "warn",
+        element,
+        path: `attributes[${index}].name`,
+        message: `attribute \`${attribute.name}\` has uppercase letters — HTML lowercases attribute names, so it never binds as written. Use \`${attribute.name.toLowerCase()}\` (the camelCase property name belongs in \`fieldName\`).`,
+      });
+    }
+
+    // Rule: enumerated-union (warn) — a conventionally-enumerated attribute typed as
+    // a bare uninformative string (`string`/`String`/`any`) accepts every value and
+    // completes nothing.
     if (
       isNonEmptyString(attribute.name) &&
       ENUMERATED_ATTRS.has(attribute.name) &&
-      attribute.type?.text === "string"
+      UNINFORMATIVE_STRING_TYPES.has(attribute.type?.text?.trim() ?? "")
     ) {
       findings.push({
         rule: "enumerated-union",
         severity: "warn",
         element,
         path: `attributes[${index}].type.text`,
-        message: `\`${attribute.name}\` is typed as bare \`"string"\` — an enumerated attribute should carry a string-literal union (e.g. \`"primary" | "secondary"\`) so values validate and complete.`,
+        message: `\`${attribute.name}\` is typed as bare \`${JSON.stringify(attribute.type?.text ?? "")}\` — an enumerated attribute should carry a string-literal union (e.g. \`"primary" | "secondary"\`) so values validate and complete.`,
       });
     }
 

@@ -261,3 +261,148 @@ test("an incidental `deprecated` mention is not flagged (marker-targeted)", () =
     "a mid-sentence mention of `deprecated` must not be flagged",
   );
 });
+
+// ---------------------------------------------------------------------------
+// attribute-name-not-lowercase — a camelCase attribute name never binds in HTML
+// ---------------------------------------------------------------------------
+
+test("a camelCase attribute name warns with the lowercased suggestion", () => {
+  const findings = findingsFor([
+    {
+      name: "buttonHref",
+      type: { text: "string" },
+      description: "The href.",
+    },
+  ]);
+  const finding = findings.find(
+    (f) => f.rule === "attribute-name-not-lowercase",
+  );
+  assert.ok(finding, "expected an attribute-name-not-lowercase finding");
+  assert.equal(finding.severity, "warn");
+  assert.equal(finding.path, "attributes[0].name");
+  assert.match(finding.message, /buttonhref/);
+});
+
+test("an all-lowercase attribute name is not flagged", () => {
+  const findings = findingsFor([
+    { name: "buttonhref", type: { text: "string" }, description: "The href." },
+  ]);
+  assert.ok(
+    !findings.some((f) => f.rule === "attribute-name-not-lowercase"),
+    "a lowercase attribute name must not be flagged",
+  );
+});
+
+// ---------------------------------------------------------------------------
+// union-widened-by-string — string literals unioned with a bare `string`
+// ---------------------------------------------------------------------------
+
+test("a union of literals with a bare `string` warns (union-widened-by-string)", () => {
+  const findings = findingsFor([
+    {
+      name: "theme",
+      type: { text: '"default" | "inverse" | string' },
+      description: "The theme.",
+    },
+  ]);
+  const finding = findings.find((f) => f.rule === "union-widened-by-string");
+  assert.ok(finding, "expected a union-widened-by-string finding");
+  assert.equal(finding.severity, "warn");
+  assert.equal(finding.path, "attributes[0].type.text");
+});
+
+test("a clean string-literal union (no bare `string`) is not flagged", () => {
+  const findings = findingsFor([
+    {
+      name: "variant",
+      type: { text: '"primary" | "secondary"' },
+      description: "The variant.",
+    },
+  ]);
+  assert.ok(
+    !findings.some((f) => f.rule === "union-widened-by-string"),
+    "a union without a bare `string` member must not be flagged",
+  );
+});
+
+test("a `string` inside a nested generic does not trip the widened-union rule", () => {
+  const findings = findingsFor([
+    {
+      name: "items",
+      type: { text: '"all" | Array<string>' },
+      description: "The items.",
+    },
+  ]);
+  assert.ok(
+    !findings.some((f) => f.rule === "union-widened-by-string"),
+    "a `string` type argument is not a top-level bare `string` union member",
+  );
+});
+
+// ---------------------------------------------------------------------------
+// enumerated-union — broadened to capital `String` and `any`
+// ---------------------------------------------------------------------------
+
+test("a curated attr typed capital `String` is an enumerated-union warn", () => {
+  const findings = findingsFor([
+    { name: "variant", type: { text: "String" }, description: "The variant." },
+  ]);
+  const finding = findings.find((f) => f.rule === "enumerated-union");
+  assert.ok(finding, "capital `String` on `variant` should warn");
+  assert.equal(finding.severity, "warn");
+  assert.equal(finding.path, "attributes[0].type.text");
+});
+
+test("a curated attr typed `any` is an enumerated-union warn", () => {
+  const findings = findingsFor([
+    { name: "size", type: { text: "any" }, description: "The size." },
+  ]);
+  assert.ok(
+    findings.some((f) => f.rule === "enumerated-union"),
+    "`any` on `size` should warn",
+  );
+});
+
+// ---------------------------------------------------------------------------
+// missing-description — no description and no summary anywhere to drive a hover
+// ---------------------------------------------------------------------------
+
+test("an attribute with no description or summary warns (missing-description)", () => {
+  const findings = findingsFor([{ name: "label", type: { text: "string" } }]);
+  const finding = findings.find(
+    (f) => f.rule === "missing-description" && f.path === "attributes[0]",
+  );
+  assert.ok(finding, "expected a missing-description finding on the attribute");
+  assert.equal(finding.severity, "warn");
+});
+
+test("a `summary` alone clears the missing-description finding", () => {
+  const findings = findingsFor([
+    { name: "label", type: { text: "string" }, summary: "The label text." },
+  ]);
+  assert.ok(
+    !findings.some(
+      (f) => f.rule === "missing-description" && f.path === "attributes[0]",
+    ),
+    "a summary drives hover docs, so no missing-description should fire",
+  );
+});
+
+test("an event with no description or summary warns (missing-description)", () => {
+  const findings = findingsForDecl({ events: [{ name: "change" }] });
+  assert.ok(
+    findings.some(
+      (f) => f.rule === "missing-description" && f.path === "events[0]",
+    ),
+    "an undescribed event should warn",
+  );
+});
+
+test("a component with an empty description warns element-level (no path)", () => {
+  const findings = findingsForDecl({ description: "" });
+  const finding = findings.find(
+    (f) => f.rule === "missing-description" && f.element === "auro-button",
+  );
+  assert.ok(finding, "expected an element-level missing-description finding");
+  assert.equal(finding.path, undefined);
+});
