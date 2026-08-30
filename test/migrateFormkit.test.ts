@@ -212,3 +212,41 @@ test("migrateToFormkit is idempotent — a second run changes nothing", async (t
     "package.json unchanged on re-run",
   );
 });
+
+test("migrateToFormkit preserves the consumer's 4-space package.json indentation", async (t) => {
+  const cwd = await tempCwd(t);
+  // Write the file with 4-space indent directly (writePackageJson forces 2-space).
+  await writeFile(
+    path.join(cwd, "package.json"),
+    `${JSON.stringify({ dependencies: { "@aurodesignsystem/auro-input": "^9.0.0" } }, null, 4)}\n`,
+  );
+
+  migrateToFormkit(cwd, detectLegacyFormkit(cwd));
+
+  const written = await read(path.join(cwd, "package.json"));
+  assert.match(
+    written,
+    /\n {4}"dependencies"/u,
+    "the file keeps its 4-space indentation, not normalised to 2",
+  );
+  // The edit still took: legacy dep gone, formkit added.
+  const pkg = JSON.parse(written);
+  assert.ok(!pkg.dependencies["@aurodesignsystem/auro-input"]);
+  assert.ok(pkg.dependencies["@aurodesignsystem/auro-formkit"]);
+});
+
+test("migrateToFormkit preserves tab-indented package.json", async (t) => {
+  const cwd = await tempCwd(t);
+  await writeFile(
+    path.join(cwd, "package.json"),
+    `${JSON.stringify({ dependencies: { "@aurodesignsystem/auro-input": "^9.0.0" } }, null, "\t")}\n`,
+  );
+
+  migrateToFormkit(cwd, detectLegacyFormkit(cwd));
+
+  assert.match(
+    await read(path.join(cwd, "package.json")),
+    /\n\t"dependencies"/u,
+    "tab indentation is preserved",
+  );
+});

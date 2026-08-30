@@ -370,6 +370,23 @@ test("a clean string-literal union (no bare `string`) is not flagged", () => {
   );
 });
 
+test("a widened union whose literal contains a bracket char still splits and warns", () => {
+  // The literal `">"` carries a bracket; splitTopLevelUnion must keep it inside
+  // the quoted member (not let the `>` disturb its depth counter) so the trailing
+  // bare `string` is still seen as a top-level member that widens the union.
+  const findings = findingsFor([
+    {
+      name: "operator",
+      type: { text: '">" | "<" | string' },
+      description: "The operator.",
+    },
+  ]);
+  assert.ok(
+    findings.some((f) => f.rule === "union-widened-by-string"),
+    "a bracket inside a literal must not stop the top-level union split",
+  );
+});
+
 test("a `string` inside a nested generic does not trip the widened-union rule", () => {
   const findings = findingsFor([
     {
@@ -450,4 +467,70 @@ test("a component with an empty description warns element-level (no path)", () =
   );
   assert.ok(finding, "expected an element-level missing-description finding");
   assert.equal(finding.path, undefined);
+});
+
+// ---------------------------------------------------------------------------
+// schema-version — a manifest that declares no CEM schema version
+// ---------------------------------------------------------------------------
+
+test("a manifest with no schemaVersion warns element-agnostic (schema-version)", () => {
+  const manifest = elementManifest("auro-button") as Manifest & {
+    schemaVersion?: string;
+  };
+  delete manifest.schemaVersion; // elementManifest always sets one — remove it
+  const findings = runContractRules(manifest);
+  const finding = findings.find((f) => f.rule === "schema-version");
+  assert.ok(finding, "expected a schema-version finding");
+  assert.equal(finding.severity, "warn");
+  assert.equal(
+    finding.element,
+    undefined,
+    "the rule is manifest-level, not per-element",
+  );
+  assert.equal(finding.path, undefined);
+});
+
+test("a manifest that declares a schemaVersion is not flagged", () => {
+  // elementManifest sets `schemaVersion: "1.0.0"`, so a plain fixture must pass.
+  const findings = runContractRules(elementManifest("auro-button") as Manifest);
+  assert.ok(
+    !findings.some((f) => f.rule === "schema-version"),
+    "a present schemaVersion must not warn",
+  );
+});
+
+// ---------------------------------------------------------------------------
+// private-reflection — an undescribed attribute reflected from a private member
+// ---------------------------------------------------------------------------
+
+test("an undescribed attribute reflecting a private member warns (private-reflection)", () => {
+  // auro-button's `data-hover` shape: reflected from a `@private onHover`, no
+  // description of its own — it leaks into autocomplete as a settable attribute.
+  const findings = findingsForDecl({
+    members: [{ kind: "field", name: "onHover", privacy: "private" }],
+    attributes: [{ name: "data-hover", fieldName: "onHover" }],
+  });
+  const finding = findings.find((f) => f.rule === "private-reflection");
+  assert.ok(finding, "expected a private-reflection finding");
+  assert.equal(finding.severity, "warn");
+  assert.equal(finding.element, "auro-button");
+  assert.equal(finding.path, "attributes[0]");
+});
+
+test("a documented reflected attribute is not flagged as a private-reflection leak", () => {
+  // The no-description guard preserves reflections a component exposes on purpose.
+  const findings = findingsForDecl({
+    members: [{ kind: "field", name: "onHover", privacy: "private" }],
+    attributes: [
+      {
+        name: "data-hover",
+        fieldName: "onHover",
+        description: "Whether the control is hovered.",
+      },
+    ],
+  });
+  assert.ok(
+    !findings.some((f) => f.rule === "private-reflection"),
+    "a documented reflection is deliberately public and must not be flagged",
+  );
 });
