@@ -128,3 +128,19 @@ test("unignore creates .gitignore when absent and no-ops on an empty list", asyn
   const result = await unignore(cwd, []);
   assert.deepEqual(result, { fixed: [], unfixable: [] });
 });
+
+test("unignore does not throw when the .gitignore write fails (advisory contract)", async (t) => {
+  const cwd = await gitRepo(t);
+  // Make `.gitignore` a directory so the append throws EISDIR — a deterministic
+  // stand-in for any write failure (read-only file, no disk). The module doc
+  // promises `unignore` is advisory and non-throwing: a failed write must never
+  // break an init whose main artifacts already landed.
+  mkdirSync(path.join(cwd, ".gitignore"));
+
+  const result = await unignore(cwd, ["auro.config.json"]);
+
+  // The contract is "never throws"; the path simply falls through to the caller
+  // rather than crashing the command.
+  assert.ok(Array.isArray(result.fixed));
+  assert.ok(Array.isArray(result.unfixable));
+});

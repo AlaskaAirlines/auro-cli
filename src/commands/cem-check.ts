@@ -89,18 +89,30 @@ export async function runCemCheck(
     ? null
     : ora(`Checking ${cemPath} against the CEM contract...`).start();
 
-  let manifest: Manifest;
-  try {
-    manifest = JSON.parse(readFileSync(resolve(cemPath), "utf-8")) as Manifest;
-  } catch (error) {
-    const message = `Could not read or parse ${cemPath}: ${(error as Error).message}`;
+  const fail = (message: string): never => {
     if (spinner) {
       spinner.fail(message);
     } else {
       console.error(message);
     }
     process.exit(1);
+  };
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(resolve(cemPath), "utf-8"));
+  } catch (error) {
+    fail(`Could not read or parse ${cemPath}: ${(error as Error).message}`);
   }
+
+  // Valid JSON that is not a CEM object (top-level `null`, an array, or a
+  // primitive) parses without throwing but has no `.modules` — resolving it would
+  // throw an uncaught `TypeError` deep in the builders. Reject it here so the
+  // failure is a clean exit 1 with a clear message, matching the parse-error path.
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    fail(`Could not read or parse ${cemPath}: not a CEM object.`);
+  }
+  const manifest = parsed as Manifest;
 
   const { pkg, version } = readSiblingPackageJson(cemPath);
   const installed: InstalledComponent[] = [{ pkg, version, manifest }];

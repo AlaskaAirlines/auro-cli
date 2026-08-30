@@ -17,6 +17,7 @@
 import {
   hasBalancedDelimiters,
   isPrivateReflection,
+  withoutStringLiterals,
 } from "#init/editors/manifest.js";
 import type {
   CemAttribute,
@@ -140,15 +141,6 @@ const BARE_GENERIC_RULES: readonly BadTypeToken[] = [...BARE_GENERIC_TYPES].map(
     re: new RegExp(`\\b${token}\\b(?!\\s*[<:])`, "u"),
   }),
 );
-
-/**
- * Blank out string/template-literal contents so a quoted `"array"` (a valid
- * string-literal type member) or `'function'` isn't misread as a bad type token.
- * Replaced with a space to preserve the word boundaries the scanners rely on.
- */
-function withoutStringLiterals(text: string): string {
-  return text.replace(/(['"`])(?:\\.|(?!\1)[\s\S])*\1/gu, " ");
-}
 
 /** Phrase the locator: `is \`X\`` when the whole type is the token, else `uses \`X\``. */
 function describeType(text: string, token: string): string {
