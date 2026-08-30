@@ -742,6 +742,87 @@ test("builders drop private-reflected description-less attributes but keep docum
   }
 });
 
+// ---------------------------------------------------------------------------
+// Deprecation surfacing — a CEM `deprecated` field (a string message or a bare
+// `true`) must reach the generated framework types as an `@deprecated` JSDoc tag,
+// which is what drives the editor strikethrough. This is the end-to-end guard for
+// the premise behind cem-check's `deprecated-prose-*` rules: flagging a deprecation
+// only helps if the flag actually flows through to the consumer's editor. The JSX
+// and Svelte generators forward it; the VS Code HTML custom-data format has no
+// deprecation field, so that target is deliberately asserted NOT to carry it (the
+// assertion doubles as a tripwire if the upstream tool ever gains support).
+// ---------------------------------------------------------------------------
+
+/** A button with a deprecated attribute (string message) and member (bare `true`). */
+function componentWithDeprecations(): ResolvedComponent {
+  const component = structuredClone(BUTTON);
+  const declaration = component.declaration as {
+    attributes?: unknown[];
+    members?: unknown[];
+  };
+  declaration.attributes = [
+    {
+      name: "onDark",
+      description: "Legacy dark-mode flag.",
+      type: { text: "boolean" },
+      // A string message — editors show the reason at the strikethrough.
+      deprecated: "use `appearance` instead",
+    },
+  ];
+  declaration.members = [
+    {
+      kind: "field",
+      name: "legacyValue",
+      privacy: "public",
+      description: "Old value field.",
+      type: { text: "string" },
+      // A bare `true` — deprecated with no migration message.
+      deprecated: true,
+    },
+  ];
+  return component;
+}
+
+test("a CEM `deprecated` field surfaces as `@deprecated` in the JSX and Svelte types", () => {
+  const components = [componentWithDeprecations()];
+  const jsx = buildJsxTypes(components, RESOLVED_TAGS).contents;
+  const svelte = buildSvelteTypes(components, RESOLVED_TAGS).contents;
+
+  for (const [target, out] of [
+    ["JSX", jsx],
+    ["Svelte", svelte],
+  ] as const) {
+    // The string message rides along with the tag, so an editor shows *what to
+    // use instead* at the strikethrough — not just that it's deprecated.
+    assert.match(
+      out,
+      /@deprecated use `appearance` instead/u,
+      `${target} carries the deprecated attribute's migration message`,
+    );
+    // A bare `deprecated: true` still emits the tag (strikethrough, no message).
+    assert.match(
+      out,
+      /@deprecated[^\n]*Old value field/u,
+      `${target} carries the bare-\`true\` deprecated member`,
+    );
+  }
+});
+
+test("VS Code HTML custom-data does not carry deprecation (known format gap)", () => {
+  // The custom-data schema has no deprecation field, so vanilla-HTML editors get
+  // no strikethrough even for a correctly-flagged member. Asserted so the gap is
+  // documented and this test fails loudly if the upstream generator ever adds it.
+  const html = buildHtmlCustomData(
+    [componentWithDeprecations()],
+    RESOLVED_TAGS,
+  ).contents;
+  assert.doesNotMatch(
+    html,
+    /deprecat/iu,
+    "HTML custom-data has no deprecation model — update this test if that changes",
+  );
+});
+
 test("the delimiter-balance guard keeps well-formed types and drops only broken ones", () => {
   const component = structuredClone(BUTTON);
   (component.declaration as { events?: unknown[] }).events = [

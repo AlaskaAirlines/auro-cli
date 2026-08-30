@@ -195,7 +195,7 @@ function checkMemberDeprecation(
       element,
       path,
       message:
-        "described as deprecated but missing the `deprecated` field — add an `@deprecated` JSDoc tag so editors (VS Code custom-data, generated JSX/Svelte types) surface it with a strikethrough.",
+        "described as deprecated but missing the `deprecated` field — add an `@deprecated` JSDoc tag so the generated JSX/Svelte types surface it with a strikethrough. (VS Code HTML custom-data has no deprecation field, so vanilla-HTML editors won't show it.)",
     });
   }
 }

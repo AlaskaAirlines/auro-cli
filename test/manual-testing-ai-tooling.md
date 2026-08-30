@@ -1176,6 +1176,7 @@ cite the test in sign-off instead.
 | Area | Test file |
 | --- | --- |
 | Byte-exact HTML/JSX/Svelte artifact contents (golden fixtures); tag swap for default-prefix / arbitrary override / bare fallback; attributes present; private-reflected description-less attributes (`data-hover`/`data-active`) dropped while documented ones are kept; slots/events/methods in the HTML hover description; JSX class-import specifiers resolved to the installed package | [`init.editors.builders.test.ts`](init.editors.builders.test.ts) |
+| A CEM `deprecated` field (string message or bare `true`) flows through to `@deprecated` in the JSX and Svelte types; VS Code HTML custom-data carries no deprecation (format gap, asserted as a tripwire) | [`init.editors.builders.test.ts`](init.editors.builders.test.ts) |
 | Format-freeze golden fixtures per target (upstream drift → failing test) | [`init.editors.format.test.ts`](init.editors.format.test.ts) |
 | `mergeVsCodeSettings` + `mergeTsconfigInclude`: empty / unrelated-keys+comments / string→array normalize / pre-existing entry / idempotent / unparseable→warn+skip; the four-branch `include` decision tree | [`init.editors.builders.test.ts`](init.editors.builders.test.ts) |
 | Detection heuristics — every branch of `detectVsCode`/`detectJsx`/`detectSvelte`/`detectEditorSignals`, negatives, never-throws | [`init.editors.detect.test.ts`](init.editors.detect.test.ts) |
@@ -1204,6 +1205,23 @@ artifacts are **correct**; only a human in an editor can prove the language serv
 7. **Live CSS `::part()` snippet completion** (M2-7) — that typing `myapp-button::part`
    in a `.css`/`.scss`/`.less` file expands to the generated part-name choice, driven
    by the auto-discovered snippets file (no `settings.json`).
+8. **Live deprecation strikethrough** (M2-8) — that a component member carrying a
+   `deprecated` field renders with the editor's **strikethrough** in the JSX and
+   Svelte apps. To exercise it, add a deprecated member to the consumer's installed
+   CEM (or edit `auro-types/auro-jsx.d.ts` / `auro-svelte.d.ts` to confirm the tag is
+   read): in `.tsx`, a deprecated attribute (e.g. `onDark`) should show struck through
+   with its migration message on hover; same in `.svelte`. **Expect the vanilla-HTML
+   app to show NO strikethrough** — the `html.customData` format has no deprecation
+   field, so that target structurally can't surface it (see the `deprecated-prose-*`
+   note in the cem-check rule table). The `deprecated` field itself flowing into the
+   JSX/Svelte `.d.ts` as `@deprecated` is [Regression-covered]; only the live editor
+   strikethrough is manual.
+
+> **Deprecation surfaces in JSX/Svelte only.** A correctly-flagged `deprecated` member
+> reaches the framework `.d.ts` as an `@deprecated` tag (strikethrough), but the VS
+> Code HTML custom-data target drops it. When adding a deprecated member to the shared
+> consumer app for this check, verify the strikethrough in the React and Svelte apps
+> and confirm its **absence** in the vanilla-HTML app rather than treating that as a bug.
 
 Individual cases below are annotated **[Manual]**, **[Manual smoke]**, or
 **[Regression-covered]** accordingly.
@@ -1452,7 +1470,7 @@ It checks the CEM two complementary ways:
 | `type-imprecise` | warn | a whole-string `type.text` is a valid but uninformative object type (`object`/`Object`) — it compiles, but exposes no properties so nothing completes |
 | `enumerated-union` | warn | a conventionally-enumerated attr (`variant`/`shape`/`size`/`type`/`appearance`) is typed as bare `"string"` |
 | `private-reflection` | warn | an undescribed, private-backed reflected attribute would be pruned |
-| `deprecated-prose-unflagged` | warn | a real class member (attribute/property/field/method) reads as deprecated in its description/summary (a leading, bracketed, or bolded `deprecated`, or an inline `@deprecated`) but has no structural `deprecated` field — **author-fixable** by adding an `@deprecated` JSDoc tag |
+| `deprecated-prose-unflagged` | warn | a real class member (attribute/property/field/method) reads as deprecated in its description/summary (a leading, bracketed, or bolded `deprecated`, or an inline `@deprecated`) but has no structural `deprecated` field — **author-fixable** by adding an `@deprecated` JSDoc tag, which surfaces in the generated JSX/Svelte types (not in VS Code HTML custom-data, which has no deprecation field) |
 | `deprecated-prose-unsupported` | warn | an event or slot reads as deprecated in prose but has no `deprecated` field — **not** author-fixable: the analyzer (v0.11.0) never emits `deprecated` for inline `@event`/`@fires`/`@slot` tags, so editors cannot surface it (distinct id so it can be suppressed independently) |
 | `deprecated-no-detail` | warn | a `deprecated` field is a bare `true` with no message — editors show a strikethrough but no migration target; prefer `@deprecated <what to use instead>` |
 
