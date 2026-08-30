@@ -19,6 +19,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
+import process from "node:process";
 import type { CemFinding } from "#init/cem-check/rules.js";
 import { buildJsxTypes } from "#init/editors/jsxTypes.js";
 import type { EditorArtifact } from "#init/editors/manifest.js";

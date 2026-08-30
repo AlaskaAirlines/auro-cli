@@ -633,22 +633,36 @@ export async function runInit(options: InitOptions): Promise<void> {
   // yellow one, so absent `<auro-*>` completions are never a silent surprise.
   let verdict = verifyEditorWiring(cwd, editorSelection);
   if (verdict.inconsistencies.length > 0) {
-    const healReport = await writeEditorArtifacts(
-      cwd,
-      components,
-      plan.resolvedTags,
-      editorSelection,
-    );
-    // The self-heal pass can raise warnings the first write didn't (e.g. a target
-    // file that turned malformed since). Surface the new ones instead of dropping
-    // its report; the first pass already printed the shared ones.
-    const alreadyWarned = new Set(editorReport.warnings);
-    for (const warning of healReport.warnings) {
-      if (!alreadyWarned.has(warning)) {
-        console.error(`⚠ ${warning}`);
+    // The primary write above already succeeded (the spinner reported success), so
+    // a failed self-heal must not crash the command — unlike the first write, this
+    // pass is best-effort remediation, not the main artifact write. Guard it: a
+    // reject here (e.g. a disk-full or permission race) would otherwise become an
+    // unhandled rejection under the synchronous `program.parse()` and print a raw
+    // stack trace. On failure, warn and fall through to the incomplete-wiring
+    // banner below, which then reflects the un-healed verdict.
+    try {
+      const healReport = await writeEditorArtifacts(
+        cwd,
+        components,
+        plan.resolvedTags,
+        editorSelection,
+      );
+      // The self-heal pass can raise warnings the first write didn't (e.g. a target
+      // file that turned malformed since). Surface the new ones instead of dropping
+      // its report; the first pass already printed the shared ones.
+      const alreadyWarned = new Set(editorReport.warnings);
+      for (const warning of healReport.warnings) {
+        if (!alreadyWarned.has(warning)) {
+          console.error(`⚠ ${warning}`);
+        }
       }
+      verdict = verifyEditorWiring(cwd, editorSelection);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(
+        `⚠ Could not re-write editor artifacts to self-heal wiring: ${message}`,
+      );
     }
-    verdict = verifyEditorWiring(cwd, editorSelection);
   }
   if (verdict.inconsistencies.length > 0) {
     console.error(
