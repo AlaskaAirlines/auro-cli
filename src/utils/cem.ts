@@ -16,6 +16,7 @@ export interface CemAttribute {
   type?: CemType;
   default?: string;
   description?: string;
+  summary?: string;
   deprecated?: Deprecated;
 }
 
@@ -27,6 +28,7 @@ export interface CemMember {
   type?: CemType;
   default?: string;
   description?: string;
+  summary?: string;
   deprecated?: Deprecated;
   return?: { type?: CemType };
 }
@@ -34,12 +36,20 @@ export interface CemMember {
 export interface CemSlot {
   name: string;
   description?: string;
+  summary?: string;
+  // The analyzer does not emit this for inline `@slot` tags (v0.11.0); optional so
+  // a custom plugin that maps `@deprecated` onto slots stays type-compatible.
+  deprecated?: Deprecated;
 }
 
 export interface CemEvent {
   name: string;
   type?: CemType;
   description?: string;
+  summary?: string;
+  // The analyzer does not emit this for inline `@event`/`@fires` tags (v0.11.0);
+  // optional so a custom plugin mapping `@deprecated` onto events stays compatible.
+  deprecated?: Deprecated;
 }
 
 export interface CemNamed {

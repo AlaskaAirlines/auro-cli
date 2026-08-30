@@ -23,6 +23,12 @@ function findingsFor(attributes: unknown[]): CemFinding[] {
   return runContractRules(manifest);
 }
 
+/** Build a one-element manifest with arbitrary declaration extras and run the rules. */
+function findingsForDecl(extra: Record<string, unknown>): CemFinding[] {
+  const manifest = elementManifest("auro-button", extra) as Manifest;
+  return runContractRules(manifest);
+}
+
 test("a lowercase `array` type.text is a type-not-typescript error with a precise locator", () => {
   const findings = findingsFor([{ name: "items", type: { text: "array" } }]);
   const finding = findings.find((f) => f.rule === "type-not-typescript");
@@ -126,5 +132,132 @@ test("a property key named `array` is not flagged (only a type position is inval
   assert.ok(
     !findings.some((f) => f.rule === "type-not-typescript"),
     "`array` before a `:` is a property key, which is valid",
+  );
+});
+
+// ---------------------------------------------------------------------------
+// deprecated-prose-unflagged / -unsupported / -no-detail — prose-only deprecation
+// ---------------------------------------------------------------------------
+
+test("an attribute described `DEPRECATED …` with no deprecated field warns (deprecated-prose-unflagged)", () => {
+  const findings = findingsFor([
+    {
+      name: "onDark",
+      type: { text: "boolean" },
+      description: "DEPRECATED - use `appearance` instead.",
+    },
+  ]);
+  const finding = findings.find((f) => f.rule === "deprecated-prose-unflagged");
+  assert.ok(finding, "expected a deprecated-prose-unflagged finding");
+  assert.equal(finding.severity, "warn");
+  assert.equal(finding.element, "auro-button");
+  assert.equal(finding.path, "attributes[0]");
+});
+
+test("a `(Deprecated)`-prefixed member with no deprecated field warns", () => {
+  const findings = findingsForDecl({
+    members: [
+      {
+        kind: "method",
+        name: "legacyToggle",
+        description: "(Deprecated) Notifies listeners of a toggle.",
+      },
+    ],
+  });
+  assert.ok(
+    findings.some(
+      (f) => f.rule === "deprecated-prose-unflagged" && f.path === "members[0]",
+    ),
+    "a bracketed `(Deprecated)` marker should be flagged on a member",
+  );
+});
+
+test("adding the `deprecated` field clears the member finding (analyzer emitted it)", () => {
+  const findings = findingsFor([
+    {
+      name: "onDark",
+      type: { text: "boolean" },
+      description: "DEPRECATED - use `appearance` instead.",
+      deprecated: "use `appearance` instead",
+    },
+  ]);
+  assert.ok(
+    !findings.some((f) => f.rule === "deprecated-prose-unflagged"),
+    "a structural `deprecated` field should clear the prose finding",
+  );
+  assert.ok(
+    !findings.some((f) => f.rule === "deprecated-no-detail"),
+    "a string `deprecated` carries a message, so no-detail must not fire",
+  );
+});
+
+test("a correctly-flagged member (bare `deprecated: true`) produces no prose finding, only no-detail", () => {
+  const findings = findingsFor([
+    { name: "onDark", type: { text: "boolean" }, deprecated: true },
+  ]);
+  assert.ok(
+    !findings.some((f) => f.rule === "deprecated-prose-unflagged"),
+    "a flagged member must not be reported as prose-only",
+  );
+  assert.ok(
+    findings.some(
+      (f) => f.rule === "deprecated-no-detail" && f.severity === "warn",
+    ),
+    "a bare `deprecated: true` should draw the low-priority no-detail warning",
+  );
+});
+
+test("a deprecated-in-prose event is reported under the distinct suppressible rule", () => {
+  const findings = findingsForDecl({
+    events: [
+      {
+        name: "auro-legacy-change",
+        description: "@deprecated use the `input` event instead.",
+      },
+    ],
+  });
+  const finding = findings.find(
+    (f) => f.rule === "deprecated-prose-unsupported",
+  );
+  assert.ok(finding, "expected a deprecated-prose-unsupported finding");
+  assert.equal(finding.severity, "warn");
+  assert.equal(finding.path, "events[0]");
+  assert.match(finding.message, /event/);
+  assert.ok(
+    !findings.some((f) => f.rule === "deprecated-prose-unflagged"),
+    "events must not use the member rule id (not author-fixable)",
+  );
+});
+
+test("a deprecated-in-prose slot is reported under the distinct suppressible rule", () => {
+  const findings = findingsForDecl({
+    slots: [
+      { name: "legacy", description: "**deprecated** use the default slot." },
+    ],
+  });
+  const finding = findings.find(
+    (f) => f.rule === "deprecated-prose-unsupported",
+  );
+  assert.ok(finding, "expected a deprecated-prose-unsupported finding");
+  assert.equal(finding.path, "slots[0]");
+  assert.match(finding.message, /slot/);
+});
+
+test("an incidental `deprecated` mention is not flagged (marker-targeted)", () => {
+  const findings = findingsFor([
+    {
+      name: "appearance",
+      type: { text: '"primary" | "secondary"' },
+      description:
+        "Sets the appearance; replaces the deprecated `onDark` attribute.",
+    },
+  ]);
+  assert.ok(
+    !findings.some(
+      (f) =>
+        f.rule === "deprecated-prose-unflagged" ||
+        f.rule === "deprecated-prose-unsupported",
+    ),
+    "a mid-sentence mention of `deprecated` must not be flagged",
   );
 });
