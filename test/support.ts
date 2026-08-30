@@ -91,7 +91,12 @@ export function forceInteractive(t: TestContext): void {
 /** Create a fresh temp directory to act as a fake project cwd, auto-removed. */
 export async function tempCwd(t: TestContext): Promise<string> {
   const dir = await mkdtemp(path.join(tmpdir(), "auro-cli-test-"));
-  t.after(() => rm(dir, { recursive: true, force: true }));
+  // Windows can briefly hold a lock on files a just-exited child (the pinned
+  // `tsc` the cem-check smoke runs) wrote into this dir, so an immediate remove
+  // throws EBUSY and crashes the whole run. Retry to let the handle release.
+  t.after(() =>
+    rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }),
+  );
   return dir;
 }
 
