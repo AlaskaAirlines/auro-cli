@@ -113,6 +113,15 @@ function isEmptyObject(source: string): boolean {
   );
 }
 
+/**
+ * True when `source` contains a JSONC comment. Only used on content already known
+ * to parse to an empty object — with no string values left, a bare `//` or `/*`
+ * can only start a comment, so this needs no string-aware scan.
+ */
+function hasComments(source: string): boolean {
+  return source.includes("//") || source.includes("/*");
+}
+
 /** Read a file as UTF-8, or `null` when it does not exist. */
 function readOrNull(absolute: string): string | null {
   try {
@@ -221,8 +230,10 @@ export function planReset(cwd: string): ResetPlan {
       // Removing our entry emptied the object → the file held only our entry, so
       // `auro init` created it. Delete it (a faithful teardown, and so the
       // `.vscode/` prune below can reclaim a now-empty dir) rather than leaving a
-      // stray `{}` that a later run only survives on by accident.
-      if (isEmptyObject(result.contents)) {
+      // stray `{}` that a later run only survives on by accident — UNLESS the file
+      // still carries user comments, which deletion would silently discard. In
+      // that case keep the file and just write back the emptied object.
+      if (isEmptyObject(result.contents) && !hasComments(result.contents)) {
         filesToRemove.push(settingsRel);
       } else {
         unmerges.push({ path: settingsRel, result });

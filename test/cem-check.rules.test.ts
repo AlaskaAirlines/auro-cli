@@ -311,6 +311,24 @@ test("a union of literals with a bare `string` warns (union-widened-by-string)",
   assert.equal(finding.path, "attributes[0].type.text");
 });
 
+test("a literal ending in an escaped backslash still splits at the top-level `|`", () => {
+  // The literal `"a\\"` closes on its final quote (the `\\` is one escaped
+  // backslash), so the `| string` after it is a real top-level union member. A
+  // naive single-char escape look-behind would treat that quote as escaped, keep
+  // the string open, and miss the widening. type.text = `"a\\" | string`.
+  const findings = findingsFor([
+    {
+      name: "token",
+      type: { text: '"a\\\\" | string' },
+      description: "The token.",
+    },
+  ]);
+  assert.ok(
+    findings.some((f) => f.rule === "union-widened-by-string"),
+    "an escaped-backslash literal unioned with bare `string` must still be flagged",
+  );
+});
+
 test("a clean string-literal union (no bare `string`) is not flagged", () => {
   const findings = findingsFor([
     {

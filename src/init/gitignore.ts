@@ -56,6 +56,16 @@ function parentDir(rel: string): string {
   return dir === "." ? "" : dir;
 }
 
+/** Trimmed set of the current `<cwd>/.gitignore` lines (empty when absent). */
+function readGitignoreLines(cwd: string): Set<string> {
+  try {
+    const current = readFileSync(path.join(cwd, ".gitignore"), "utf-8");
+    return new Set(current.split(/\r?\n/).map((line) => line.trim()));
+  } catch {
+    return new Set();
+  }
+}
+
 /**
  * Append `lines` to `<cwd>/.gitignore` (created if absent), preserving a trailing
  * newline. With `dedupe` (the default) any line already present is skipped so
@@ -118,21 +128,32 @@ export async function unignore(
   // re-exclude its contents (to keep siblings ignored), then re-include the file.
   // Force-append (no dedupe): the `!<path>` must land AFTER `<dir>/*`, but Round 1
   // already wrote `!<path>` earlier — a deduping append would skip it and leave
-  // `<dir>/*` as the last match, re-ignoring the file. This block only runs while a
-  // path is still ignored, so it never re-executes on an already-fixed re-run.
+  // `<dir>/*` as the last match, re-ignoring the file.
+  //
+  // A path that stays ignored after Round 2 is unfixable, so it re-enters this
+  // block on every re-run. To avoid stacking duplicate trios, skip a path whose
+  // trio is already present: `<dir>/*` is only ever written here alongside its
+  // `!<path>` entries, so if both lines exist the trio ran on a prior invocation.
   if (stillIgnored.length > 0) {
+    const present = readGitignoreLines(cwd);
     const trio: string[] = [];
     const seenDirs = new Set<string>();
     for (const rel of stillIgnored) {
       const dir = parentDir(rel);
-      if (dir !== "" && !seenDirs.has(dir)) {
+      const dirBlockPresent = dir === "" || present.has(`${dir}/*`);
+      if (dirBlockPresent && present.has(`!${rel}`)) {
+        continue; // trio already written on an earlier run — don't restack it.
+      }
+      if (dir !== "" && !seenDirs.has(dir) && !present.has(`${dir}/*`)) {
         seenDirs.add(dir);
         trio.push(`!${dir}/`, `${dir}/*`);
       }
       trio.push(`!${rel}`);
     }
-    appendGitignore(cwd, trio, false);
-    stillIgnored = await findIgnored(cwd, ignoredPaths);
+    if (trio.length > 0) {
+      appendGitignore(cwd, trio, false);
+      stillIgnored = await findIgnored(cwd, ignoredPaths);
+    }
   }
 
   const unfixable = new Set(stillIgnored);

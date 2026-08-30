@@ -397,6 +397,19 @@ function checkPrimitiveType(
 }
 
 /**
+ * True when the character at `index` is escaped — preceded by an odd number of
+ * consecutive backslashes. `"a\\"` (two backslashes) leaves the following `"`
+ * unescaped; `"a\"` (one backslash) escapes it.
+ */
+function isEscaped(text: string, index: number): boolean {
+  let backslashes = 0;
+  for (let j = index - 1; j >= 0 && text[j] === "\\"; j--) {
+    backslashes++;
+  }
+  return backslashes % 2 === 1;
+}
+
+/**
  * Split a `type.text` on its **top-level** `|` union separators, ignoring any `|`
  * inside quotes or nested `()[]{}<>` (so `"a|b" | Array<x | y>` yields two members,
  * not four). Arrow `=>` is not treated as a closing angle. Members are trimmed and
@@ -410,7 +423,10 @@ function splitTopLevelUnion(text: string): string[] {
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
     if (quote !== null) {
-      if (ch === quote && text[i - 1] !== "\\") {
+      // A quote closes the literal only when it isn't escaped; an even run of
+      // preceding backslashes (incl. zero) means the quote itself is unescaped
+      // (`"a\\"` → the `"` closes), an odd run means it's escaped (`"a\"`).
+      if (ch === quote && !isEscaped(text, i)) {
         quote = null;
       }
     } else if (ch === '"' || ch === "'" || ch === "`") {

@@ -106,9 +106,24 @@ function tsProgramIncludesTypes(cwd: string): boolean {
     const data = parseJsonc(contents, [], { allowTrailingComma: true }) as
       | Record<string, unknown>
       | undefined;
+    // Only the first existing config is authoritative (matches the writer's
+    // branch selection in `mergeTsconfigInclude`).
     const include = data?.[TSCONFIG_INCLUDE_KEY];
-    // Only the first existing config is authoritative (matches the writer).
-    return Array.isArray(include) && include.includes(TSCONFIG_INCLUDE_ENTRY);
+    if (Array.isArray(include)) {
+      // Branch 1: include array — wired iff it lists the entry.
+      return include.includes(TSCONFIG_INCLUDE_ENTRY);
+    }
+    if (include !== undefined) {
+      // Branch 4a: wrong-typed include — the writer refuses, so it's not wired.
+      return false;
+    }
+    if ("files" in (data ?? {})) {
+      // Branch 2: `files` suppresses the default glob, so an include is
+      // required; its absence here is a real gap.
+      return false;
+    }
+    // Branch 3: neither key — the default glob already covers `auro-types/`.
+    return true;
   }
   // Neither config exists — the default include glob picks up `auro-types/`.
   return true;

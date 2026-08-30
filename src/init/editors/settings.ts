@@ -24,6 +24,7 @@ import {
   modify,
   type ParseError,
   parse as parseJsonc,
+  parseTree,
 } from "jsonc-parser";
 import {
   HTML_CUSTOM_DATA_SETTINGS_ENTRY,
@@ -96,12 +97,46 @@ function applyValueEdit(
 }
 
 /**
+ * Splice out `key` when it is the object's **only** top-level property, returning
+ * `null` in every other case (not an object, more than one property, or a
+ * different sole key). `jsonc-parser`'s `modify` reformats an object to `{}` when
+ * its last property is deleted, which discards any interior comment
+ * (`{ // note\n "k": v }` → `{}`); removing just the property node preserves that
+ * comment. Only the last-property case needs this — with siblings remaining,
+ * `modify` already keeps comments.
+ */
+function deleteLoneTopLevelKey(source: string, key: string): string | null {
+  const root = parseTree(source);
+  if (!root || root.type !== "object" || root.children?.length !== 1) {
+    return null;
+  }
+  const prop = root.children[0];
+  if (prop.children?.[0]?.value !== key) {
+    return null;
+  }
+  let end = prop.offset + prop.length;
+  while (end < source.length && source[end] === ",") {
+    end++; // swallow a trailing comma so no stray `{ , }` is left behind
+  }
+  return source.slice(0, prop.offset) + source.slice(end);
+}
+
+/**
  * Surgically remove the property at `path` from `source`, preserving surrounding
  * comments and formatting. `modify(..., undefined, ...)` emits the delete edit;
  * `applyEdits` splices it in without a parse-then-stringify round-trip. The
  * inverse of {@link applyValueEdit}, used by the un-merge helpers below.
+ *
+ * For a lone top-level key we splice the property node ourselves so a user's
+ * interior comment survives, since `modify` would drop it when emptying the object.
  */
 function applyKeyDeletion(source: string, path: string[]): string {
+  if (path.length === 1) {
+    const surgical = deleteLoneTopLevelKey(source, path[0]);
+    if (surgical !== null) {
+      return surgical;
+    }
+  }
   const edits = modify(source, path, undefined, {
     formattingOptions: FORMATTING,
   });
