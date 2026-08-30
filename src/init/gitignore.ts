@@ -30,6 +30,16 @@ const GITIGNORE_HEADER =
   "# Added by auro init — keep generated grounding/IntelliSense files tracked";
 
 /**
+ * Normalize an OS path to forward slashes. `.gitignore` rules and this module's
+ * parent-dir logic are all POSIX, but `git check-ignore` on Windows echoes paths
+ * with `\` separators — un-normalized, `parentDir` (a `path.posix.dirname`) would
+ * see no separator and the directory re-include trio would never be emitted.
+ */
+function toPosix(p: string): string {
+  return p.split(path.sep).join("/");
+}
+
+/**
  * The subset of `paths` (project-root-relative, forward-slash) that git would
  * ignore — i.e. that a plain `git add` would not stage. Returns `[]` when `cwd`
  * is not a git repository, git is unavailable, or `paths` is empty, so callers
@@ -43,7 +53,13 @@ export async function findIgnored(
     return [];
   }
   try {
-    return await simpleGit({ baseDir: cwd }).checkIgnore(paths);
+    // Pass POSIX paths in and normalize what git echoes back: git-for-windows
+    // returns `\`-separated paths, which would break the caller's forward-slash
+    // comparisons and this module's own parentDir logic in `unignore`.
+    const ignored = await simpleGit({ baseDir: cwd }).checkIgnore(
+      paths.map(toPosix),
+    );
+    return ignored.map(toPosix);
   } catch {
     // Not a git repo / git missing → ignoring is not in play here.
     return [];

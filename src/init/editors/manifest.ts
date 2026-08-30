@@ -270,7 +270,15 @@ export function withTempDir<T>(fn: (dir: string) => T): T {
   try {
     return fn(dir);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    // Windows can briefly hold a lock on files a just-exited child process (the
+    // pinned `tsc` the smoke runs via execFileSync) wrote, so an immediate remove
+    // throws EBUSY. Retry a few times to let the handle release before giving up.
+    rmSync(dir, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    });
   }
 }
 
