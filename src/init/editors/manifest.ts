@@ -270,15 +270,21 @@ export function withTempDir<T>(fn: (dir: string) => T): T {
   try {
     return fn(dir);
   } finally {
-    // Windows can briefly hold a lock on files a just-exited child process (the
-    // pinned `tsc` the smoke runs via execFileSync) wrote, so an immediate remove
-    // throws EBUSY. Retry a few times to let the handle release before giving up.
-    rmSync(dir, {
-      recursive: true,
-      force: true,
-      maxRetries: 10,
-      retryDelay: 100,
-    });
+    // Best-effort cleanup. On Windows a just-exited child process (the pinned
+    // `tsc` the smoke runs via execFileSync) can hold a lock on files it wrote
+    // past the retry window, so removal throws EBUSY. A leaked throwaway temp dir
+    // is harmless (the OS reclaims it) and must never crash cem-check or the test
+    // suite — retry, then swallow.
+    try {
+      rmSync(dir, {
+        recursive: true,
+        force: true,
+        maxRetries: 10,
+        retryDelay: 100,
+      });
+    } catch {
+      // ignore — temp-dir removal is advisory
+    }
   }
 }
 

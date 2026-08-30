@@ -91,11 +91,18 @@ export function forceInteractive(t: TestContext): void {
 /** Create a fresh temp directory to act as a fake project cwd, auto-removed. */
 export async function tempCwd(t: TestContext): Promise<string> {
   const dir = await mkdtemp(path.join(tmpdir(), "auro-cli-test-"));
-  // Windows can briefly hold a lock on files a just-exited child (the pinned
-  // `tsc` the cem-check smoke runs) wrote into this dir, so an immediate remove
-  // throws EBUSY and crashes the whole run. Retry to let the handle release.
+  // Best-effort cleanup. On Windows a spawned child (the CLI subprocess whose
+  // cwd is this dir, or the pinned `tsc` the cem-check smoke runs) can hold a
+  // lock past the retry window, so removal throws EBUSY. Deleting a throwaway
+  // OS temp dir must never fail the suite — retry, then swallow: the OS reclaims
+  // %TEMP% regardless. (Mirrors the advisory, non-throwing gitignore module.)
   t.after(() =>
-    rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }),
+    rm(dir, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    }).catch(() => {}),
   );
   return dir;
 }
