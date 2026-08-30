@@ -23,6 +23,8 @@ import type {
   CemDeclaration,
   CemEvent,
   CemMember,
+  CemSlot,
+  Deprecated,
   Manifest,
 } from "#utils/cem.js";
 
@@ -140,6 +142,115 @@ function describeType(text: string, token: string): string {
   return text === token
     ? `\`type.text\` is \`${token}\``
     : `\`type.text\` (${JSON.stringify(text)}) uses \`${token}\``;
+}
+
+/**
+ * Prose-level deprecation markers — a description/summary that *announces* the entry
+ * is deprecated. Deliberately narrow: only a **leading** marker, a **bracketed** or
+ * **bolded** `deprecated`, or an inline `@deprecated` tag counts. An incidental
+ * mention ("replaces the deprecated `onDark`") is not at the start and is neither
+ * bracketed nor bolded, so it never trips the rule.
+ */
+const DEPRECATION_MARKERS: readonly RegExp[] = [
+  /^[\s>*_~([-]*@?deprecated\b/iu, // leading: "DEPRECATED - use …", "- @deprecated …"
+  /[([]\s*deprecated\b/iu, //          bracketed: "(Deprecated) Notifies …", "[deprecated]"
+  /\*\*\s*deprecated\b/iu, //          bolded: "**deprecated**"
+  /@deprecated\b/iu, //                inline JSDoc tag left in the prose
+];
+
+/** True when any supplied text carries a targeted prose deprecation marker. */
+function hasDeprecationMarker(...texts: (string | undefined)[]): boolean {
+  return texts.some(
+    (text) =>
+      typeof text === "string" &&
+      DEPRECATION_MARKERS.some((re) => re.test(text.trim())),
+  );
+}
+
+/** True when a structural `deprecated` field is present (bare `true` or a message). */
+function isDeprecationFlagged(deprecated: Deprecated): boolean {
+  return deprecated === true || isNonEmptyString(deprecated);
+}
+
+/**
+ * Push a `deprecated-prose-unflagged` warning when a real class member (attribute /
+ * property / field / method) reads as deprecated in its description or summary but
+ * carries no structural `deprecated` field. Author-fixable: the analyzer honors an
+ * `@deprecated` JSDoc tag on class members (v0.11.0), so adding the tag makes it emit
+ * `deprecated` and clears the finding.
+ */
+function checkMemberDeprecation(
+  findings: CemFinding[],
+  element: string,
+  path: string,
+  entry: { description?: string; summary?: string; deprecated?: Deprecated },
+): void {
+  if (
+    !isDeprecationFlagged(entry.deprecated) &&
+    hasDeprecationMarker(entry.description, entry.summary)
+  ) {
+    findings.push({
+      rule: "deprecated-prose-unflagged",
+      severity: "warn",
+      element,
+      path,
+      message:
+        "described as deprecated but missing the `deprecated` field — add an `@deprecated` JSDoc tag so editors (VS Code custom-data, generated JSX/Svelte types) surface it with a strikethrough.",
+    });
+  }
+}
+
+/**
+ * Push a `deprecated-prose-unsupported` warning when an event or slot reads as
+ * deprecated in prose but has no `deprecated` field. Unlike class members this is
+ * **not** author-fixable with an `@deprecated` tag: the analyzer's inline
+ * `@event`/`@fires`/`@slot` handling (v0.11.0) never emits `deprecated`, so editors
+ * cannot surface it regardless of JSDoc. Reported under a distinct id so it can be
+ * suppressed independently of the member rule.
+ */
+function checkEventSlotDeprecation(
+  findings: CemFinding[],
+  element: string,
+  kind: "event" | "slot",
+  path: string,
+  entry: { description?: string; summary?: string; deprecated?: Deprecated },
+): void {
+  if (
+    !isDeprecationFlagged(entry.deprecated) &&
+    hasDeprecationMarker(entry.description, entry.summary)
+  ) {
+    findings.push({
+      rule: "deprecated-prose-unsupported",
+      severity: "warn",
+      element,
+      path,
+      message: `this ${kind} reads as deprecated in prose, but the analyzer (v0.11.0) does not emit a \`deprecated\` field for inline \`@${kind}\` tags — editors cannot surface it. Track upstream or a mapping plugin; suppress this warning if the prose is intentional.`,
+    });
+  }
+}
+
+/**
+ * Push a `deprecated-no-detail` warning when a `deprecated` field is a bare `true`
+ * with no message — editors render a strikethrough but give consumers no migration
+ * target. Low priority (a style nudge): prefer `@deprecated <what to use instead>`
+ * over a bare `@deprecated`.
+ */
+function checkDeprecationDetail(
+  findings: CemFinding[],
+  element: string,
+  path: string,
+  entry: { deprecated?: Deprecated },
+): void {
+  if (entry.deprecated === true) {
+    findings.push({
+      rule: "deprecated-no-detail",
+      severity: "warn",
+      element,
+      path,
+      message:
+        "`deprecated` is set but carries no message — editors show a strikethrough with no migration target. Prefer `@deprecated <what to use instead>`.",
+    });
+  }
 }
 
 /**
@@ -292,6 +403,7 @@ function checkDeclaration(findings: CemFinding[], decl: CemDeclaration): void {
   const members: readonly CemMember[] = decl.members ?? [];
   const attributes: readonly CemAttribute[] = decl.attributes ?? [];
   const events: readonly CemEvent[] = decl.events ?? [];
+  const slots: readonly CemSlot[] = decl.slots ?? [];
 
   // Rule: name-required — every named collection.
   checkNames(findings, element, "members", members);
@@ -306,14 +418,24 @@ function checkDeclaration(findings: CemFinding[], decl: CemDeclaration): void {
   members.forEach((m, i) => {
     checkType(findings, element, `members[${i}]`, m);
     checkPrimitiveType(findings, element, `members[${i}]`, m);
+    checkMemberDeprecation(findings, element, `members[${i}]`, m);
+    checkDeprecationDetail(findings, element, `members[${i}]`, m);
   });
   attributes.forEach((a, i) => {
     checkType(findings, element, `attributes[${i}]`, a);
     checkPrimitiveType(findings, element, `attributes[${i}]`, a);
+    checkMemberDeprecation(findings, element, `attributes[${i}]`, a);
+    checkDeprecationDetail(findings, element, `attributes[${i}]`, a);
   });
   events.forEach((e, i) => {
     checkType(findings, element, `events[${i}]`, e);
     checkPrimitiveType(findings, element, `events[${i}]`, e);
+    checkEventSlotDeprecation(findings, element, "event", `events[${i}]`, e);
+    checkDeprecationDetail(findings, element, `events[${i}]`, e);
+  });
+  slots.forEach((s, i) => {
+    checkEventSlotDeprecation(findings, element, "slot", `slots[${i}]`, s);
+    checkDeprecationDetail(findings, element, `slots[${i}]`, s);
   });
 
   // Backing-member privacy, keyed by name (built from raw members with a string

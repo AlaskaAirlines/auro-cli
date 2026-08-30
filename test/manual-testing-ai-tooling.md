@@ -1452,6 +1452,9 @@ It checks the CEM two complementary ways:
 | `type-imprecise` | warn | a whole-string `type.text` is a valid but uninformative object type (`object`/`Object`) — it compiles, but exposes no properties so nothing completes |
 | `enumerated-union` | warn | a conventionally-enumerated attr (`variant`/`shape`/`size`/`type`/`appearance`) is typed as bare `"string"` |
 | `private-reflection` | warn | an undescribed, private-backed reflected attribute would be pruned |
+| `deprecated-prose-unflagged` | warn | a real class member (attribute/property/field/method) reads as deprecated in its description/summary (a leading, bracketed, or bolded `deprecated`, or an inline `@deprecated`) but has no structural `deprecated` field — **author-fixable** by adding an `@deprecated` JSDoc tag |
+| `deprecated-prose-unsupported` | warn | an event or slot reads as deprecated in prose but has no `deprecated` field — **not** author-fixable: the analyzer (v0.11.0) never emits `deprecated` for inline `@event`/`@fires`/`@slot` tags, so editors cannot surface it (distinct id so it can be suppressed independently) |
+| `deprecated-no-detail` | warn | a `deprecated` field is a bare `true` with no message — editors show a strikethrough but no migration target; prefer `@deprecated <what to use instead>` |
 
 **Exit-code contract:** `0` when there are no `error`-severity findings; `1` when
 there is ≥1 error, or — under `--strict` — ≥1 warning. Warnings alone never fail
