@@ -112,6 +112,58 @@ test("svelte target: .d.ts present and no tsconfig at all is consistent (default
   assert.deepEqual(verdict.inconsistencies, []);
 });
 
+test("svelte target: .d.ts present and a tsconfig with neither include nor files is consistent (default glob covers it)", async (t: TestContext) => {
+  const cwd = await tempCwd(t);
+  seed(cwd, SVELTE_TYPES_PATH, "export {};");
+  // The most common shape: options only, no include/files. The default `**/*`
+  // glob already picks up the non-dotted auro-types/, so the writer no-ops and
+  // the verifier must agree — no spurious "wiring incomplete" banner.
+  seed(
+    cwd,
+    "tsconfig.json",
+    `${JSON.stringify({ compilerOptions: { jsx: "react-jsx" } }, null, 2)}\n`,
+  );
+
+  const verdict = verifyEditorWiring(cwd, { ...OFF, svelte: true });
+  assert.deepEqual(verdict.inconsistencies, []);
+});
+
+test("svelte target: .d.ts present but a files-only tsconfig is an inconsistency (files suppresses the glob)", async (t: TestContext) => {
+  const cwd = await tempCwd(t);
+  seed(cwd, SVELTE_TYPES_PATH, "export {};");
+  // `files` suppresses the default glob, so the writer must add an include for
+  // auro-types/; its absence here is a real gap the verifier should flag.
+  seed(
+    cwd,
+    "tsconfig.json",
+    `${JSON.stringify({ files: ["src/main.ts"] }, null, 2)}\n`,
+  );
+
+  const verdict = verifyEditorWiring(cwd, { ...OFF, svelte: true });
+  assert.ok(
+    verdict.inconsistencies.some((m) => m.includes(TSCONFIG_INCLUDE_ENTRY)),
+    "a files-only config is reported as not wired",
+  );
+});
+
+test("svelte target: .d.ts present but a wrong-typed include is an inconsistency", async (t: TestContext) => {
+  const cwd = await tempCwd(t);
+  seed(cwd, SVELTE_TYPES_PATH, "export {};");
+  // include present but not an array → the writer refuses to touch it, so the
+  // types are not wired.
+  seed(
+    cwd,
+    "tsconfig.json",
+    `${JSON.stringify({ include: "src" }, null, 2)}\n`,
+  );
+
+  const verdict = verifyEditorWiring(cwd, { ...OFF, svelte: true });
+  assert.ok(
+    verdict.inconsistencies.some((m) => m.includes(TSCONFIG_INCLUDE_ENTRY)),
+    "a wrong-typed include is reported as not wired",
+  );
+});
+
 test("a disabled target with nothing on disk is not an inconsistency", async (t: TestContext) => {
   const cwd = await tempCwd(t);
 

@@ -633,12 +633,21 @@ export async function runInit(options: InitOptions): Promise<void> {
   // yellow one, so absent `<auro-*>` completions are never a silent surprise.
   let verdict = verifyEditorWiring(cwd, editorSelection);
   if (verdict.inconsistencies.length > 0) {
-    await writeEditorArtifacts(
+    const healReport = await writeEditorArtifacts(
       cwd,
       components,
       plan.resolvedTags,
       editorSelection,
     );
+    // The self-heal pass can raise warnings the first write didn't (e.g. a target
+    // file that turned malformed since). Surface the new ones instead of dropping
+    // its report; the first pass already printed the shared ones.
+    const alreadyWarned = new Set(editorReport.warnings);
+    for (const warning of healReport.warnings) {
+      if (!alreadyWarned.has(warning)) {
+        console.error(`⚠ ${warning}`);
+      }
+    }
     verdict = verifyEditorWiring(cwd, editorSelection);
   }
   if (verdict.inconsistencies.length > 0) {

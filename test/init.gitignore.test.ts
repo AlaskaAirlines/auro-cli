@@ -100,6 +100,29 @@ test("unignore is idempotent — a second call appends nothing and still reports
   assert.equal(readGitignore(cwd), afterFirst, "no duplicate entries appended");
 });
 
+test("unignore does not restack the round-2 trio for an unfixable path across re-runs", async (t) => {
+  const cwd = await gitRepo(t);
+  // `a/` is ignored, so a file two levels down can't be re-included: the trio
+  // re-includes only its immediate parent `a/b/`, but git won't re-include a
+  // subdirectory of an excluded dir. The path stays ignored (unfixable) and so
+  // re-enters round 2 on every run — the appended trio must not accumulate.
+  seed(cwd, ".gitignore", "a/\n");
+  const target = "a/b/auro.config.json";
+
+  const first = await unignore(cwd, [target]);
+  assert.deepEqual(first.fixed, [], "the path is genuinely unfixable");
+  assert.deepEqual(first.unfixable, [target]);
+  const afterFirst = readGitignore(cwd);
+
+  const second = await unignore(cwd, [target]);
+  assert.deepEqual(second.unfixable, [target]);
+  assert.equal(
+    readGitignore(cwd),
+    afterFirst,
+    "no duplicate trio appended on the re-run",
+  );
+});
+
 test("unignore creates .gitignore when absent and no-ops on an empty list", async (t) => {
   const cwd = await gitRepo(t);
   const result = await unignore(cwd, []);

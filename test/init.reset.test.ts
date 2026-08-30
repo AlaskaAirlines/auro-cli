@@ -268,6 +268,39 @@ test("planReset removes an Auro-created settings.json (only our entry) instead o
   );
 });
 
+test("planReset keeps (un-merges, not deletes) a settings.json whose only remaining content is a user comment", async (t: TestContext) => {
+  const cwd = await tempCwd(t);
+  // Only our pointer as a key, but the user added a JSONC comment. Un-merging
+  // empties the object, yet deleting the file would silently discard the comment,
+  // so reset must keep the file and just write back the emptied object.
+  seed(
+    cwd,
+    ".vscode/settings.json",
+    `{\n  // keep my editor defaults out of source control tweaks\n  "html.customData": ["${HTML_CUSTOM_DATA_SETTINGS_ENTRY}"]\n}\n`,
+  );
+
+  const plan = planReset(cwd);
+  assert.ok(
+    !plan.filesToRemove.includes(".vscode/settings.json"),
+    "a comment-carrying settings.json is not deleted",
+  );
+  assert.ok(
+    plan.unmerges.some((u) => u.path === ".vscode/settings.json"),
+    "it is un-merged in place so the comment survives",
+  );
+
+  // End to end: the file stays, our entry is gone, and the comment survives.
+  applyReset(cwd, plan);
+  assert.ok(has(cwd, ".vscode/settings.json"), "the file is kept");
+  const settings = read(cwd, ".vscode/settings.json");
+  assert.match(
+    settings,
+    /keep my editor defaults/,
+    "the user comment survives",
+  );
+  assert.doesNotMatch(settings, /auro\.html-custom-data/, "our entry is gone");
+});
+
 test("applyReset deletes the emptied settings.json and prunes a now-empty .vscode/", async (t: TestContext) => {
   const cwd = await tempCwd(t);
   seed(cwd, HTML_CUSTOM_DATA_PATH, "{}");
