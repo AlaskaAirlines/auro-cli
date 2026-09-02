@@ -1,6 +1,6 @@
 # The username of the assignees to be added on the pull request.
 assignees:
-  - rmenner
+  - jason-capsule42
 
 # The authentication type. Used only for Bitbucket cloud. Available values: app-password, workspace-token.
 auth-type: workspace-token
