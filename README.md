@@ -143,6 +143,8 @@ CI runs these. You do not usually run them by hand. The workflows in auro-action
 
 Cuts the release-candidate branch and opens the RC pull request. Runs on a push to dev. No options.
 
+See [Auro Teams GitFlow](src/scripts/rc-workflow/auro-gitflow.md) for how the team plans and tracks releases in ADO, and the [Manual Release Candidate Process](src/scripts/rc-workflow/manual-rc-process.md) for running the RC steps by hand.
+
 #### `auro pr-release`
 
 Sets the PR preview version in `package.json`, computed from the npm registry. Does not publish.
