@@ -143,6 +143,8 @@ CI runs these. You do not usually run them by hand. The workflows in auro-action
 
 Cuts the release-candidate branch and opens the RC pull request. Runs on a push to dev. No options.
 
+See [Auro Teams GitFlow](src/scripts/rc-workflow/auro-gitflow.md) for how the team plans and tracks releases in ADO, and the [Manual Release Candidate Process](src/scripts/rc-workflow/manual-rc-process.md) for running the RC steps by hand.
+
 #### `auro pr-release`
 
 Sets the PR preview version in `package.json`, computed from the npm registry. Does not publish.
@@ -159,3 +161,82 @@ Reads the repo's commits, classifies each by conventional-commit type, and repor
 - `-l, --set-label`: label the PR by the highest-priority commit type.
 - `-d, --debug`: print detailed commit info.
 - `-r, --release-notes`: generate release notes from the commits.
+
+### AI assistant context
+
+#### `auro context`
+
+Prints an AI-ready context document describing the Auro Design System, its components, and usage patterns. Designed to be piped into or pasted into AI coding assistants (Claude, Cursor, Copilot, etc.) to prime them on Auro.
+
+The Component Reference table is enriched from each component's Custom Elements Manifest so descriptions stay current. For components installed in the current project, the manifest is read from `node_modules` (matching your installed version); everything else is fetched from unpkg. The curated built-in list is the fallback for any component that can't be resolved. After generating the document, any installed component that isn't on the latest published release is reported to stderr (so it never pollutes the document itself).
+
+- `-o, --output <file>`: write the context document to a file instead of stdout (e.g. `AURO_CONTEXT.md`).
+- `--offline`: skip network fetches — enrich only from locally installed manifests and fall back to the built-in table (also skips the outdated-release check).
+
+Print the context to the terminal:
+
+```bash
+auro context
+```
+
+Write the context to a file for your AI tool:
+
+```bash
+auro context --output AURO_CONTEXT.md
+```
+
+#### `auro cem`
+
+Aggregates the Custom Elements Manifests (`custom-elements.json`) of every published Auro component into a single file. Each component's manifest is fetched from the latest published version on unpkg; components that do not publish a manifest yet are skipped. Useful for feeding a complete, machine-readable component API index to IDEs, docs tooling, and AI assistants.
+
+#### Options
+
+- `-o, --output <file>` Path to write the aggregated manifest (default: `custom-elements.aggregate.json`).
+
+#### Examples
+
+Generate the aggregated manifest:
+
+```
+auro cem
+```
+
+Write it to a specific path:
+
+```
+auro cem --output dist/custom-elements.aggregate.json
+```
+
+#### `auro component <name>`
+
+Looks up a single Auro component's API — attributes, properties/methods, slots, events, and CSS parts — from its Custom Elements Manifest. Useful for humans and for AI coding assistants that call the CLI in a tool-use loop to avoid guessing an API.
+
+If the component is installed in the current project's `node_modules`, its manifest is read locally so the API matches the version you actually have — the success line shows `(local vX.Y.Z)`. Otherwise it's fetched from unpkg (shown as `(unpkg)`). Passing an explicit `--tag`/version always fetches that version from unpkg.
+
+#### Options
+
+- `-t, --tag <version>` npm dist-tag or version to look up (default: `latest`; forces an unpkg fetch).
+- `--json` Output the raw manifest declaration(s) as JSON instead of formatted text.
+
+#### Examples
+
+Look up a component (name is normalized, so all of these work):
+
+```
+auro component button
+auro component auro-button
+auro component @aurodesignsystem/auro-button
+```
+
+Look up a specific version or dist-tag:
+
+```
+auro component auro-button --tag beta
+auro component auro-button --tag 11.0.0
+```
+
+Get machine-readable output:
+
+```
+auro component auro-button --json
+```

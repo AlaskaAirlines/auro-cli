@@ -1,0 +1,11 @@
+{
+  // Branch 4 — neither `files` nor `include`: the default `**/*` glob already
+  // picks up the non-dotted `auro-types/` dir (dotfiles are the only thing it
+  // skips), so NO tsconfig edit is needed. Frozen: this is why the types dir is
+  // non-dotted (see src/init/editors/layout.ts → FRAMEWORK_TYPES_DIR).
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true
+  }
+}

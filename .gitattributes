@@ -1,0 +1,6 @@
+# Force LF in the working tree on every platform. The editor-type builders and
+# grounding-file generators emit `\n`, and the golden fixtures they are checked
+# against are stored with LF; without this, a Windows checkout under
+# core.autocrlf=true rewrites those fixtures to CRLF and the byte-for-byte
+# comparisons in test/ fail. `text=auto` still lets git treat binaries correctly.
+* text=auto eol=lf

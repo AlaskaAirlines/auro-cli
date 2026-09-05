@@ -1,0 +1,6 @@
+{
+  // Team formatting prefs — the merge must preserve this comment and these keys.
+  "editor.tabSize": 2,
+  "editor.formatOnSave": true,
+  "files.eol": "\n"
+}

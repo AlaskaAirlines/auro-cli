@@ -1,6 +1,6 @@
 # The username of the assignees to be added on the pull request.
 assignees:
-  - rmenner
+  - jason-capsule42
 
 # The authentication type. Used only for Bitbucket cloud. Available values: app-password, workspace-token.
 auth-type: workspace-token
@@ -18,7 +18,7 @@ base-branch:
 base-url:
 
 # The name of the branch where changes are committed.
-branch: rmenner/ci/oidc-release-upgrade
+branch: jason-capsule42/ci/oidc-release-upgrade
 
 # The temporary directory where the repositories will be cloned. If not set, the default os temporary directory will be used.
 clone-dir: .gitter-temp

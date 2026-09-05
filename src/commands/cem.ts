@@ -1,0 +1,87 @@
+import { writeFile } from "node:fs/promises";
+import path from "node:path";
+import process from "node:process";
+import { Logger } from "@aurodesignsystem/auro-library/scripts/utils/logger.mjs";
+import { program } from "commander";
+import ora from "ora";
+import { AURO_COMPONENT_PACKAGES } from "#static/auroComponents.js";
+import { buildAggregateManifest } from "#utils/aggregateManifest.js";
+
+/** Options accepted by the `cem` action. */
+export interface CemOptions {
+  output: string;
+}
+
+/**
+ * Fetch every published Auro component's canonical manifest, merge them into a
+ * single aggregated `custom-elements.json`, and write it to `options.output`.
+ * Exits non-zero when nothing could be fetched, the write fails, or any fetch
+ * failed transiently (leaving the aggregate incomplete).
+ */
+export async function runCem(options: CemOptions): Promise<void> {
+  const spinner = ora(
+    `Fetching manifests for ${AURO_COMPONENT_PACKAGES.length} components...`,
+  ).start();
+
+  // Aggregate the canonical latest published manifests, not whatever happens
+  // to be installed locally, so the index doesn't mix versions per machine.
+  const {
+    manifest: aggregate,
+    sources,
+    skipped,
+    transientFailures,
+  } = await buildAggregateManifest(AURO_COMPONENT_PACKAGES, {
+    preferLocal: false,
+  });
+
+  if (sources.length === 0) {
+    spinner.fail("No component manifests could be fetched.");
+    process.exit(1);
+  }
+
+  const outputPath = path.resolve(process.cwd(), options.output);
+  try {
+    await writeFile(
+      outputPath,
+      `${JSON.stringify(aggregate, null, 2)}\n`,
+      "utf-8",
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    spinner.fail(`Failed to write ${options.output}: ${message}`);
+    process.exit(1);
+  }
+
+  spinner.succeed(
+    `Aggregated ${sources.length}/${AURO_COMPONENT_PACKAGES.length} component manifests (${aggregate.modules?.length ?? 0} modules) to ${options.output}`,
+  );
+
+  // Report skips after the spinner so output isn't garbled. Genuine 404s are
+  // expected (not every component publishes a CEM yet); transient failures
+  // mean the aggregate is incomplete and are treated as an error.
+  for (const outcome of skipped) {
+    // Transient failures are a subset of `skipped` but are reported as errors
+    // below — don't also log them as deliberate "Skipped" (no CEM published).
+    if (outcome.transient) continue;
+    Logger.info(`Skipped ${outcome.target}: ${outcome.reason}`);
+  }
+
+  if (transientFailures.length > 0) {
+    Logger.error(
+      `${transientFailures.length} component(s) failed to fetch transiently; the aggregate may be incomplete. Re-run to retry.`,
+    );
+    process.exit(1);
+  }
+}
+
+export default program
+  .command("cem")
+  .description(
+    "Fetch every published Auro component's custom-elements.json and merge them into a single aggregated manifest",
+  )
+  .option(
+    "-o, --output <file>",
+    "Path to write the aggregated manifest",
+    "custom-elements.aggregate.json",
+  )
+  .action(runCem);

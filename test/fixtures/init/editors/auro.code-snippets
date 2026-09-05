@@ -1,0 +1,12 @@
+{
+  "Auro <myapp-button> ::part": {
+    "scope": "css,scss,less",
+    "prefix": "myapp-button::part",
+    "body": [
+      "myapp-button::part(${1|button,contentWrapper,link,loader,text|}) {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Style a shadow part of <myapp-button> (button, contentWrapper, link, loader, text)"
+  }
+}

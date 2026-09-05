@@ -1,0 +1,690 @@
+# PT-M1 Completion Plan — `auro init` v1 (scoped grounding file)
+
+This document tracks the work required to resolve PT-M1 and tick the second box
+of the Phase 1 Auro AI Tooling story. Where PT-M0 landed the **data layer** (PR
+#302), PT-M1 builds the first **generator** on top of it: an `auro init` command
+that writes a project-scoped AI grounding file listing exactly the Auro
+components a project has installed.
+
+## Tickets
+
+| Ticket | Type | Title | State |
+| --- | --- | --- | --- |
+| [AB#1628541](https://itsals.visualstudio.com/E_Retain_Content/_workitems/edit/1628541) | Task | PT-M1 — `auro init` v1 (scoped grounding file) | New |
+| [AB#1628539](https://itsals.visualstudio.com/E_Retain_Content/_workitems/edit/1628539) | User Story | Phase 1 — Auro AI Tooling: Standalone Grounding (no MCP) | Committed |
+
+PT-M1 is the parent story's "highest-leverage" task: it turns "install → grounded
+AI" into something real. Effort estimate on the ticket is **~1.5–2.5 ew**, with a
+note to **freeze the file format early** (bus-factor mitigation) and prioritise so
+the flow is real by ~end-S2.
+
+## What PT-M0 already gives us (data-layer inventory)
+
+The `auro init` prototype ([scripts/proto-init.mjs](../scripts/proto-init.mjs),
+kept untracked) already composed the intended flow end-to-end, so we know exactly
+which surfaces exist and which are still trapped. Reusable today:
+
+| Surface | Location | Reuse in PT-M1 |
+| --- | --- | --- |
+| Version-pinned manifest resolution (local `node_modules` first, unpkg fallback, timeout, transient-vs-404) | [fetchManifest.ts](../src/utils/fetchManifest.ts) `fetchManifest()` | **This is "the exact resolution path from PR #302"** the ticket says to reuse so Tier 0/Tier 1 never disagree. Local read is already version-pinned (`preferLocal` + no ref → installed copy + `version`). |
+| Outcome partitioning (skip vs transient failure) | [fetchManifest.ts](../src/utils/fetchManifest.ts) `partitionOutcomes()` | Same fail-on-transient semantics for init's aggregation. |
+| Manifest merge into one aggregate | [mergeManifests.ts](../src/utils/mergeManifests.ts) `mergeManifests()` | Aggregating a multi-component set. |
+| Per-component API rendering (tag, attributes, properties/methods, slots, events, CSS parts, install lines) | [formatComponent.ts](../src/utils/formatComponent.ts) `formatDeclaration()` | The API body of each component's `AGENTS.md` section — but its import/registration lines need to become prefix- and subpath-aware (see below). |
+| CEM typing + description cleanup | [cem.ts](../src/utils/cem.ts) `Manifest`, `CemDeclaration`, `clean()` | Declaration walking + text sanitising. |
+| Curated package list | [auroComponents.ts](../src/static/auroComponents.ts) `AURO_COMPONENT_PACKAGES` | Candidate set to test for local installation. |
+| Latest-version lookup | [fetchManifest.ts](../src/utils/fetchManifest.ts) `fetchLatestVersion()` / [outdated.ts](../src/utils/outdated.ts) | Optional outdated advisory (network-only). |
+
+## Gaps carried forward from the PT-M0 handoff
+
+The prototype recorded four surfaces PT-M1 needs but that are currently locked
+inside command actions. These are the first, mechanical extractions:
+
+1. **No exported "detect installed components".** The `node_modules` scan +
+   version capture lives privately in
+   [context.ts](../src/commands/context.ts) `buildComponentTable`. → Extract a
+   reusable `detectInstalled()`.
+2. **Context enrichment isn't reusable in-memory.** `runContext()` couples
+   generation with output (stdout/file, `process.exit` on failure). Not directly
+   needed by init's output, but the same private-behind-the-action shape recurs.
+3. **CEM aggregation is trapped in the command action.** [cem.ts](../src/commands/cem.ts)
+   `runCem()` inlines `fetch → mergeManifests → partitionOutcomes →
+   fail-on-transient`. → Extract `buildAggregateManifest(packages)`.
+4. **No assistant grounding/rules surface.** Nothing emits an `AGENTS.md`-style
+   file. This is PT-M1's core new artifact — a deliberate format decision.
+
+## What's net-new in PT-M1 (beyond the data layer)
+
+Everything below has **no existing surface** and is the bulk of the work:
+
+- The `init` command itself and its output writer (`AGENTS.md` + `CLAUDE.md`).
+- **Multi-component (monorepo) handling** — e.g. `@aurodesignsystem/auro-formkit`
+  is one package that ships one aggregated `custom-elements.json`, per-component
+  subpath exports (`@aurodesignsystem/auro-formkit/auro-input`, verified against
+  `6.1.0`), and a single shared version. init must enumerate **all** components
+  the package ships, emit the correct subpath import per component, and treat the
+  package version as shared.
+- **Legacy-standalone-vs-monorepo dedupe** — if both a monorepo and a legacy
+  standalone package register the same component, detect and warn/prefer one.
+- **Prefix + custom-registration system** — a CLI-owned config (default prefix +
+  per-component overrides), an AST scan for existing `Component.register('...')`
+  calls, prefix inference, and mixed-prefix resolution. None of this exists today.
+- **Auro coding rules** content block embedded in the grounding file.
+- **Idempotent regeneration** driven by the persisted config.
+
+## Proposed architecture
+
+The ticket requires data resolution to be **isolated behind a single module** so a
+Phase-2 shared core can replace it without touching the generator. Proposed layout
+under a new `src/init/` directory:
+
+| Module | Responsibility | Notes |
+| --- | --- | --- |
+| `src/commands/init.ts` | Commander wiring + orchestration + prompts + writing files | Thin; mirrors `context.ts`/`cem.ts`. Registered in [index.ts](../src/index.ts). |
+| `src/init/resolver.ts` | **The single data module.** Detect installed `@aurodesignsystem/*`, resolve each CEM at its installed version, and **normalise single-component and aggregated multi-component CEMs into one flat `ResolvedComponent[]`**. | Wraps `fetchManifest`/`mergeManifests`; the Phase-2 seam. Emits `{ pkg, version, tagName (bare auro-*), declaration, importPath, isMonorepo }`. |
+| `src/init/registry.ts` | Prefix + custom-registration logic: config load/save, AST scan, prefix inference, mixed-prefix resolution | Uses the TypeScript compiler API (already a dep) for the AST scan. |
+| `src/init/generator.ts` | Render `AGENTS.md` from `ResolvedComponent[]` + resolved tags + coding rules; render `CLAUDE.md` thin import; structured for future targets (`copilot-instructions.md`) | Pure/side-effect-free string builders; reuses `formatDeclaration` for the API body. |
+| `src/init/rules.ts` (or a template asset) | The static "Auro coding rules" block | Frozen early per the ticket note. |
+
+Import-path derivation lives in the resolver: a standalone package imports as
+`import "@aurodesignsystem/auro-button"`; a monorepo component imports via its
+subpath export `import "@aurodesignsystem/auro-formkit/auro-input"`. This replaces
+the fixed `import "${pkg}"` line currently hard-coded in `formatDeclaration`.
+
+## Task breakdown
+
+> **This is a requirements-coverage matrix, not the build sequence.** The `#`
+> column is the *ticket's* task number, not implementation order (task #1 "add
+> the `init` command" is actually built near-last). Use
+> [Build order / action checklist](#build-order--action-checklist) for the
+> ordered steps; check this table to confirm every ticket task is covered before
+> calling M1 done.
+
+Ticket tasks mapped against current repo state:
+
+| # | Ticket task | Current state | Action needed |
+| --- | --- | --- | --- |
+| 1 | Add an `init` command | No `init` command exists | New `src/commands/init.ts`; register in [index.ts](../src/index.ts) alongside `context`/`cem`. |
+| 2 | Detect installed Auro packages via `package.json`/`node_modules` | Logic private in `context.ts#buildComponentTable`; `fetchManifest` already does local reads | Extract `detectInstalled()` into `resolver.ts`; drive off installed deps, not the full curated list. |
+| 3 | Resolve each CEM at the installed version (never "latest"), reusing PR #302 path | `fetchManifest({preferLocal,no ref})` already version-pins local reads | Reuse as-is inside the resolver. |
+| 4 | Isolate resolution behind one module; normalise single + aggregated CEM into the same component list | No such module; merge exists but no normaliser | `resolver.ts` producing `ResolvedComponent[]` — the Phase-2 seam. |
+| 5 | Generate `AGENTS.md` (canonical) listing only installed components with full API + coding rules; `CLAUDE.md` as thin `@AGENTS.md` import | `formatDeclaration` renders API but with fixed `import "${pkg}"`; no file writer, no rules block, no `CLAUDE.md` | `generator.ts` + `rules.ts`; make import/registration lines prefix/subpath-aware. |
+| 6 | Multi-component packages (monorepos): enumerate all shipped components, subpath imports, shared version, legacy-vs-monorepo dedupe warning | None; `mergeManifests` aggregates but nothing enumerates-per-package or derives subpaths | Resolver: walk the package's aggregated CEM, emit one `ResolvedComponent` per declaration, derive subpath import, flag duplicate tags across packages. |
+| 7 | Default to custom registration via a `--prefix`/prompt; persist default + per-component override map in CLI-owned config; idempotent regeneration; warn on bare `auro-*` fallback; optionally scaffold `register('')` | Nothing — no config; `inquirer` v12 already a dep | `registry.ts` + config schema; reuse existing `inquirer` with a non-interactive guard (see Frozen decisions). |
+| 8 | Detect existing custom registrations: config → AST scan of `Component.register('literal')` → skip+warn on unresolvable | Nothing | AST scan via TS compiler API; resolution precedence in `registry.ts`. |
+| 9 | Infer default prefix from existing registrations (common leading segment) and adopt it | Nothing | Prefix-inference in `registry.ts`. |
+| 10 | Resolve mixed/inconsistent prefixes: honor each per-component, default governs only unregistered, suggest majority + confirm, `--prefix`/fail in CI | Nothing | Interactive resolution + non-interactive `--prefix`/fail path. |
+| 11 | Structure generator to emit future targets (`copilot-instructions.md`) | Nothing | Target registry / pluggable emitter shape in `generator.ts`. |
+| 12 | Enforce strict scoping — only installed packages, never the 60+ catalog | `context`/`cem` deliberately walk the full curated list | init must scope to **installed** packages only (curated list is just the detection candidate set). |
+| 13 | Support regeneration on dependency add/remove | Nothing | Re-run reads persisted config, re-detects, rewrites files. |
+| 14 | Tests (detection, resolution, scoping, monorepo, dedupe, regeneration, `CLAUDE.md` import, prefix application, registration detection, prefix inference, mixed-prefix resolution, bare-default warning) | Existing test patterns in [test/](../test/) (node:test + `register.mjs` TS hook) | Add init test suite following existing conventions. |
+
+## Frozen decisions
+
+Decisions resolved and locked; do not reopen without a format-version bump.
+
+### CLI-owned config location/shape — FROZEN
+
+A dedicated project-root file, **`auro.config.json`**, namespaced internally by
+command:
+
+```json
+{
+  "version": 1,
+  "init": {
+    "prefix": {
+      "default": "myapp-",
+      "overrides": { "auro-input": "legacy-input" }
+    }
+  }
+}
+```
+
+Rationale and rules:
+
+- **Dedicated file, not a `package.json` key.** `auro init` **writes this file
+  back** on every regeneration (tasks #7/#13), so it must be isolated from the
+  user's `package.json` to avoid noisy diffs on an unrelated file and to let a
+  team commit-or-gitignore it independently.
+- **JSON, not `.js`/`.ts`.** Because the CLI round-trips (reads *and* rewrites)
+  the file, it must be machine-serializable. A JS/TS config can't be safely
+  rewritten. This rules out an ecosystem-style `auro.config.js`.
+- **Top-level `version` field.** Present from v1 so any future format change is
+  an explicit migration, not a guess. This is the ticket's "freeze the format
+  early / bus-factor" requirement made concrete.
+- **Namespaced under `init`.** Future commands get their own top-level keys
+  without a schema break.
+- **Override keys are the bare `auro-*` tag** (the stable component identity);
+  the value is the resolved custom tag. The resolver's canonical `tagName`
+  (bare `auro-*`) is the key — see the resolver row in Proposed architecture.
+- **Committed by default; not auto-gitignored.** The config is treated as a
+  committed artifact so regeneration is deterministic across the team and in CI
+  (the task #10 "`--prefix`/fail in CI" path assumes the config is present).
+  `init` must **not** auto-append it to `.gitignore`. Document that teams may
+  gitignore it if they treat `AGENTS.md` as fully regenerated-on-demand.
+
+Freeze this alongside the `AGENTS.md` layout (build-order step 1) before wiring
+generation.
+
+### Interactive prompt library — FROZEN
+
+Use the **already-present `inquirer` v12** (`inquirer@^12.9.6` is a production
+dependency today). **Do not add `@inquirer/prompts` or `prompts`** — a second
+prompt library would be a redundant dependency and a style split.
+
+- Match the established pattern in [agent.ts](../src/commands/agent.ts) and
+  [migrate.js](../src/commands/migrate.js): `input` (with `validate`) for the
+  prefix prompt; `confirm` for the majority-confirmation flow (task #10).
+- **Non-interactive guard (new precedent — no command does this today).** init
+  is non-interactive when **any** of: `process.stdin.isTTY` is falsy, `process.env.CI`
+  is set, or an explicit `--non-interactive`/`--yes` flag is passed. When
+  non-interactive: never call `inquirer.prompt` (avoids an inquirer throw on a
+  closed stdin); take the prefix from `--prefix`; and if a value can't be
+  resolved without a prompt (no `--prefix`, or a mixed-prefix conflict needing
+  confirmation), **fail cleanly** with a one-line actionable error and a
+  non-zero exit — satisfying the tasks #7/#10 "`--prefix` or fail in CI" path.
+
+### AST scan tooling — FROZEN
+
+Use the **TypeScript compiler API** (`typescript` is already a dependency; no new
+parser). Rejected alternatives: regex (brittle on consumer code — cf. the
+existing [prepWcaCompatibleCode.mjs](../src/scripts/prepWcaCompatibleCode.mjs)
+approach, fine only for Auro's own predictable dist), Babel (`@babel/parser` would
+be a new dep), acorn/espree (new dep, no TS/TSX).
+
+- **`ts.createSourceFile` per file — not a `Program`/type-checker.** This is a
+  purely syntactic scan: no tsconfig, no module resolution, no type-checking.
+  Set `scriptKind` from the file extension so `.jsx`/`.tsx` parse.
+- **Match shape:** a `CallExpression` whose callee is a `PropertyAccessExpression`
+  with `.name.text === "register"`, and whose **first argument** is a
+  `StringLiteral` or `NoSubstitutionTemplateLiteral` (a backtick string with no
+  `${}` is statically resolvable → treat as a literal). Capture that string as
+  the existing custom tag.
+- **Skip + warn** on any `.register(...)` whose first arg is a template literal
+  *with substitutions*, an identifier/const, a call, a spread, or absent — i.e.
+  anything not statically resolvable. Warn, never guess (matches the Risks note
+  on false-negatives).
+- **Scope:** glob the project's own sources (`glob` is already a dep) —
+  `**/*.{js,jsx,ts,tsx,mjs,cjs}` under cwd, **excluding** `node_modules`, `dist`,
+  `build`, `coverage`. Never scan installed packages (Auro's own `static
+  register` defaults would be false positives).
+- **Per-file `try/catch`** around the parse: a syntax error in one consumer file
+  warns and skips that file, never crashes `init`.
+- **No cross-file resolution** of whether the callee is truly an Auro class — the
+  scan is heuristic input to the config → scan → warn precedence, and matches are
+  reconciled against the detected component set.
+
+### `AGENTS.md` vs data files — FROZEN
+
+**Self-contained `AGENTS.md` for v1. Do not emit separate machine-readable
+artifacts** (`custom-elements.aggregate.json`, `AURO_COMPONENT_API.txt`) — the
+prototype's split ([proto-init.mjs](../scripts/proto-init.mjs) STEP 3/4/4b) was a
+debugging convenience, not a product requirement.
+
+- **Consumer is an LLM reading one instruction file, not a program.** Inlining
+  grounds the assistant the moment it reads `AGENTS.md`; a pointer file forces
+  extra reads that agents follow unreliably. Decisive argument.
+- **No programmatic consumer exists** for the aggregate CEM in v1 (no MCP server,
+  no lint/codemod rule) — emitting it is YAGNI and adds commit/gitignore/sync
+  surface.
+- **Size is bounded** by strict install-scoping (task #12): tens of KB of
+  markdown for a real project, well within assistant ingestion.
+- **The one justified indirection already exists**: `CLAUDE.md` → `@AGENTS.md`
+  thin import (task #5) dedups across targets. A second layer (`AGENTS.md` →
+  data files) is redundant with it.
+- **Fewer files = simpler idempotent regeneration** (task #13): one canonical
+  file + one thin import, minimal write/diff surface.
+- **Not a corner**: `generator.ts` renders from in-memory `ResolvedComponent[]`
+  and is structured for multiple targets (task #11); a JSON/CEM emitter is an
+  additive function over the same model later.
+
+Definition of "self-contained": `AGENTS.md` inlines the component list,
+per-component full API (via `formatDeclaration`), prefixed tags + import/
+registration lines, and the Auro coding-rules block — merging what the prototype
+split across `AURO_CONTEXT.md` + `AURO_COMPONENT_API.txt`.
+
+**Revisit trigger:** split out a machine-readable artifact only when a real
+programmatic consumer appears (MCP server, lint/codemod rule) — not before.
+
+### `register()` scaffolding scope — FROZEN
+
+**v1 documents; it does not modify consumer source.** The ticket marks
+scaffolding "optional"; defer any actual code-mod to a follow-up.
+
+- **init's writes are limited to files it owns**: `AGENTS.md`, `CLAUDE.md`,
+  `auro.config.json`. It must **not** edit existing consumer source files in v1.
+  Modifying a user's source (insert point, import management, formatting,
+  re-run idempotency) is a categorically riskier operation than writing owned
+  files.
+- **Consistent with the read-only AST scan** (frozen above): v1 *reads* source
+  syntactically. A codemod is the inverse — safe write-back that preserves
+  formatting/comments — which would need a new transform dep (recast/
+  jscodeshift; the TS printer reprints and loses formatting). Not justified for
+  a 1.5–2.5 ew ticket.
+- **The grounding file is the product.** For each component, `AGENTS.md` inlines
+  the exact registration snippet the consumer (or its AI assistant) should add —
+  the `import` line plus `AuroX.register('<prefixed-tag>')` using the resolved
+  prefix. This satisfies the goal without touching source.
+- **Bare `auro-*` case**: when the default applies and no custom prefix/
+  registration is found, document the required `register()` call *and* emit the
+  bare-default warning (tasks #7/#10).
+
+**Follow-up (out of scope for PT-M1):** an opt-in `--scaffold` flag that runs a
+formatting-preserving codemod to insert the `register()` calls.
+
+## Build order / action checklist
+
+Sequenced so each step is independently testable **and so every fixture-independent
+task is front-loaded**. Steps 1–5 need nothing beyond what the repo already has —
+every reuse surface exists (`partitionOutcomes`, `fetchManifest({preferLocal})`,
+`mergeManifests`, `formatDeclaration`, `fetchLatestVersion`, the private
+`buildComponentTable`), and `typescript`/`inquirer`/`glob`/`commander` are all
+installed — so they can be built and unit-tested against **synthetic** fixtures
+before any real Auro component is installed and before PR #302 merges. The fixture
+install (step 6) gates end-to-end verification; the admin step gates on merge.
+
+**No external dependency — start now (synthetic fixtures only):**
+
+1. ✅ **DONE — Freeze the file format (critical path).** Write the `AGENTS.md`
+   layout + coding-rules block and the `CLAUDE.md` thin-import as fixtures, and land
+   the `auro.config.json` `Config` type + a fixture. The `auro.config.json` shape is
+   already frozen (see Frozen decisions). **Did this first** — the ticket's
+   bus-factor note calls the format freeze out explicitly, it needs zero deps, and
+   it unblocks the generator (step 4).
+   - **Delivered:** frozen source in `src/init/` — [config.ts](../src/init/config.ts)
+     (`AuroConfig` type + `CONFIG_VERSION`), [rules.ts](../src/init/rules.ts)
+     (`AURO_CODING_RULES`), [layout.ts](../src/init/layout.ts) (`GROUNDING_HEADER`,
+     `SECTION_HEADINGS`, `INSTALLED_TABLE_HEADER`, `REGENERATION_NOTE`, `CLAUDE_MD`);
+     golden fixtures in [test/fixtures/init/](../test/fixtures/init/)
+     (`AGENTS.md`, `CLAUDE.md`, `auro.config.json`) pinning monorepo subpath imports,
+     shared version, default-prefix + per-component override; freeze test
+     [init.format.test.ts](../test/init.format.test.ts) (5 tests). `#init/*` alias
+     added to `tsconfig.json`/`package.json`. Full suite 74/74, `tsc`/biome clean.
+   - **Spec handed to step 4:** the frozen per-component section wraps
+     `formatDeclaration` output in a fenced block and pins the `Install:` lines to
+     emit the **resolved tag + subpath import + `register('<tag>')`** — the concrete
+     shape `formatDeclaration` must take on when it becomes prefix/subpath-aware.
+2. ✅ **DONE — Extract the trapped surfaces** (handoff gaps 1 & 3):
+   `detectInstalled()` (out of [context.ts](../src/commands/context.ts)
+   `buildComponentTable`) and `buildAggregateManifest()` (out of
+   [cem.ts](../src/commands/cem.ts) `runCem`), with unit tests against synthetic
+   manifests. Mechanical and low-risk; unblocks everything. Note this refactors
+   files still open in PR #302 — expect rebase churn on
+   `context.ts`/`cem.ts`/`fetchManifest.ts` until it merges.
+   - **Delivered:** two reusable utils —
+     [detectInstalled.ts](../src/utils/detectInstalled.ts) (`detectInstalled()`
+     local-only `node_modules` scan → `InstalledComponent[]` with pinned version +
+     manifest, never hits the network; plus a pure `installedFromOutcomes()` helper
+     so the "detect installed" rule lives in one place) and
+     [aggregateManifest.ts](../src/utils/aggregateManifest.ts)
+     (`buildAggregateManifest()` fetch → merge → partition; never fails on its own —
+     empty sources still returns a valid empty manifest, the caller owns error
+     policy). Behavior-preserving refactors of
+     [cem.ts](../src/commands/cem.ts) (destructures `buildAggregateManifest(...,
+     { preferLocal: false })`) and [context.ts](../src/commands/context.ts) (derives
+     its `local` version map from `installedFromOutcomes`, no second fetch pass).
+     Unit tests [detectInstalled.test.ts](../test/detectInstalled.test.ts) +
+     [aggregateManifest.test.ts](../test/aggregateManifest.test.ts) (6 offline/
+     synthetic: pure-filter cases, node_modules scan asserting zero fetch calls,
+     missing-manifest exclusion, offline merge, transient-failure surfacing,
+     empty-result well-formedness). Full suite 80/80, `tsc`/biome clean.
+   - **Spec handed to step 3:** `detectInstalled()` returns the version-pinned
+     installed set (`{ pkg, version, manifest }`) the resolver normalises into
+     `ResolvedComponent[]`; `buildAggregateManifest()` is the fetch → merge → partition
+     pipeline the resolver wraps for the aggregated-CEM (monorepo) path.
+3. ✅ **DONE — Build `resolver.ts` logic** — normalise single + aggregated CEM
+   into `ResolvedComponent[]`, derive per-component subpath import paths, capture
+   shared version, flag cross-package duplicate tags. Test against a **synthetic**
+   standalone package and a **synthetic** formkit-style aggregate. (The live
+   "detect what's really installed" smoke test is deferred to step 6.)
+   - **Delivered:** [resolver.ts](../src/init/resolver.ts) — the isolated data
+     seam. `resolveComponents(installed)` (pure) walks each package's manifest,
+     emits one `ResolvedComponent` per registered element
+     (`{ pkg, version, tagName, declaration, importPath, isMonorepo }`), and
+     returns a `ResolveResult` with a `duplicates` list of tags registered by more
+     than one installed package. A package is treated as multi-component when its
+     manifest registers >1 element; those import via the subpath export
+     `<pkg>/<tag>` (e.g. `@aurodesignsystem/auro-formkit/auro-input`), standalones
+     from the package root. `tagName` is the **canonical bare `auro-*`** — prefixes
+     are applied later by the generator, never here. `resolveInstalled(packages?)`
+     is the thin async wrapper (delegates to `detectInstalled` → `resolveComponents`).
+     Deliberately walks per-package manifests rather than `mergeManifests` (which
+     the `cem` command uses) so each component keeps its package's pinned version.
+     Tests [resolver.test.ts](../test/resolver.test.ts) (6 offline/synthetic:
+     standalone root import, monorepo enumeration + subpaths + shared version,
+     untagged-base-class exclusion, cross-package duplicate flagging, empty input,
+     and a `resolveInstalled` node_modules integration asserting zero fetch calls).
+     Full suite 86/86, `tsc`/biome clean.
+   - **Spec handed to step 4:** the generator consumes `ResolvedComponent[]` +
+     resolved tags (a `Map<canonical-tag, custom-tag>` from `registry.ts`); it uses
+     each component's `importPath` for the `import` line and `declaration` for the
+     API body, and must surface `duplicates` as a dedupe warning.
+4. ✅ **DONE — Build `generator.ts`** — render `AGENTS.md`/`CLAUDE.md` from
+   resolved components using prefixed tags; make import/registration lines
+   subpath- and prefix-aware; structure for future targets. **The generator takes
+   resolved tags as an input parameter — it does not compute prefixes itself**
+   (that's `registry.ts`, step 5). This is why it can be built and tested here,
+   before registry exists, using fixture tags; at runtime the command wires it as
+   detect → resolve → resolve-tags (registry) → generate (step 7).
+   - **Delivered:** [generator.ts](../src/init/generator.ts) — pure,
+     side-effect-free string builders. `generateAgentsMd(components, resolvedTags?)`
+     assembles the frozen scaffolding ([layout.ts](../src/init/layout.ts)/
+     [rules.ts](../src/init/rules.ts)) around an Installed Components table plus one
+     fenced API section per component; `generateClaudeMd()` renders the thin
+     `@AGENTS.md` import; `groundingFiles(...)` returns both as
+     `{ filename, contents }[]` so the command (step 6) writes them uniformly and
+     future targets (task #11) are additive. `resolvedTags` is a
+     `Map<canonical-tag, custom-tag>` **input** — an absent entry falls back to the
+     bare `auro-*` tag; the generator never derives prefixes. Each block's install
+     lines use the component's `importPath` (package root vs. monorepo subpath) and
+     `register('<resolved-tag>')`. To avoid duplicating ~80 lines of API rendering,
+     [formatComponent.ts](../src/utils/formatComponent.ts) was refactored to extract
+     `apiBodyLines(decl)` (Attributes → Properties & Methods → Slots → Events → CSS
+     Parts/Custom Properties); `formatDeclaration` now calls it and stays
+     **byte-identical** (the `component` command's tests are unchanged). Tests
+     [generator.test.ts](../test/generator.test.ts) (6: the **golden byte-for-byte
+     `AGENTS.md`** reproduction deferred from step 1 — a standalone prefixed button +
+     a formkit monorepo subpath input; `CLAUDE.md` fixture; `groundingFiles` order/
+     contents; bare-tag fallback; monorepo subpath import + register; empty-doc
+     validity). Full suite 92/92, `tsc`/biome clean.
+   - **Spec handed to step 5:** `registry.ts` produces the `resolvedTags`
+     `Map<canonical-tag, custom-tag>` the generator consumes — keyed by the bare
+     `auro-*` tag, valued by the project's custom/prefixed registration. An absent
+     key means "no custom registration" (bare tag stands), so the registry only
+     needs to emit entries for tags it actually resolves a prefix/override for.
+5. ✅ **DONE — Build `registry.ts`** — config load/save, AST scan (against
+   synthetic consumer-source strings via the already-installed TS compiler API),
+   prefix inference, mixed-prefix resolution (majority-suggest + confirm;
+   `--prefix`/fail in CI), bare-`auro-*` warning.
+   - **Delivered:** [registry.ts](../src/init/registry.ts) — a **pure planner**
+     plus two thin IO wrappers, producing the `resolvedTags`
+     `Map<canonical-tag, custom-tag>` the generator consumes. Config IO:
+     `loadConfig(cwd)` (null when absent; `RegistryError` on malformed/
+     unsupported-version JSON — the format-freeze contract), `saveConfig(cwd,
+     config)` (pretty JSON + trailing newline), `emptyConfig()`. Read-only AST
+     scan: `scanSource(path, src)` uses `ts.createSourceFile` (syntactic, no
+     type-checker; `scriptKind` from extension so `.jsx`/`.tsx` parse) to capture
+     `<Class>.register('<literal>')` calls (string or no-substitution template),
+     **warning and skipping** any non-literal tag (`${...}`, identifier, call,
+     spread, absent) and any per-file parse failure — never guesses;
+     `scanProject(cwd)` globs the project's own sources (excludes `node_modules`/
+     `dist`/`build`/`coverage`). Prefix inference: `inferPrefixFromTag` +
+     `suggestDefaultPrefix` (majority, ignoring bare `auro-`/empty). The heart,
+     `planTagResolution(components, { config?, scan?, prefix? })`, applies the
+     frozen **config → scan → default-prefix** precedence, persists detected
+     registrations as overrides, flags `needsDefaultPrefix`/`suggestedDefault`/
+     `mixedPrefixes`, and warns on bare `auro-*` defaults and unattributable
+     registrations. The interactive prompt/confirm + non-interactive TTY/CI guard
+     were deliberately **kept out** (step 6's command consumes the plan) so this
+     stays fully synthetic-testable. Tests [registry.test.ts](../test/registry.test.ts)
+     (18 offline/synthetic: scan capture across `.ts`/`.jsx` + template literal,
+     non-literal + syntax-error tolerance, config round-trip/null/malformed/version,
+     prefix inference + majority, and the full precedence/bare/mixed/`needsDefault`/
+     unreconciled planner matrix). Full suite 110/110, `tsc`/biome clean.
+   - **Spec handed to step 6:** the command wires **detect → resolve →
+     `planTagResolution` → generate → write**. It calls `planTagResolution` once;
+     if `needsDefaultPrefix`, it resolves a prefix (inquirer prompt/confirm the
+     `suggestedDefault` when interactive; else `--prefix`; else fail cleanly in CI
+     per the non-interactive guard) and **re-calls** with that `prefix` for the
+     authoritative `resolvedTags` + `config`; then persists via `saveConfig` and
+     surfaces `warnings` (plus the resolver's `duplicates`) to the user. Only a
+     plan whose `needsDefaultPrefix` is `false` is persisted.
+
+**Gate — install real component fixtures. ✅ DONE.** Vendored the real published
+`@aurodesignsystem/auro-button@12.3.2` (standalone, 1 tag) and
+`@aurodesignsystem/auro-formkit@6.1.0` (monorepo, 20 tags) into
+[test/fixtures/packages/](../test/fixtures/packages/) — each package's real
+`package.json` plus its custom-elements.json (losslessly minified: button 18 KB,
+formkit 411 KB). Rather than commit a gitignored `node_modules/`, a new
+`installRealPackage(cwd, name)` helper in [test/support.ts](../test/support.ts)
+copies a fixture into `<cwd>/node_modules/<pkg>` at runtime (offline,
+deterministic), mirroring `installLocalPackage`. Verified end-to-end against
+`resolveInstalled`: 21 components (1 standalone button + 20 monorepo formkit),
+correct `isMonorepo`/subpath-import/shared-version, no false duplicates.
+Spec handed to step 6: point `process.cwd()` at a tempCwd staged via
+`installRealPackage` to drive real detection.
+
+**Needs the fixtures / a merged base:**
+
+6. **Wire `src/commands/init.ts`. ✅ DONE.**
+   - **Delivered:** [init.ts](../src/commands/init.ts) — `runInit(options)` +
+     commander registration (registered in [index.ts](../src/index.ts)),
+     mirroring the `context.ts` conventions (ora spinners, stderr for advisories,
+     `process.exit(1)` on failure). Pipeline: `resolveInstalled()` (default
+     candidate set, local-only) → empty ⇒ warn + exit 0 (never clobbers existing
+     files) → `loadConfig(cwd)` (`RegistryError` on malformed/unsupported-version
+     ⇒ stderr + exit 1) → `scanProject(cwd)` → `planTagResolution` once. **Two-phase
+     prefix resolution:** when `--prefix` is absent *and* the plan reports
+     `needsDefaultPrefix`/`mixedPrefixes`, a **non-interactive** run (`!stdin.isTTY`
+     ∨ `CI` ∨ `--non-interactive`/`--yes`) fails cleanly with an actionable
+     `--prefix` message + non-zero exit, while an **interactive** run prompts
+     (inquirer `confirm` the majority `suggestedDefault`, else `input`) and
+     **re-plans** with the chosen prefix. Then writes `AGENTS.md`/`CLAUDE.md` via
+     `groundingFiles` + persists `saveConfig` (try/catch ⇒ exit 1), and surfaces
+     `plan.warnings` + resolver `duplicates` on stderr. Never touches consumer
+     source or `.gitignore`. No `--offline` flag — detection is already local-only.
+     Options: `--prefix <prefix>`, `--non-interactive`, `--yes`. Tests
+     [init.command.test.ts](../test/init.command.test.ts) (7 offline: real-fixture
+     write of the 21-component `AGENTS.md`+config with `--prefix`, subpath import;
+     nothing-installed warn+no-write; `needsDefaultPrefix` non-interactive exit 1;
+     config-override precedence; malformed-config exit 1; duplicate-tag warning;
+     byte-identical idempotent regeneration reusing the persisted default). Full
+     suite 117/117, `tsc`/biome clean.
+   - **Spec handed to step 7:** regeneration already proven idempotent by the
+     command test; step 7 extends it to the add/**remove**-a-dependency path
+     (re-run after changing installed packages updates the files from the
+     persisted config). The interactive prompt/confirm branch is deferred to the
+     step-9 manual verification (the test runner has no TTY).
+7. **Regeneration. ✅ DONE.**
+   - **Delivered:** a `regeneration after removing a dependency` test in
+     [init.command.test.ts](../test/init.command.test.ts) closes the last
+     regeneration gap. It grounds a standalone (`auro-button`) + a monorepo
+     (`auro-formkit`) install with `--prefix myapp-`, `rm`s the monorepo package
+     from `node_modules`, then re-runs **without** `--prefix`: the persisted
+     `auro.config.json` default carries the prefix, so the run neither prompts nor
+     fails. Asserts the removed component's resolved tag (`<myapp-input>`) and its
+     install snippet are gone while the survivor (`<myapp-button>`) stays, the
+     persisted `default` is unchanged (`myapp-`), and a third run against the
+     reduced deps is byte-identical. Full suite 118/118, `tsc`/biome clean.
+   - **Behavior confirmed:** `planTagResolution` seeds `persistOverrides` from the
+     existing config, so a removed component's override lingers harmlessly in the
+     config but has no component to apply to; `resolvedTags`/`groundingFiles` only
+     cover currently-installed components, so the grounding files shrink to the
+     remaining set. Add-path + same-deps idempotence was already covered by the
+     step-6 command test.
+8. **Tests. ✅ DONE.** — close the fixture-dependent gaps (real detection, monorepo
+   subpaths, dedupe). Most unit suites were written alongside steps 1–5; this step
+   audited the full suite against the ticket's enumerated test list (below) and
+   confirmed all twelve cases are covered by real assertions, not incidental
+   touches:
+   - **Detection / scoping / aggregated-CEM (1–4):** [detectInstalled.test.ts](../test/detectInstalled.test.ts)
+     (node_modules scan, not-installed + no-manifest exclusion, pinned versions) and
+     [resolver.test.ts](../test/resolver.test.ts) (`resolveInstalled` enumerates every
+     monorepo component with per-component subpath imports + a shared version;
+     an uninstalled catalog package is excluded).
+   - **Dedupe (5):** [resolver.test.ts](../test/resolver.test.ts) (`duplicates` record,
+     first-detected wins) + [init.command.test.ts](../test/init.command.test.ts)
+     (end-to-end "registered by multiple installed packages" warning, grounded once).
+   - **Regeneration / CLAUDE.md / prefix (6–8, 11–12):**
+     [init.command.test.ts](../test/init.command.test.ts) (remove-a-dependency regen,
+     mixed-prefix confirm/decline/CI-fail) + [registry.test.ts](../test/registry.test.ts)
+     (`planTagResolution` precedence, bare-`auro-*` warning) +
+     [init.format.test.ts](../test/init.format.test.ts) (frozen thin `@AGENTS.md`).
+   - **Custom-registration precedence + inference (9–10):**
+     [registry.test.ts](../test/registry.test.ts) (config → scan → default ordering,
+     `inferPrefixFromTag`, majority suggestion) + the end-to-end AST-scan warn/skip
+     test in [init.command.test.ts](../test/init.command.test.ts).
+   - **Gap closed:** the enumerated "installed-version resolution — never `latest`"
+     case (item 2) was only proven *indirectly* (tests required a version captured
+     from a local `package.json` and excluded network-sourced outcomes). Added an
+     explicit test to [detectInstalled.test.ts](../test/detectInstalled.test.ts) —
+     *"detectInstalled pins the installed package.json version, never 'latest'"* —
+     asserting the resolved version equals the installed semver and is never the
+     `latest` dist-tag. Full suite **151/151**, `tsc`/biome clean, `npm run build` OK.
+9. **Manual verification. ✅ DONE (doc authored; human run gated on release).** —
+   extended [test/manual-testing-ai-tooling.md](../test/manual-testing-ai-tooling.md)
+   with a full **PT-M1 / AB#1628541** section mirroring the M0 structure:
+   milestone goal, the `auro init` command/options/outputs, and a **test-projects**
+   block wiring the three real consumer apps
+   ([-vanilla](https://github.com/AlaskaAirlines/ai-tooling-test-vanilla)/[-react](https://github.com/AlaskaAirlines/ai-tooling-test-react)/[-svelte](https://github.com/AlaskaAirlines/ai-tooling-test-svelte))
+   plus derived **migration** and **dedupe** scratch scenarios. An
+   *Automated coverage & manual scope* split cites each init suite as
+   **[Regression-covered]** and isolates the four things automation structurally
+   can't reach — **real-TTY `inquirer` prompts**, the **formkit migration codemod on
+   real source + reinstall loop**, the **cross-framework AST scan over real
+   `.js/.jsx/.svelte`**, and packaging. Seven cases (M1-1…M1-7) cover scoped
+   grounding, monorepo enumeration + subpath imports, prefix resolution (free input /
+   blank-keeps-bare / `--prefix` / CI-fail), existing-registration + cross-framework
+   scan, the legacy→formkit **migration walkthrough** (accept → edit + defer,
+   decline → ground as-is, CI advisory-only), regeneration on dependency change, and
+   the legacy-vs-monorepo dedupe warning — every quoted spinner/prompt/error string
+   verified verbatim against [init.ts](../src/commands/init.ts). Closed with a
+   PT-M1 sign-off checklist. The actual human execution against the real repos is
+   gated on the release/PR #302 the same way M0-6 is.
+10. **Admin** — assign AB#1628541, New → Active, and on merge/verify → Resolved,
+    ticking the PT-M1 line on parent story AB#1628539. (Gates on PR #302 merging.)
+
+## Testing plan
+
+Map the ticket's enumerated test list to suites (node:test via
+[test/register.mjs](../test/register.mjs), following existing conventions):
+
+- Detection: installed vs not-installed; version captured from `package.json`.
+- Installed-version resolution (never "latest").
+- Scoping: only installed packages; **all** components of a multi-component
+  package included; catalog packages that aren't installed excluded.
+- Aggregated-CEM handling: subpath-export import paths + shared version for
+  monorepos.
+- Legacy-standalone-vs-monorepo dedupe warning.
+- Regeneration on dependency change.
+- `CLAUDE.md` import correctness (thin `@AGENTS.md`).
+- Prefix application: unique tags for all components + persisted config.
+- Custom-registration detection precedence: config → AST scan → warn/skip.
+- Prefix inference from existing registrations.
+- Mixed/inconsistent-prefix resolution: per-component overrides preserved,
+  majority suggested + confirmed, CI fail-without-`--prefix`.
+- Warning on bare `auro-*` defaults.
+
+## Risks / open questions
+
+- ✅ **Format freeze is the critical path** — the ticket explicitly calls it out
+  for bus-factor. **Resolved:** the `AGENTS.md` layout + rules block, `CLAUDE.md`
+  thin-import, and `auro.config.json` schema are frozen and locked by fixtures/tests
+  (build-order step 1). Generation logic (step 4) now builds against a fixed spec.
+- ✅ **Mixed-prefix UX** is the most intricate branch (interactive confirm vs CI
+  fail). **Resolved.** The decision gate in [init.ts](../src/commands/init.ts) now
+  fires only while the default is **unsettled** (no `--prefix` *and* no persisted
+  config default) — a fix for a latent bug where a committed mixed-prefix config
+  (a legitimate "honor each per-component" setup) re-triggered the prompt/CI-fail on
+  every regeneration, breaking idempotence. The branch is fully unit-covered in
+  [init.command.test.ts](../test/init.command.test.ts): non-interactive CI-fail
+  (exit 1, actionable message, no write); interactive `confirm` adopting the majority
+  default; declining `confirm` → `input` fallback; `--prefix` bypassing the decision;
+  and a regression test proving a settled mixed-prefix config regenerates cleanly
+  (fails against the old gate, passes with the fix). Interactive branches are reached
+  under the non-TTY runner via a `forceInteractive` helper + an `inquirer.prompt` mock.
+- ✅ **AST scan false-negatives** (computed/template-literal tags, Auro's
+  auto-versioned dependency tags) must warn, never guess. **Resolved.**
+  Computed/template-literal tags (`` `${p}-x` ``, identifiers, calls) warn+skip in
+  [scanSource](../src/init/registry.ts) — never guessed. Auro's auto-versioned
+  dependency tags (`versioning.generateTag('auro-input', …)` /
+  `customElements.define(<computed>)`) are not `.register()` calls, so they are
+  never matched, grounded, or guessed (no false positive on the versioning
+  internals). A no-arg **default** `register()` (e.g. `AuroButton.register()`,
+  registering `<auro-button>`) is now detected as a distinct signal: instead of a
+  generic "non-literal" warning it emits a targeted **app-vs-grounding mismatch**
+  warning *only* when a prefix/override grounded the component under a custom tag
+  (`Update the register() call to '<myapp-button>' so your app matches AGENTS.md`) —
+  a documented refinement of the frozen "absent → skip + warn" rule (still never
+  resolves a tag from a no-arg call; warns only when actionable). Verified by a
+  real-consumer-app integration test in
+  [init.command.test.ts](../test/init.command.test.ts) exercising all three
+  patterns in one `app.js`, plus unit coverage in
+  [registry.test.ts](../test/registry.test.ts).
+- ✅ **Duplicate-tag dedupe** — Resolved. `resolveComponents`
+  ([resolver.ts](../src/init/resolver.ts)) now grounds each canonical tag **once**
+  (first-detected package wins) while still recording every colliding package in
+  `duplicates`, so a tag registered by both a legacy standalone and the
+  `auro-formkit` monorepo (e.g. `@aurodesignsystem/auro-input` vs
+  `@aurodesignsystem/auro-formkit`) yields a single grounded entry plus the
+  existing "registered by multiple installed packages" warning — matching init's
+  "Grounded once — verify which package you intend to use" contract end-to-end.
+  The real legacy-standalone form packages
+  (`auro-input`/`-select`/`-combobox`/`-menu`/`-checkbox`/`-radio`/`-datepicker`/`-dropdown`/`-form`)
+  were added to [auroComponents.ts](../src/static/auroComponents.ts) so the overlap
+  is detectable. Covered by a grounded-once assertion in
+  [resolver.test.ts](../test/resolver.test.ts) and an "exactly one API section"
+  assertion on `AGENTS.md` in
+  [init.command.test.ts](../test/init.command.test.ts).
+- ✅ **Cross-framework source scanning** (vanilla / React / Svelte) — Resolved.
+  Validated against three real consumer apps
+  ([ai-tooling-test-vanilla](https://github.com/AlaskaAirlines/ai-tooling-test-vanilla),
+  [-react](https://github.com/AlaskaAirlines/ai-tooling-test-react),
+  [-svelte](https://github.com/AlaskaAirlines/ai-tooling-test-svelte)), all of which
+  install `auro-button` (standalone) + `auro-formkit` (monorepo) and register via
+  **side-effect import** (`import "@aurodesignsystem/auro-button"`) with no
+  `.register()` calls. Findings + fixes: (1) the dominant side-effect-import pattern
+  yields an empty scan with **no** false-positive warnings (now unit-covered for the
+  vanilla `.js` and Svelte shapes); (2) React `.jsx` with JSX markup parses and a
+  real `.register('legacy-input')` amid JSX is detected; (3) **Svelte `.svelte`
+  files are now scanned** — `scanProject` globs `…,svelte` and
+  [`extractSvelteScripts`](../src/init/registry.ts) pulls each `<script>` block
+  (instance + `context="module"`/Svelte-5 `module`), scanning it as TS or JS per its
+  `lang` attribute so template markup and runes (`$state`) never reach the parser.
+  `scanSource` gained an optional explicit `scriptKind` for the extracted blocks.
+  Covered by `extractSvelteScripts` unit tests + `scanProject` tests for the JS/TS
+  Svelte blocks, the real-app Svelte component, the React `.jsx`, and the vanilla
+  entry in [registry.test.ts](../test/registry.test.ts). Known v1 boundary: a
+  literal `</script>` inside a string ends a block early (lexical extraction, no
+  Svelte compiler).
+
+- ✅ **Legacy standalone → auro-formkit migration** — Resolved. Nine form components
+  ship both as legacy standalone packages (`@aurodesignsystem/auro-input`, `-select`,
+  `-combobox`, `-menu`, `-checkbox`, `-radio`, `-datepicker`, `-dropdown`, `-form`)
+  and inside `auro-formkit`; `auro-button` is a true standalone and is **excluded**.
+  A single source of truth ([`formkitMigration.ts`](../src/static/formkitMigration.ts))
+  owns the legacy list and the `@aurodesignsystem/auro-<x>` → `…/auro-formkit/auro-<x>`
+  mapping. Two surfaces: **(1)** `auro init` detects legacy standalones declared in
+  `package.json` and, on an interactive TTY, offers an **opt-in confirm** (default
+  *No*) to migrate — [`migrateToFormkit`](../src/init/migrateFormkit.ts) rewrites the
+  `package.json` dep (adds `auro-formkit@latest` when absent, keeps an existing
+  version) and the bare import specifiers across the project's source (JS/TS/JSX/
+  Svelte, reusing the scanner's `SOURCE_GLOB`), then stops so the user reinstalls and
+  re-runs to ground formkit. A non-interactive/CI run **never edits** — it only
+  advises. This is the sole codemod exception to init's "documents, never codemods"
+  stance, recorded in the [init.ts](../src/commands/init.ts) header. **(2)** the
+  outdated banner ([`renderOutdatedBanner`](../src/utils/outdated.ts)) marks a legacy
+  standalone `⇢ auro-formkit`, excludes it from the misleading `npm install @latest`
+  command, and lists it under a distinct **"Migrate to auro-formkit"** block.
+  Conservative: a deep import (`…/auro-input/dist/x.js`) is left untouched and
+  reported for manual follow-up. Covered by `formkitMigration`/`migrateFormkit` unit
+  tests (dep swap, named/side-effect/Svelte rewrites, deep-import skip, idempotency),
+  three `init.command` integration tests (accept → migrate + defer grounding, decline
+  → ground as-is, non-interactive → advisory only), and `outdated` banner tests.
+
+- ➡️ **Internal sub-components leak into the grounding (and get broken import
+  paths).** *Surfaced while reviewing PT-M1 init grounding, but tracked and to be
+  fixed in the **PT-M2** plan* (see its Risks / open questions). The resolver's sole
+  element filter surfaces **every** registered element, so a monorepo package like
+  `auro-formkit` grounds internal-only elements (10 of its 20 registered tags are
+  absent from the `package.json` `exports` map) and emits non-existent subpath imports
+  for them. It's moved to PT-M2 because the same resolver output feeds that
+  milestone's editor artifacts (JSX/Svelte/VS Code), so the `exports`-map gate fixes
+  the grounding **and** the editor targets in one change, on the milestone that owns
+  those targets.
+
+## Done when
+
+Running `auro init` in a project with known Auro deps produces `AGENTS.md` (+ a
+`CLAUDE.md` that imports it) listing exactly the components from installed
+packages, with correct APIs for the installed version plus the Auro coding rules;
+for a multi-component package like `auro-formkit`, **all** components it ships are
+grounded (correct subpath imports + shared version), never components from
+uninstalled packages; re-running after adding a package updates the files; a
+single `--prefix` yields unique custom tags for all components (persisted for
+idempotent regeneration); existing custom registrations are detected (config →
+AST scan), always grounded under their actual tag and never rewritten; when
+present the CLI infers and adopts the default prefix from them; mixed/inconsistent
+prefixes are resolved by honoring each existing tag as a per-component override
+and choosing the future default via "suggest majority + confirm" (or
+`--prefix`/fail in CI); unresolvable names are warned rather than guessed; and
+bare `auro-*` defaults emit a warning.
