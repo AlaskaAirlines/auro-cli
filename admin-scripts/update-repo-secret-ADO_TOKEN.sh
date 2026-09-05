@@ -7,6 +7,15 @@
 # (the RC Workflow repos); ADO_TOKEN is a new secret, so there is nothing to
 # "discover" by its own name yet.
 #
+# It ALSO wires each repo's RC caller workflow to forward the secret. Setting the
+# repo secret is not sufficient on its own: the RC Workflow calls a reusable
+# workflow in auro-actions, and a called workflow only sees the secrets its caller
+# explicitly passes. The reusable workflow declares ADO_TOKEN as required, so a
+# caller that forwards only GH_TOKEN fails before the job runs. For each repo that
+# needs it, this script opens a PR into `dev` adding the ADO_TOKEN forwarding line
+# (dev is PR-protected, so it cannot be committed directly). Set UPDATE_CALLER=0
+# to only set the secret and skip this.
+#
 # NOTE: unlike the GH_TOKEN/ACCESS_TOKEN scripts, the secret VALUE here is an
 # Azure DevOps Personal Access Token (for https://dev.azure.com/itsals), NOT a
 # GitHub PAT. The gh CLI session (which must have repo admin) is what writes the
@@ -17,6 +26,9 @@
 #   ./update-repo-secret-ADO_TOKEN.sh             # target GH_TOKEN repos
 #   DRY_RUN=1 ./update-repo-secret-ADO_TOKEN.sh   # show what would happen
 #   MODE=all ./update-repo-secret-ADO_TOKEN.sh    # set on ALL org repos instead
+#   UPDATE_CALLER=0 ./update-repo-secret-ADO_TOKEN.sh
+#                                                 # only set the secret; do NOT
+#                                                 # open caller-forwarding PRs
 #   DISCOVER_BY_SECRET=RELEASE_TOKEN ./update-repo-secret-ADO_TOKEN.sh
 #                                                 # discover by a different secret
 #   VERIFY_REPO=auro-hyperlink ./update-repo-secret-ADO_TOKEN.sh
@@ -28,6 +40,8 @@
 #   DISCOVER_BY_SECRET=GH_TOKEN
 #   ADO_ORG=itsals   ADO_ORG_URL=https://dev.azure.com/itsals
 #   VERIFY_WORKFLOW="RC Workflow"   VERIFY_REF=dev
+#   UPDATE_CALLER=1   CALLER_PATH=.github/workflows/release-candidate.yml
+#   CALLER_BASE_BRANCH=dev   FIX_BRANCH=chore/forward-ado-token-secret
 #
 # Prerequisites:
 #   - Azure DevOps PAT (the value stored as ADO_TOKEN):
@@ -57,6 +71,14 @@ VERIFY_REPO="${VERIFY_REPO:-}"
 VERIFY_WORKFLOW="${VERIFY_WORKFLOW:-RC Workflow}"
 VERIFY_REF="${VERIFY_REF:-dev}"
 REPOS_FILE="${REPOS_FILE:-/tmp/ado_token_repos.txt}"
+
+# Caller-forwarding pass (see the header notes). Opens a PR per repo whose RC
+# caller does not yet forward ADO_TOKEN.
+UPDATE_CALLER="${UPDATE_CALLER:-1}"                 # 1 = patch callers | 0 = skip
+CALLER_PATH="${CALLER_PATH:-.github/workflows/release-candidate.yml}"
+CALLER_BASE_BRANCH="${CALLER_BASE_BRANCH:-dev}"
+FIX_BRANCH="${FIX_BRANCH:-chore/forward-ado-token-secret}"
+CALLER_COMMIT_MSG="${CALLER_COMMIT_MSG:-ci: forward ADO_TOKEN to the RC reusable workflow}"
 
 # ---- Preconditions --------------------------------------------------------
 command -v gh >/dev/null 2>&1 || { echo "❌ gh CLI not found. Install: https://cli.github.com"; exit 1; }
@@ -176,6 +198,120 @@ if [ "${DRY_RUN}" != "1" ]; then
   fi
 fi
 
+# ---- Ensure callers forward ADO_TOKEN to the reusable workflow -------------
+# The secret existing on the repo is not enough: the RC Workflow calls a reusable
+# workflow, and a called workflow only sees the secrets its caller explicitly
+# passes. Each caller (CALLER_PATH) must forward ADO_TOKEN alongside GH_TOKEN.
+# We open a PR into CALLER_BASE_BRANCH (dev) per repo that needs it, because dev
+# is PR-protected and cannot be committed to directly.
+
+# Insert `ADO_TOKEN: ${{ secrets.ADO_TOKEN }}` on the line below the GH_TOKEN
+# forwarding line, matching its indentation. Reads stdin, writes stdout.
+insert_ado_token_line() {
+  awk '
+    { print }
+    /secrets\.GH_TOKEN/ {
+      match($0, /^[ \t]*/)
+      printf "%sADO_TOKEN: ${{ secrets.ADO_TOKEN }}\n", substr($0, 1, RLENGTH)
+    }
+  '
+}
+
+# Ensure a single repo forwards ADO_TOKEN; opens a PR if a change is needed.
+# Returns non-zero only on an unexpected failure (not on skip/idempotent cases).
+ensure_caller_forwards_ado_token() {
+  local repo="$1"
+  local raw_file new_file dev_sha file_sha b64 existing_pr pr_url
+  raw_file="$(mktemp)"; new_file="$(mktemp)"
+
+  # 1) Read the caller on the base branch (raw bytes).
+  if ! gh api "repos/${ORG}/${repo}/contents/${CALLER_PATH}?ref=${CALLER_BASE_BRANCH}" \
+        -H "Accept: application/vnd.github.raw" > "${raw_file}" 2>/dev/null; then
+    echo "  ⏭  ${repo}: no ${CALLER_PATH} on ${CALLER_BASE_BRANCH} (skipping)"
+    rm -f "${raw_file}" "${new_file}"; return 0
+  fi
+
+  # 2) Idempotency / shape guards.
+  if grep -q 'ADO_TOKEN' "${raw_file}"; then
+    echo "  ✓ ${repo}: caller already forwards ADO_TOKEN"
+    rm -f "${raw_file}" "${new_file}"; return 0
+  fi
+  if grep -qE '^[[:space:]]*secrets:[[:space:]]*inherit[[:space:]]*$' "${raw_file}"; then
+    echo "  ✓ ${repo}: caller uses 'secrets: inherit' (already covered)"
+    rm -f "${raw_file}" "${new_file}"; return 0
+  fi
+  if ! grep -q 'secrets\.GH_TOKEN' "${raw_file}"; then
+    echo "  ⚠️  ${repo}: caller does not forward GH_TOKEN in the expected form; skipping for manual review"
+    rm -f "${raw_file}" "${new_file}"; return 0
+  fi
+
+  if [ "${DRY_RUN}" = "1" ]; then
+    echo "  would open PR on ${repo}: add ADO_TOKEN forwarding to ${CALLER_PATH}"
+    rm -f "${raw_file}" "${new_file}"; return 0
+  fi
+
+  # 3) Produce the edited file.
+  insert_ado_token_line < "${raw_file}" > "${new_file}"
+
+  # 4) Ensure the fix branch exists (created from the base branch head).
+  dev_sha="$(gh api "repos/${ORG}/${repo}/git/ref/heads/${CALLER_BASE_BRANCH}" -q '.object.sha' 2>/dev/null || true)"
+  if [ -z "${dev_sha}" ]; then
+    echo "  ⚠️  ${repo}: cannot resolve ${CALLER_BASE_BRANCH} head; skipping"
+    rm -f "${raw_file}" "${new_file}"; return 0
+  fi
+  gh api "repos/${ORG}/${repo}/git/refs" \
+    -f ref="refs/heads/${FIX_BRANCH}" -f sha="${dev_sha}" >/dev/null 2>&1 || true
+
+  # 5) Commit the edit to the fix branch (unless a prior run already did).
+  if gh api "repos/${ORG}/${repo}/contents/${CALLER_PATH}?ref=${FIX_BRANCH}" \
+        -H "Accept: application/vnd.github.raw" 2>/dev/null | grep -q 'ADO_TOKEN'; then
+    echo "  ↻ ${repo}: fix already committed on ${FIX_BRANCH}"
+  else
+    file_sha="$(gh api "repos/${ORG}/${repo}/contents/${CALLER_PATH}?ref=${FIX_BRANCH}" -q '.sha' 2>/dev/null || true)"
+    b64="$(base64 < "${new_file}" | tr -d '\n')"
+    if ! gh api -X PUT "repos/${ORG}/${repo}/contents/${CALLER_PATH}" \
+          -f message="${CALLER_COMMIT_MSG}" \
+          -f content="${b64}" \
+          -f branch="${FIX_BRANCH}" \
+          -f sha="${file_sha}" >/dev/null 2>&1; then
+      echo "  ❌ ${repo}: failed to commit caller change"
+      rm -f "${raw_file}" "${new_file}"; return 1
+    fi
+  fi
+
+  # 6) Ensure a PR is open from the fix branch into the base branch.
+  existing_pr="$(gh pr list --repo "${ORG}/${repo}" --head "${FIX_BRANCH}" \
+    --base "${CALLER_BASE_BRANCH}" --state open --json url -q '.[0].url' 2>/dev/null || true)"
+  if [ -n "${existing_pr}" ]; then
+    echo "  ↻ ${repo}: PR already open ${existing_pr}"
+  else
+    pr_url="$(gh pr create --repo "${ORG}/${repo}" \
+      --base "${CALLER_BASE_BRANCH}" --head "${FIX_BRANCH}" \
+      --title "${CALLER_COMMIT_MSG}" \
+      --body "Forward the repo-level ADO_TOKEN secret to the reusable RC workflow so \`auro rc-workflow\` can resolve the Azure DevOps Release ticket. The reusable workflow declares ADO_TOKEN as required; without this the RC Workflow fails before it starts. Opened automatically by admin-scripts/update-repo-secret-ADO_TOKEN.sh." 2>&1)" \
+      && echo "  ✅ ${repo}: ${pr_url}" \
+      || echo "  ⚠️  ${repo}: could not open PR: ${pr_url}"
+  fi
+
+  rm -f "${raw_file}" "${new_file}"
+  return 0
+}
+
+if [ "${UPDATE_CALLER}" = "1" ]; then
+  echo
+  echo "Ensuring RC callers forward ADO_TOKEN (file '${CALLER_PATH}', base '${CALLER_BASE_BRANCH}', fix branch '${FIX_BRANCH}')."
+  [ "${DRY_RUN}" = "1" ] && echo "(DRY RUN — no branches, commits, or PRs will be created)"
+  echo
+  caller_fail=0
+  while read -r r; do
+    [ -n "${r}" ] || continue
+    ensure_caller_forwards_ado_token "${r}" || caller_fail=$((caller_fail+1))
+  done < "${REPOS_FILE}"
+  echo
+  echo "Caller forwarding pass complete. Failures: ${caller_fail}"
+  echo "Review and merge the opened PRs so the forwarding takes effect."
+fi
+
 # ---- Verify (optional) ----------------------------------------------------
 if [ -n "${VERIFY_REPO}" ] && [ "${DRY_RUN}" != "1" ]; then
   echo
@@ -196,7 +332,12 @@ echo "Cleanup:"
 echo "  - unset NEW_TOKEN   # clear the ADO PAT from your shell env"
 echo "  - Review ${REPOS_FILE} and delete it if you don't need the record."
 echo "  - Note the ADO PAT's expiry date so it can be rotated before it lapses."
+if [ "${UPDATE_CALLER}" = "1" ]; then
+  echo "  - Review and merge the caller-forwarding PRs opened above (branch"
+  echo "    '${FIX_BRANCH}' into '${CALLER_BASE_BRANCH}'); forwarding only takes"
+  echo "    effect once merged."
+fi
 
-if [ "${DRY_RUN}" != "1" ] && [ "${fail:-0}" -gt 0 ]; then
+if [ "${DRY_RUN}" != "1" ] && { [ "${fail:-0}" -gt 0 ] || [ "${caller_fail:-0}" -gt 0 ]; }; then
   exit 1
 fi
