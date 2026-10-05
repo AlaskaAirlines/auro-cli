@@ -134,7 +134,7 @@ export class RCWorkflow {
     // commits), not just the release-note filtered list.
     const rcCommits = await Git.getCommitMessages(RC_SOURCE_BRANCH);
     const workItemIds = extractWorkItemIds(rcCommits);
-    return findReleaseTicket(workItemIds);
+    return findReleaseTicket(workItemIds, this.repoInfo.repo);
   }
 
   private async createOrUpdateRcBranch(ticketId: number): Promise<void> {

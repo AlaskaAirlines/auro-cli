@@ -31,7 +31,10 @@ The RC workflow coordinates three components:
    **committed work items**.
 2. Each committed work item's ADO relations are inspected to find the linked ticket
    tagged **`auro-rcs`** — that is the **Release ticket**.
-3. There must be exactly one distinct Release ticket. Its id names the branch
+3. If more than one Release ticket is linked (e.g. a shared work item links to the
+   RC tickets of several repos), the one for the current repo is selected — first
+   by an **Area Path** segment naming the repo (`auro-accordion` or `Accordion`),
+   then by the **title** mentioning it. The selected ticket's id names the branch
    (`rc/{ticketId}`) and it is referenced in the PR body.
 
 If the new commits do not link to a Release ticket (no `AB#<id>` references, or the
@@ -99,8 +102,9 @@ git push -f origin rc/1597900
 The automated script (`auro rc-workflow`) performs all these steps in sequence:
 
 1. Switches to `dev` branch if needed
-2. Scans the RC commits for `AB#<id>` references and resolves the single ADO Release
-   ticket tagged `auro-rcs`. If none is found, it stops without creating a Release PR
+2. Scans the RC commits for `AB#<id>` references and resolves the ADO Release ticket
+   tagged `auro-rcs` (picking the current repo's ticket by Area Path or title when
+   several are linked). If none is found, it stops without creating a Release PR
 3. Creates or updates the `rc/{ticketId}` branch
 4. Creates or updates the PR with the ADO Release ticket reference
 
@@ -122,9 +126,11 @@ expected, ensure the committed work carries the `AB#` mention and that its work 
 link to the `auro-rcs` Release ticket in ADO.
 
 ### Multiple Release tickets found (error)
-More than one distinct `auro-rcs` ticket is linked to the committed work items. There
-must be exactly one Release ticket per repo — fix the ADO links so a single Release
-ticket is reachable from the committed work items.
+More than one `auro-rcs` ticket is linked to the committed work items, and the workflow
+could not pick exactly one for this repo — either none of them, or several of them,
+name the repo in their Area Path or title. The error lists each candidate's id, title,
+and Area Path. Fix the ticket's Area Path or title so exactly one names the repo
+(e.g. `auro-accordion` or `Accordion`), or fix the ADO links.
 
 ### Branch already exists error
 The branch was created previously. Use the "update" commands instead (see step 3).
