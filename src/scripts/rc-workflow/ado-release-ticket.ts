@@ -81,19 +81,106 @@ function hasReleaseTag(workItem: WorkItem): boolean {
     .includes(RELEASE_TICKET_TAG);
 }
 
+/** Lowercase and collapse separators so "auro-accordion" matches "Auro Accordion". */
+function normalizeName(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+/**
+ * Names a repo may go by in ADO: the full repo name ("auro-accordion") and, for
+ * `auro-*` repos, the bare component name ("accordion").
+ */
+function repoNameVariants(repo: string): string[] {
+  const full = normalizeName(repo);
+  const short = full.replace(/^auro /, "");
+  return [...new Set([full, short])].filter(Boolean);
+}
+
+/** True when the work item's Area Path has a segment naming the repo. */
+function areaPathMatchesRepo(workItem: WorkItem, names: string[]): boolean {
+  const areaPath = workItem.fields?.["System.AreaPath"];
+  if (typeof areaPath !== "string") {
+    return false;
+  }
+  return areaPath
+    .split("\\")
+    .map(normalizeName)
+    .some((segment) => names.includes(segment));
+}
+
+/** True when the work item's title mentions the repo as a whole word/phrase. */
+function titleMatchesRepo(workItem: WorkItem, names: string[]): boolean {
+  const title = workItem.fields?.["System.Title"];
+  if (typeof title !== "string") {
+    return false;
+  }
+  const padded = ` ${normalizeName(title)} `;
+  return names.some((name) => padded.includes(` ${name} `));
+}
+
+function describeTicket(workItem: WorkItem): string {
+  const title = workItem.fields?.["System.Title"] ?? "(no title)";
+  const areaPath = workItem.fields?.["System.AreaPath"] ?? "(no area path)";
+  return `#${workItem.id} "${title}" [${areaPath}]`;
+}
+
+/**
+ * When several Release tickets are linked to the committed work items, pick the
+ * one belonging to `repo` — first by Area Path, then by title.
+ *
+ * @throws if no ticket, or more than one, can be attributed to the repo.
+ */
+export function selectReleaseTicketForRepo(
+  tickets: WorkItem[],
+  repo: string,
+): WorkItem {
+  const names = repoNameVariants(repo);
+  const candidates = `\n  ${tickets.map(describeTicket).join("\n  ")}`;
+
+  for (const [label, matches] of [
+    ["Area Path", areaPathMatchesRepo],
+    ["title", titleMatchesRepo],
+  ] as const) {
+    const matched = tickets.filter((ticket) => matches(ticket, names));
+    if (matched.length === 1) {
+      console.log(
+        `Found ${tickets.length} Release tickets; selected #${matched[0].id} for "${repo}" by ${label}.`,
+      );
+      return matched[0];
+    }
+    if (matched.length > 1) {
+      throw new Error(
+        `Found ${matched.length} Release tickets whose ${label} matches "${repo}":` +
+          `\n  ${matched.map(describeTicket).join("\n  ")}` +
+          "\nOnly one Release Candidate ticket per repo is supported.",
+      );
+    }
+  }
+
+  throw new Error(
+    `Found ${tickets.length} Release tickets but none could be matched to "${repo}" by Area Path or title:${candidates}`,
+  );
+}
+
 /**
  * Given the ids of committed work items, resolve the single ADO Release ticket
  * (the related work item tagged `auro-rcs`) that the RC PR should reference.
+ * When more than one is linked, the ticket for `repo` is selected by Area Path
+ * or title.
  *
  * Returns null when the new commits do not roll up to a Release ticket (no
  * `AB#<id>` references, no linked work items, or none tagged `auro-rcs`) — the
  * caller should skip creating the Release PR in that case.
  *
- * @throws if more than one distinct Release ticket is found (a misconfiguration —
- *   only one Release Candidate ticket per repo is supported).
+ * @throws if several Release tickets are found and exactly one cannot be
+ *   attributed to `repo`.
  */
 export async function findReleaseTicket(
   workItemIds: number[],
+  repo: string,
 ): Promise<ReleaseTicket | null> {
   if (workItemIds.length === 0) {
     console.log(
@@ -136,7 +223,7 @@ export async function findReleaseTicket(
   // 3. Fetch the related items with their tags and keep the ones tagged auro-rcs.
   const relatedItems = await witApi.getWorkItems(
     [...relatedIds],
-    ["System.Title", "System.Tags"],
+    ["System.Title", "System.Tags", "System.AreaPath"],
     undefined,
     undefined,
     WorkItemErrorPolicy.Omit,
@@ -145,28 +232,18 @@ export async function findReleaseTicket(
 
   const releaseTickets = (relatedItems ?? []).filter(hasReleaseTag);
 
-  const distinctIds = [
-    ...new Set(releaseTickets.map((item) => item.id)),
-  ].filter((id): id is number => typeof id === "number");
-
-  if (distinctIds.length === 0) {
+  if (releaseTickets.length === 0) {
     console.log(
       `No Release ticket (tagged "${RELEASE_TICKET_TAG}") is linked to the committed work items (${workItemIds.join(", ")}).`,
     );
     return null;
   }
 
-  if (distinctIds.length > 1) {
-    throw new Error(
-      `Expected exactly one Release ticket but found ${distinctIds.length}: ${distinctIds.join(", ")}. ` +
-        "Only one Release Candidate ticket per repo is supported.",
-    );
-  }
-
-  const releaseTicket = releaseTickets.find(
-    (item) => item.id === distinctIds[0],
-  );
-  if (!releaseTicket || releaseTicket.id === undefined) {
+  const releaseTicket =
+    releaseTickets.length === 1
+      ? releaseTickets[0]
+      : selectReleaseTicketForRepo(releaseTickets, repo);
+  if (releaseTicket.id === undefined) {
     throw new Error("Failed to resolve the Release ticket details from ADO.");
   }
 
