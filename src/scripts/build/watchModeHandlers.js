@@ -82,11 +82,20 @@ async function runBuildTask(taskName, taskFn) {
  * @param {object} watcher - Rollup watcher object.
  * @param {object} options - Build options.
  * @param {Function} [onInitialBuildComplete] - Callback to run after initial build completes.
+ * @param {object} [steps] - Overrides for the post-bundle steps (used by tests).
+ * @param {Function} [steps.analyze] - Analyzes components (default: analyzeComponents).
+ * @param {Function} [steps.docs] - Generates docs (default: generateDocs).
+ * @param {Function} [steps.scss] - Compiles demo SCSS (default: compileDemoScss).
  */
 export async function handleWatcherEvents(
   watcher,
   options,
   onInitialBuildComplete,
+  {
+    analyze: runAnalyze = analyzeComponents,
+    docs: runDocs = generateDocs,
+    scss: runScss = compileDemoScss,
+  } = {},
 ) {
   // Track if this is the first build
   let isInitialBuild = true;
@@ -115,7 +124,7 @@ export async function handleWatcherEvents(
         "Detective work: analyzing components...",
       ).start();
       try {
-        await analyzeComponents(sourceFiles, outFile);
+        await runAnalyze(sourceFiles, outFile);
         analyzeSpinner.succeed("Component analysis complete! API generated.");
         return true;
       } catch (error) {
@@ -143,13 +152,16 @@ export async function handleWatcherEvents(
 
       const docsSpinner = ora("Refreshing docs...").start();
       try {
-        await generateDocs(options);
+        await runDocs(options);
         docsSpinner.succeed("Documentation refreshed!");
-        return true;
       } catch (error) {
         docsSpinner.fail("Docs stumble! Couldn't refresh.");
         console.error("Documentation rebuild error:", error);
       }
+      // The docs step ran, pass or fail. A docs failure is reported above but
+      // mustn't hold back the dev server — the docs regenerate on the next
+      // rebuild.
+      return true;
     },
 
     // Function to compile demo SCSS
@@ -159,7 +171,7 @@ export async function handleWatcherEvents(
       }
 
       try {
-        await compileDemoScss();
+        await runScss();
         return true;
       } catch (error) {
         console.error("Demo SCSS compilation error:", error);
@@ -168,7 +180,7 @@ export async function handleWatcherEvents(
     },
   };
 
-  // Check if all initial build tasks completed successfully
+  // Check if all initial build tasks have run (docs counts even if it failed)
   const checkInitialBuildComplete = () => {
     if (
       isInitialBuild &&

@@ -27,6 +27,8 @@ jobs:
           node-version: ${{ matrix.node-version }}
       - name: Install dependencies
         run: npm clean-install
+      - name: Check production dependency tree
+        run: npm ls --omit=dev
       - name: Build
         run: npm run build
       - name: Test
