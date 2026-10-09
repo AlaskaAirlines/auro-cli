@@ -37,18 +37,39 @@ export async function api() {
   }
 }
 
-export async function docs(options = {}) {
+/**
+ * Build the docs, then the demo. Throws the docs error, if any, after the demo
+ * is built.
+ * @param options - Docs options.
+ * @param steps - Overrides for the build steps (used by tests).
+ */
+export async function docs(
+  options = {},
+  { build = runDefaultDocsBuild, demo = buildDemo } = {},
+) {
   const docsSpinner = ora("Compiling documentation...").start();
+  let docsError: unknown;
 
   try {
-    await runDefaultDocsBuild(options);
+    await build(options);
     docsSpinner.succeed("Documentation compiled successfully!");
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     docsSpinner.fail("Failed to compile MD documentation: " + errorMessage);
-    throw error;
+    docsError = error;
   }
 
+  // The demo doesn't depend on the docs build, so refresh it even when a docs
+  // file failed — otherwise watch mode stops picking up src/ changes until the
+  // unrelated docs file is fixed.
+  await demo(options);
+
+  if (docsError) {
+    throw docsError;
+  }
+}
+
+async function buildDemo(options = {}) {
   copyReadmeToDemo();
   await compileDemoScss();
   await buildDemoBundle(options);
@@ -116,10 +137,17 @@ export async function watchDocs(options = {}) {
 
     const spinner = ora(`Change detected: ${triggeredBy}`).start();
     try {
-      await runDefaultDocsBuild(options);
-      copyReadmeToDemo();
-      await compileDemoScss();
-      await buildDemoBundle(options);
+      let docsError: unknown;
+      try {
+        await runDefaultDocsBuild(options);
+      } catch (error) {
+        docsError = error;
+      }
+      // Rebuild the demo even if the docs failed (see docs()).
+      await buildDemo(options);
+      if (docsError) {
+        throw docsError;
+      }
       spinner.succeed("Docs rebuilt!");
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);

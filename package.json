@@ -56,7 +56,7 @@
   ],
   "dependencies": {
     "@actions/github": "^9.1.1",
-    "@aurodesignsystem/auro-library": "^5.5.4",
+    "@aurodesignsystem/auro-library": "^5.14.4",
     "@babel/preset-env": "^7.28.3",
     "@custom-elements-manifest/analyzer": "^0.11.0",
     "@npmcli/package-json": "^7.0.1",
