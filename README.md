@@ -94,6 +94,27 @@ Generates API documentation from the Custom Elements Manifest.
 - `-p, --port <number>`: server port.
 - `-o, --open`: open the browser once the server is up.
 
+#### Docs generation
+
+`auro build` and `auro docs` generate `README.md` and the `demo/*.md` pages from `docs/partials/` and `docs/pages/`. If any docs file fails, the rest are still generated. Then the command exits non-zero and lists every failed file. A docs file fails when:
+
+- a file it includes with `FILE` or `CODE` is missing, including nested includes;
+- a `{{ … }}` placeholder is left in its prose (code is ignored). This includes a misspelled template variable, such as `{{ nmae }}`.
+
+Code snippets (fenced blocks, `<pre>` and `<code>` elements, inline code and `CODE` includes) keep every `{{ … }}` expression except template variables and helpers, so Vue, Angular and Handlebars examples come through unchanged, including Handlebars blocks, comments, partials and triple-stash (`{{#each}}`, `{{!-- --}}`, `{{> header}}`, `{{{ raw }}}`). Two kinds of snippet expression are still filled in:
+
+- a template variable on its own: `{{ name }}`, `{{ Name }}`, `{{ namespace }}`, `{{ Namespace }}`, `{{ Version }}`, `{{ dtVersion }}`, `{{ wcssVersion }}`, `{{ monorepoName }}`;
+- a template helper whose arguments are template variables or quoted strings: `{{ capitalize name }}`, `{{ withAuroNamespace "button" }}`, `{{ packageName }}`.
+
+Anything else, such as `{{ name.length }}` or `{{ name | uppercase }}`, is kept as written. To keep a template variable literal, write it as `\{{ name }}`.
+
+In watch mode, a docs failure is reported but doesn't stop the watcher or the dev server. `auro docs --watch` rebuilds when you fix the file. `auro dev` and `auro build --watch` regenerate docs on the next source change.
+
+**Upgrading a component created before auro-cli v4:** the v4 README template includes these files, so create them, even empty, or the build fails:
+
+- `docs/partials/customRegistration.md`
+- `apiExamples/custom.html`
+
 #### `auro test`
 
 Runs the web test runner against the component library.
