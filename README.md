@@ -32,7 +32,7 @@ Run `auro <command> --help` for options on any command. Defaults are shown where
 |---------|------|
 | `auro dev` | Runs the dev server for a component. |
 | `auro build` | Builds a component. |
-| `auro docs` | Generates API docs from the Custom Elements Manifest. |
+| `auro docs` | Generates API docs from the Custom Elements Manifest. `--figma` also builds the Code Connect file. |
 | `auro test` | Runs the web test runner. |
 
 **Repo maintenance**
@@ -90,6 +90,8 @@ Generates API documentation from the Custom Elements Manifest.
 - `-w, --watch`: rebuild docs on change (default: off).
 - `-r, --readme-template <url>`: URL to the README template.
 - `--skip-readme`: skip README.md processing (default: off).
+- `--figma`: fetch the Figma data from the Figma API (needs `FIGMA_ACCESS_TOKEN`) and save it in `figma/snapshots/`, then build the Code Connect files from `custom-elements.json`, that data and `figma/<tag>.translate.md`. It writes the gitignored `dist/figma/<tag>.cem-map.json` and `dist/figma/<tag>.figma.ts`, refreshes `figma/<tag>.mismatch.md`, and adds `TBD` rows for new gaps to `figma/<tag>.translate.md` (creating it the first time). Only components in the Figma connector config (`src/scripts/figma/figma-connector.config.ts`, which holds the Figma file URL and each tag's component set node id) are built; any other repo is skipped with exit code 0. Adding a component, or changing its Figma URL, is a change to that file and needs an auro-cli release.
+- `--figma-check`: for CI. Skips doc generation, writes nothing committed, and exits 1 if the translate or mismatch file is out of date (2 on bad input).
 - `-s, --serve`: start a server.
 - `-p, --port <number>`: server port.
 - `-o, --open`: open the browser once the server is up.

@@ -1,0 +1,1383 @@
+{
+  "schemaVersion": "1.0.0",
+  "readme": "",
+  "modules": [
+    {
+      "kind": "javascript-module",
+      "path": "src/auro-hyperlink-button.js",
+      "declarations": [],
+      "exports": []
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/auro-hyperlink.js",
+      "declarations": [
+        {
+          "kind": "class",
+          "description": "The `auro-hyperlink` element is a wrapper for an HTML5 `<a>` anchor element. \nThis contains styling enabling multi-brand theme support as well as behavior and accessibility improvements over the HTML5 standard anchor element.",
+          "name": "AuroHyperlink",
+          "cssParts": [
+            {
+              "description": "Allows styling to be applied to the `a` element.",
+              "name": "link"
+            },
+            {
+              "description": "Allows styling to be applied to the icon that appears next to the hyperlink.",
+              "name": "targetIcon"
+            }
+          ],
+          "members": [
+            {
+              "kind": "method",
+              "name": "_createRefs",
+              "description": "Create usable refs to internal elements",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "privacy": "private"
+            },
+            {
+              "kind": "method",
+              "name": "_initializeDefaults",
+              "inheritedFrom": {
+                "name": "ComponentBase",
+                "module": "src/component-base.mjs"
+              },
+              "type": {
+                "text": "_initializeDefaults() => void"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "_rescuePreUpgradeOnDark",
+              "description": "Re-applies an `onDark` value that was assigned before the element upgraded.\n\nLit's pre-upgrade rescue only covers names in `elementProperties`. `onDark` is a\nplain accessor rather than a reactive property, so a value assigned before upgrade\nstays behind as an own data property that permanently masks the prototype accessor\n— `ondark` never receives it and later writes to either name silently disagree.\nDeleting the own property and re-assigning routes the value through the setter.",
+              "privacy": "private",
+              "inheritedFrom": {
+                "name": "ComponentBase",
+                "module": "src/component-base.mjs"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "appearance",
+              "privacy": "public",
+              "type": {
+                "text": "'default' | 'inverse'"
+              },
+              "description": "Defines whether the component will be on lighter or darker backgrounds.",
+              "default": "'default'",
+              "attribute": "appearance",
+              "reflects": true,
+              "inheritedFrom": {
+                "name": "AuroElement",
+                "module": "src/layoutElement/auroElement.js"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "download",
+              "privacy": "public",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "If true, the linked resource will be downloaded when the hyperlink is clicked.",
+              "attribute": "download",
+              "reflects": true,
+              "inheritedFrom": {
+                "name": "ComponentBase",
+                "module": "src/component-base.mjs"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "fluid",
+              "privacy": "public",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "If true and `type=\"cta\"`, the hyperlink will have a fluid-width UI.",
+              "attribute": "fluid",
+              "inheritedFrom": {
+                "name": "ComponentBase",
+                "module": "src/component-base.mjs"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "generateIconHtml",
+              "parameters": [
+                {
+                  "name": "svgContent",
+                  "description": "The SVG content to be embedded.",
+                  "type": {
+                    "text": "string"
+                  }
+                }
+              ],
+              "description": "Generates an HTML element containing an SVG icon based on the provided `svgContent`.",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "Element"
+                }
+              },
+              "inheritedFrom": {
+                "name": "ComponentBase",
+                "module": "src/component-base.mjs"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "getMarkup",
+              "description": "Generates an object containing CSS classes based on the properties of the component.",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "object"
+                }
+              }
+            },
+            {
+              "kind": "method",
+              "name": "getRelType",
+              "parameters": [
+                {
+                  "name": "target",
+                  "description": "The target attribute of the anchor element.",
+                  "type": {
+                    "text": "string"
+                  }
+                },
+                {
+                  "name": "rel",
+                  "description": "The rel attribute of the anchor element.",
+                  "type": {
+                    "text": "string"
+                  }
+                }
+              ],
+              "description": "Gets the rel attribute value based on target and rel values.",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "string|undefined"
+                }
+              },
+              "inheritedFrom": {
+                "name": "ComponentBase",
+                "module": "src/component-base.mjs"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "getTabState",
+              "parameters": [
+                {
+                  "name": "tabIsActive",
+                  "description": "Indicates whether the tab is active.",
+                  "type": {
+                    "text": "boolean"
+                  }
+                }
+              ],
+              "description": "Returns the state of a tab as a string.",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "string"
+                }
+              },
+              "inheritedFrom": {
+                "name": "ComponentBase",
+                "module": "src/component-base.mjs"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "href",
+              "privacy": "public",
+              "type": {
+                "text": "string"
+              },
+              "description": "Defines the URL of the linked page.",
+              "attribute": "href",
+              "reflects": true,
+              "inheritedFrom": {
+                "name": "ComponentBase",
+                "module": "src/component-base.mjs"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "iconTag",
+              "privacy": "private"
+            },
+            {
+              "kind": "field",
+              "name": "includesDomain",
+              "description": "Checks whether the provided URI (if available) includes the 'http' protocol.\nIf the URI is truthy, it examines whether it contains 'http'.\nOtherwise, it returns false.",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "boolean"
+                }
+              },
+              "readonly": true,
+              "inheritedFrom": {
+                "name": "ComponentBase",
+                "module": "src/component-base.mjs"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "layout",
+              "privacy": "private",
+              "type": {
+                "text": "string"
+              },
+              "description": "Defines the language of an element.",
+              "default": "'default'",
+              "attribute": "layout",
+              "reflects": true,
+              "inheritedFrom": {
+                "name": "AuroElement",
+                "module": "src/layoutElement/auroElement.js"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "referrerpolicy",
+              "privacy": "public",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "If true, sets `strict-origin-when-cross-origin` to control the referrer information sent with requests.",
+              "attribute": "referrerpolicy",
+              "reflects": true,
+              "inheritedFrom": {
+                "name": "ComponentBase",
+                "module": "src/component-base.mjs"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "register",
+              "static": true,
+              "parameters": [
+                {
+                  "name": "name",
+                  "default": "\"auro-hyperlink\"",
+                  "description": "The name of the element that you want to register.",
+                  "optional": true,
+                  "type": {
+                    "text": "string"
+                  }
+                }
+              ],
+              "description": "This will register this element with the browser.",
+              "type": {
+                "text": "register(name?: string = \"auro-hyperlink\") => void"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "rel",
+              "privacy": "public",
+              "type": {
+                "text": "string"
+              },
+              "description": "Defines the relationship between the current document and the linked document. Visit [MDN Web Docs](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/rel) for more information.",
+              "attribute": "rel",
+              "reflects": true,
+              "inheritedFrom": {
+                "name": "ComponentBase",
+                "module": "src/component-base.mjs"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "renderLayoutCTA",
+              "description": "Renders the cta layout for the hyperlink.",
+              "return": {
+                "type": {
+                  "text": "TemplateResult"
+                }
+              },
+              "privacy": "private"
+            },
+            {
+              "kind": "method",
+              "name": "renderLayoutDefault",
+              "description": "Renders the default layout for the hyperlink.",
+              "return": {
+                "type": {
+                  "text": "TemplateResult"
+                }
+              },
+              "privacy": "private"
+            },
+            {
+              "type": {
+                "text": "string"
+              },
+              "description": "Defines ARIA roles; currently supports `button` for extended experiences.",
+              "name": "role",
+              "kind": "field"
+            },
+            {
+              "kind": "field",
+              "name": "safeUri",
+              "description": "Returns a safe URI based on the provided `href`.\nIf `href` is truthy, it generates a safe URL using the `safeUrl` function.\nOtherwise, it returns an empty string.",
+              "return": {
+                "type": {
+                  "text": "string"
+                }
+              },
+              "readonly": true,
+              "inheritedFrom": {
+                "name": "ComponentBase",
+                "module": "src/component-base.mjs"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "safeUrl",
+              "parameters": [
+                {
+                  "name": "href",
+                  "description": "The original URL.",
+                  "type": {
+                    "text": "string"
+                  }
+                }
+              ],
+              "description": "Generates a safe URL based on the provided `href` parameter.\nIf `href` is falsy, it returns `undefined`.",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "string|undefined"
+                }
+              },
+              "inheritedFrom": {
+                "name": "ComponentBase",
+                "module": "src/component-base.mjs"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "shadowRootOptions",
+              "static": true,
+              "readonly": true
+            },
+            {
+              "kind": "field",
+              "name": "shape",
+              "privacy": "public",
+              "type": {
+                "text": "'rounded' | 'pill' | 'circle' | 'square'"
+              },
+              "description": "Defines the shape of the button when using `type=\"cta\"`.",
+              "attribute": "shape",
+              "reflects": true,
+              "inheritedFrom": {
+                "name": "AuroElement",
+                "module": "src/layoutElement/auroElement.js"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "size",
+              "privacy": "public",
+              "type": {
+                "text": "'xs' | 'sm' | 'md' | 'lg' | 'xl'"
+              },
+              "description": "Defines the size of the button when using `type=\"cta\"`.",
+              "attribute": "size",
+              "reflects": true,
+              "inheritedFrom": {
+                "name": "AuroElement",
+                "module": "src/layoutElement/auroElement.js"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "target",
+              "privacy": "public",
+              "type": {
+                "text": "string"
+              },
+              "description": "Defines where to open the linked document.",
+              "attribute": "target",
+              "reflects": true,
+              "inheritedFrom": {
+                "name": "ComponentBase",
+                "module": "src/component-base.mjs"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "targetIcon",
+              "parameters": [
+                {
+                  "name": "target",
+                  "description": "The target attribute of the anchor element.",
+                  "type": {
+                    "text": "string"
+                  }
+                }
+              ],
+              "description": "Generates an icon HTML element based on the target attribute.",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "HTMLElement|undefined"
+                }
+              },
+              "inheritedFrom": {
+                "name": "ComponentBase",
+                "module": "src/component-base.mjs"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "type",
+              "privacy": "public",
+              "type": {
+                "text": "'nav' | 'cta'"
+              },
+              "description": "Defines the type of hyperlink.",
+              "attribute": "type",
+              "reflects": true,
+              "inheritedFrom": {
+                "name": "ComponentBase",
+                "module": "src/component-base.mjs"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "variant",
+              "privacy": "public",
+              "type": {
+                "text": "'primary' | 'secondary' | 'tertiary' | 'ghost' | 'flat'"
+              },
+              "description": "Sets button variant option when using `type=\"cta\"`.",
+              "default": "'primary'",
+              "attribute": "variant",
+              "reflects": true,
+              "inheritedFrom": {
+                "name": "ComponentBase",
+                "module": "src/component-base.mjs"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "ondark",
+              "privacy": "public",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Deprecated in favor of `appearance=\"inverse\"`; scheduled for removal in the next major version.",
+              "deprecated": "Use `appearance=\"inverse\"` instead.",
+              "attribute": "ondark",
+              "reflects": true,
+              "inheritedFrom": {
+                "name": "ComponentBase",
+                "module": "src/component-base.mjs"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "onDark",
+              "description": "Deprecated alias of `ondark`, kept for backward compatibility; scheduled for removal in the next major version.",
+              "deprecated": "Use `appearance=\"inverse\"` instead.",
+              "type": {
+                "text": "boolean"
+              },
+              "inheritedFrom": {
+                "name": "ComponentBase",
+                "module": "src/component-base.mjs"
+              }
+            }
+          ],
+          "superclass": {
+            "name": "ComponentBase",
+            "module": "/src/component-base.mjs"
+          },
+          "tagName": "auro-hyperlink",
+          "customElement": true,
+          "attributes": [
+            {
+              "name": "appearance",
+              "type": {
+                "text": "'default' | 'inverse'"
+              },
+              "description": "Defines whether the component will be on lighter or darker backgrounds.",
+              "default": "'default'",
+              "fieldName": "appearance",
+              "inheritedFrom": {
+                "name": "AuroElement",
+                "module": "src/layoutElement/auroElement.js"
+              }
+            },
+            {
+              "name": "download",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "If true, the linked resource will be downloaded when the hyperlink is clicked.",
+              "fieldName": "download",
+              "inheritedFrom": {
+                "name": "ComponentBase",
+                "module": "src/component-base.mjs"
+              }
+            },
+            {
+              "name": "fluid",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "If true and `type=\"cta\"`, the hyperlink will have a fluid-width UI.",
+              "fieldName": "fluid",
+              "inheritedFrom": {
+                "name": "ComponentBase",
+                "module": "src/component-base.mjs"
+              }
+            },
+            {
+              "name": "href",
+              "type": {
+                "text": "string"
+              },
+              "description": "Defines the URL of the linked page.",
+              "fieldName": "href",
+              "inheritedFrom": {
+                "name": "ComponentBase",
+                "module": "src/component-base.mjs"
+              }
+            },
+            {
+              "name": "referrerpolicy",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "If true, sets `strict-origin-when-cross-origin` to control the referrer information sent with requests.",
+              "fieldName": "referrerpolicy",
+              "inheritedFrom": {
+                "name": "ComponentBase",
+                "module": "src/component-base.mjs"
+              }
+            },
+            {
+              "name": "rel",
+              "type": {
+                "text": "string"
+              },
+              "description": "Defines the relationship between the current document and the linked document. Visit [MDN Web Docs](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/rel) for more information.",
+              "fieldName": "rel",
+              "inheritedFrom": {
+                "name": "ComponentBase",
+                "module": "src/component-base.mjs"
+              }
+            },
+            {
+              "name": "shape",
+              "type": {
+                "text": "'rounded' | 'pill' | 'circle' | 'square'"
+              },
+              "description": "Defines the shape of the button when using `type=\"cta\"`.",
+              "fieldName": "shape",
+              "inheritedFrom": {
+                "name": "AuroElement",
+                "module": "src/layoutElement/auroElement.js"
+              }
+            },
+            {
+              "name": "size",
+              "type": {
+                "text": "'xs' | 'sm' | 'md' | 'lg' | 'xl'"
+              },
+              "description": "Defines the size of the button when using `type=\"cta\"`.",
+              "fieldName": "size",
+              "inheritedFrom": {
+                "name": "AuroElement",
+                "module": "src/layoutElement/auroElement.js"
+              }
+            },
+            {
+              "name": "target",
+              "type": {
+                "text": "string"
+              },
+              "description": "Defines where to open the linked document.",
+              "fieldName": "target",
+              "inheritedFrom": {
+                "name": "ComponentBase",
+                "module": "src/component-base.mjs"
+              }
+            },
+            {
+              "name": "type",
+              "type": {
+                "text": "'nav' | 'cta'"
+              },
+              "description": "Defines the type of hyperlink.",
+              "fieldName": "type",
+              "inheritedFrom": {
+                "name": "ComponentBase",
+                "module": "src/component-base.mjs"
+              }
+            },
+            {
+              "name": "variant",
+              "type": {
+                "text": "'primary' | 'secondary' | 'tertiary' | 'ghost' | 'flat'"
+              },
+              "description": "Sets button variant option when using `type=\"cta\"`.",
+              "default": "'primary'",
+              "fieldName": "variant",
+              "inheritedFrom": {
+                "name": "ComponentBase",
+                "module": "src/component-base.mjs"
+              }
+            },
+            {
+              "name": "ondark",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Deprecated in favor of `appearance=\"inverse\"`; scheduled for removal in the next major version.",
+              "deprecated": "Use `appearance=\"inverse\"` instead.",
+              "fieldName": "ondark",
+              "inheritedFrom": {
+                "name": "ComponentBase",
+                "module": "src/component-base.mjs"
+              }
+            }
+          ],
+          "modulePath": "src/auro-hyperlink.js"
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "AuroHyperlink",
+          "declaration": {
+            "name": "AuroHyperlink",
+            "module": "src/auro-hyperlink.js"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/color-css.js",
+      "declarations": [],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "default",
+          "declaration": {
+            "module": "src/color-css.js"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/component-base.mjs",
+      "declarations": [
+        {
+          "kind": "class",
+          "description": "",
+          "name": "ComponentBase",
+          "members": [
+            {
+              "kind": "method",
+              "name": "_initializeDefaults"
+            },
+            {
+              "kind": "method",
+              "name": "_rescuePreUpgradeOnDark",
+              "description": "Re-applies an `onDark` value that was assigned before the element upgraded.\n\nLit's pre-upgrade rescue only covers names in `elementProperties`. `onDark` is a\nplain accessor rather than a reactive property, so a value assigned before upgrade\nstays behind as an own data property that permanently masks the prototype accessor\n— `ondark` never receives it and later writes to either name silently disagree.\nDeleting the own property and re-assigning routes the value through the setter.",
+              "privacy": "private"
+            },
+            {
+              "kind": "field",
+              "name": "appearance",
+              "privacy": "public",
+              "type": {
+                "text": "'default' | 'inverse'"
+              },
+              "description": "Defines whether the component will be on lighter or darker backgrounds.",
+              "default": "'default'",
+              "attribute": "appearance",
+              "reflects": true,
+              "inheritedFrom": {
+                "name": "AuroElement",
+                "module": "src/layoutElement/auroElement.js"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "download",
+              "privacy": "public",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "If true, the linked resource will be downloaded when the hyperlink is clicked.",
+              "attribute": "download",
+              "reflects": true
+            },
+            {
+              "kind": "field",
+              "name": "fluid",
+              "privacy": "public",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "If true and `type=\"cta\"`, the hyperlink will have a fluid-width UI.",
+              "attribute": "fluid"
+            },
+            {
+              "kind": "method",
+              "name": "generateIconHtml",
+              "parameters": [
+                {
+                  "name": "svgContent",
+                  "description": "The SVG content to be embedded.",
+                  "type": {
+                    "text": "string"
+                  }
+                }
+              ],
+              "description": "Generates an HTML element containing an SVG icon based on the provided `svgContent`.",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "Element"
+                }
+              }
+            },
+            {
+              "kind": "method",
+              "name": "getRelType",
+              "parameters": [
+                {
+                  "name": "target",
+                  "description": "The target attribute of the anchor element.",
+                  "type": {
+                    "text": "string"
+                  }
+                },
+                {
+                  "name": "rel",
+                  "description": "The rel attribute of the anchor element.",
+                  "type": {
+                    "text": "string"
+                  }
+                }
+              ],
+              "description": "Gets the rel attribute value based on target and rel values.",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "string|undefined"
+                }
+              }
+            },
+            {
+              "kind": "method",
+              "name": "getTabState",
+              "parameters": [
+                {
+                  "name": "tabIsActive",
+                  "description": "Indicates whether the tab is active.",
+                  "type": {
+                    "text": "boolean"
+                  }
+                }
+              ],
+              "description": "Returns the state of a tab as a string.",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "string"
+                }
+              }
+            },
+            {
+              "kind": "field",
+              "name": "href",
+              "privacy": "public",
+              "type": {
+                "text": "string"
+              },
+              "description": "Defines the URL of the linked page.",
+              "attribute": "href",
+              "reflects": true
+            },
+            {
+              "kind": "field",
+              "name": "includesDomain",
+              "description": "Checks whether the provided URI (if available) includes the 'http' protocol.\nIf the URI is truthy, it examines whether it contains 'http'.\nOtherwise, it returns false.",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "boolean"
+                }
+              },
+              "readonly": true
+            },
+            {
+              "kind": "field",
+              "name": "layout",
+              "privacy": "public",
+              "type": {
+                "text": "string"
+              },
+              "description": "Defines the language of an element.",
+              "default": "'default'",
+              "attribute": "layout",
+              "reflects": true,
+              "inheritedFrom": {
+                "name": "AuroElement",
+                "module": "src/layoutElement/auroElement.js"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "referrerpolicy",
+              "privacy": "public",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "If true, sets `strict-origin-when-cross-origin` to control the referrer information sent with requests.",
+              "attribute": "referrerpolicy",
+              "reflects": true
+            },
+            {
+              "kind": "field",
+              "name": "rel",
+              "privacy": "public",
+              "type": {
+                "text": "string"
+              },
+              "description": "Defines the relationship between the current document and the linked document. Visit [MDN Web Docs](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/rel) for more information.",
+              "attribute": "rel",
+              "reflects": true
+            },
+            {
+              "kind": "field",
+              "name": "safeUri",
+              "description": "Returns a safe URI based on the provided `href`.\nIf `href` is truthy, it generates a safe URL using the `safeUrl` function.\nOtherwise, it returns an empty string.",
+              "return": {
+                "type": {
+                  "text": "string"
+                }
+              },
+              "readonly": true
+            },
+            {
+              "kind": "method",
+              "name": "safeUrl",
+              "parameters": [
+                {
+                  "name": "href",
+                  "description": "The original URL.",
+                  "type": {
+                    "text": "string"
+                  }
+                }
+              ],
+              "description": "Generates a safe URL based on the provided `href` parameter.\nIf `href` is falsy, it returns `undefined`.",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "string|undefined"
+                }
+              }
+            },
+            {
+              "kind": "field",
+              "name": "shape",
+              "privacy": "public",
+              "type": {
+                "text": "'rounded' | 'pill' | 'circle' | 'square'"
+              },
+              "description": "Defines the shape of the button when using `type=\"cta\"`.",
+              "attribute": "shape",
+              "reflects": true,
+              "inheritedFrom": {
+                "name": "AuroElement",
+                "module": "src/layoutElement/auroElement.js"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "size",
+              "privacy": "public",
+              "type": {
+                "text": "'xs' | 'sm' | 'md' | 'lg' | 'xl'"
+              },
+              "description": "Defines the size of the button when using `type=\"cta\"`.",
+              "attribute": "size",
+              "reflects": true,
+              "inheritedFrom": {
+                "name": "AuroElement",
+                "module": "src/layoutElement/auroElement.js"
+              }
+            },
+            {
+              "kind": "field",
+              "name": "target",
+              "privacy": "public",
+              "type": {
+                "text": "string"
+              },
+              "description": "Defines where to open the linked document.",
+              "attribute": "target",
+              "reflects": true
+            },
+            {
+              "kind": "method",
+              "name": "targetIcon",
+              "parameters": [
+                {
+                  "name": "target",
+                  "description": "The target attribute of the anchor element.",
+                  "type": {
+                    "text": "string"
+                  }
+                }
+              ],
+              "description": "Generates an icon HTML element based on the target attribute.",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "HTMLElement|undefined"
+                }
+              }
+            },
+            {
+              "kind": "field",
+              "name": "type",
+              "privacy": "public",
+              "type": {
+                "text": "'nav' | 'cta'"
+              },
+              "description": "Defines the type of hyperlink.",
+              "attribute": "type",
+              "reflects": true
+            },
+            {
+              "kind": "field",
+              "name": "variant",
+              "privacy": "public",
+              "type": {
+                "text": "'primary' | 'secondary' | 'tertiary' | 'ghost' | 'flat'"
+              },
+              "description": "Sets button variant option when using `type=\"cta\"`.",
+              "default": "'primary'",
+              "attribute": "variant",
+              "reflects": true
+            },
+            {
+              "kind": "field",
+              "name": "ondark",
+              "privacy": "public",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Deprecated in favor of `appearance=\"inverse\"`; scheduled for removal in the next major version.",
+              "deprecated": "Use `appearance=\"inverse\"` instead.",
+              "attribute": "ondark",
+              "reflects": true
+            },
+            {
+              "kind": "field",
+              "name": "onDark",
+              "description": "Deprecated alias of `ondark`, kept for backward compatibility; scheduled for removal in the next major version.",
+              "deprecated": "Use `appearance=\"inverse\"` instead.",
+              "type": {
+                "text": "boolean"
+              }
+            }
+          ],
+          "attributes": [
+            {
+              "name": "appearance",
+              "type": {
+                "text": "'default' | 'inverse'"
+              },
+              "description": "Defines whether the component will be on lighter or darker backgrounds.",
+              "default": "'default'",
+              "fieldName": "appearance",
+              "inheritedFrom": {
+                "name": "AuroElement",
+                "module": "src/layoutElement/auroElement.js"
+              }
+            },
+            {
+              "name": "download",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "If true, the linked resource will be downloaded when the hyperlink is clicked.",
+              "fieldName": "download"
+            },
+            {
+              "name": "fluid",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "If true and `type=\"cta\"`, the hyperlink will have a fluid-width UI.",
+              "fieldName": "fluid"
+            },
+            {
+              "name": "href",
+              "type": {
+                "text": "string"
+              },
+              "description": "Defines the URL of the linked page.",
+              "fieldName": "href"
+            },
+            {
+              "name": "layout",
+              "type": {
+                "text": "string"
+              },
+              "description": "Defines the language of an element.",
+              "default": "'default'",
+              "fieldName": "layout",
+              "inheritedFrom": {
+                "name": "AuroElement",
+                "module": "src/layoutElement/auroElement.js"
+              }
+            },
+            {
+              "name": "referrerpolicy",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "If true, sets `strict-origin-when-cross-origin` to control the referrer information sent with requests.",
+              "fieldName": "referrerpolicy"
+            },
+            {
+              "name": "rel",
+              "type": {
+                "text": "string"
+              },
+              "description": "Defines the relationship between the current document and the linked document. Visit [MDN Web Docs](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/rel) for more information.",
+              "fieldName": "rel"
+            },
+            {
+              "name": "shape",
+              "type": {
+                "text": "'rounded' | 'pill' | 'circle' | 'square'"
+              },
+              "description": "Defines the shape of the button when using `type=\"cta\"`.",
+              "fieldName": "shape",
+              "inheritedFrom": {
+                "name": "AuroElement",
+                "module": "src/layoutElement/auroElement.js"
+              }
+            },
+            {
+              "name": "size",
+              "type": {
+                "text": "'xs' | 'sm' | 'md' | 'lg' | 'xl'"
+              },
+              "description": "Defines the size of the button when using `type=\"cta\"`.",
+              "fieldName": "size",
+              "inheritedFrom": {
+                "name": "AuroElement",
+                "module": "src/layoutElement/auroElement.js"
+              }
+            },
+            {
+              "name": "target",
+              "type": {
+                "text": "string"
+              },
+              "description": "Defines where to open the linked document.",
+              "fieldName": "target"
+            },
+            {
+              "name": "type",
+              "type": {
+                "text": "'nav' | 'cta'"
+              },
+              "description": "Defines the type of hyperlink.",
+              "fieldName": "type"
+            },
+            {
+              "name": "variant",
+              "type": {
+                "text": "'primary' | 'secondary' | 'tertiary' | 'ghost' | 'flat'"
+              },
+              "description": "Sets button variant option when using `type=\"cta\"`.",
+              "default": "'primary'",
+              "fieldName": "variant"
+            },
+            {
+              "name": "ondark",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Deprecated in favor of `appearance=\"inverse\"`; scheduled for removal in the next major version.",
+              "deprecated": "Use `appearance=\"inverse\"` instead.",
+              "fieldName": "ondark"
+            }
+          ],
+          "superclass": {
+            "name": "AuroElement",
+            "module": "/src/layoutElement/auroElement.js"
+          }
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "default",
+          "declaration": {
+            "name": "ComponentBase",
+            "module": "src/component-base.mjs"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/iconVersion.js",
+      "declarations": [],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "default",
+          "declaration": {
+            "name": "9.2.0",
+            "module": "src/iconVersion.js"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/index.js",
+      "declarations": [],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "AuroHyperlink",
+          "declaration": {
+            "name": "AuroHyperlink",
+            "module": "src/index.js"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/layoutElement/auroElement.js",
+      "declarations": [
+        {
+          "kind": "class",
+          "description": "",
+          "name": "AuroElement",
+          "members": [
+            {
+              "kind": "field",
+              "name": "appearance",
+              "privacy": "public",
+              "type": {
+                "text": "'default' | 'inverse'"
+              },
+              "description": "Defines whether the component should be light colored for use on dark backgrounds.",
+              "default": "'default'",
+              "attribute": "appearance",
+              "reflects": true
+            },
+            {
+              "kind": "field",
+              "name": "layout",
+              "privacy": "public",
+              "type": {
+                "text": "string"
+              },
+              "description": "Defines the language of an element.",
+              "default": "'default'",
+              "attribute": "layout",
+              "reflects": true
+            },
+            {
+              "kind": "field",
+              "name": "shape",
+              "privacy": "public",
+              "type": {
+                "text": "'rounded' | 'pill' | 'circle' | 'square'"
+              },
+              "description": "Defines the shape of the button when using `type=\"cta\"`.",
+              "attribute": "shape",
+              "reflects": true
+            },
+            {
+              "kind": "field",
+              "name": "size",
+              "privacy": "public",
+              "type": {
+                "text": "'xs' | 'sm' | 'md' | 'lg' | 'xl'"
+              },
+              "description": "Defines the size of the button when using `type=\"cta\"`.",
+              "attribute": "size",
+              "reflects": true
+            }
+          ],
+          "attributes": [
+            {
+              "name": "appearance",
+              "type": {
+                "text": "'default' | 'inverse'"
+              },
+              "description": "Defines whether the component should be light colored for use on dark backgrounds.",
+              "default": "'default'",
+              "fieldName": "appearance"
+            },
+            {
+              "name": "layout",
+              "type": {
+                "text": "string"
+              },
+              "description": "Defines the language of an element.",
+              "default": "'default'",
+              "fieldName": "layout"
+            },
+            {
+              "name": "shape",
+              "type": {
+                "text": "'rounded' | 'pill' | 'circle' | 'square'"
+              },
+              "description": "Defines the shape of the button when using `type=\"cta\"`.",
+              "fieldName": "shape"
+            },
+            {
+              "name": "size",
+              "type": {
+                "text": "'xs' | 'sm' | 'md' | 'lg' | 'xl'"
+              },
+              "description": "Defines the size of the button when using `type=\"cta\"`.",
+              "fieldName": "size"
+            }
+          ],
+          "superclass": {
+            "name": "LitElement",
+            "package": "lit"
+          },
+          "customElement": true,
+          "modulePath": "src/layoutElement/auroElement.js"
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "AuroElement",
+          "declaration": {
+            "name": "AuroElement",
+            "module": "src/layoutElement/auroElement.js"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/registered.js",
+      "declarations": [],
+      "exports": []
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/style-css.js",
+      "declarations": [],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "default",
+          "declaration": {
+            "module": "src/style-css.js"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/styles/color-css.js",
+      "declarations": [],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "default",
+          "declaration": {
+            "module": "src/styles/color-css.js"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/styles/hyperlink-button-style-css.js",
+      "declarations": [],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "default",
+          "declaration": {
+            "module": "src/styles/hyperlink-button-style-css.js"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/styles/style-css.js",
+      "declarations": [],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "default",
+          "declaration": {
+            "module": "src/styles/style-css.js"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/styles/tokens-css.js",
+      "declarations": [],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "default",
+          "declaration": {
+            "module": "src/styles/tokens-css.js"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/tokens-css.js",
+      "declarations": [],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "default",
+          "declaration": {
+            "module": "src/tokens-css.js"
+          }
+        }
+      ]
+    }
+  ]
+}
