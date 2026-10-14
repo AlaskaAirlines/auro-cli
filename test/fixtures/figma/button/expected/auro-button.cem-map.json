@@ -1,0 +1,244 @@
+{
+  "tag": "auro-button",
+  "className": "AuroButton",
+  "attributes": [
+    {
+      "name": "shape",
+      "kind": "enum",
+      "values": [
+        "rounded",
+        "pill",
+        "circle",
+        "square"
+      ],
+      "default": "rounded",
+      "description": "Defines the shape of the button.",
+      "deprecated": false,
+      "privacy": "public",
+      "inheritedFrom": "AuroElement"
+    },
+    {
+      "name": "size",
+      "kind": "enum",
+      "values": [
+        "xs",
+        "sm",
+        "md",
+        "lg",
+        "xl"
+      ],
+      "default": "md",
+      "description": "Defines the size of the button.",
+      "deprecated": false,
+      "privacy": "public",
+      "inheritedFrom": "AuroElement"
+    },
+    {
+      "name": "autofocus",
+      "kind": "boolean",
+      "values": null,
+      "default": "false",
+      "description": "This Boolean attribute lets you specify that the button should have input focus when the page loads, unless overridden by the user.",
+      "deprecated": false,
+      "privacy": "public",
+      "inheritedFrom": null
+    },
+    {
+      "name": "disabled",
+      "kind": "boolean",
+      "values": null,
+      "default": "false",
+      "description": "If set to true, button will become disabled and not allow for interactions.",
+      "deprecated": false,
+      "privacy": "public",
+      "inheritedFrom": null
+    },
+    {
+      "name": "fluid",
+      "kind": "boolean",
+      "values": null,
+      "default": "false",
+      "description": "Alters the shape of the button to be full width of its parent container.",
+      "deprecated": false,
+      "privacy": "public",
+      "inheritedFrom": null
+    },
+    {
+      "name": "loading",
+      "kind": "boolean",
+      "values": null,
+      "default": "false",
+      "description": "If set to true button text will be replaced with `auro-loader` and become disabled.",
+      "deprecated": false,
+      "privacy": "public",
+      "inheritedFrom": null
+    },
+    {
+      "name": "loadingtext",
+      "kind": "string",
+      "values": null,
+      "default": null,
+      "description": "DEPRECATED - Use `slot=\"ariaLabel.loading\"` instead.",
+      "deprecated": "Use `slot=\"ariaLabel.loading\"` instead.",
+      "privacy": "public",
+      "inheritedFrom": null
+    },
+    {
+      "name": "tindex",
+      "kind": "string",
+      "values": null,
+      "default": null,
+      "description": "Populates `tabindex` to define the focusable sequence in keyboard navigation.",
+      "deprecated": false,
+      "privacy": "public",
+      "inheritedFrom": null
+    },
+    {
+      "name": "tabindex",
+      "kind": "string",
+      "values": null,
+      "default": null,
+      "description": "Populates `tabindex` to define the focusable sequence in keyboard navigation. Must be used with \".\" to ensure the host element does not retain a reference to the `tabindex` attribute. Example: `<auro-button .tabindex=\"${this.disabled ? '-1' : '0'}\"></auro-button>`.",
+      "deprecated": false,
+      "privacy": "public",
+      "inheritedFrom": null
+    },
+    {
+      "name": "title",
+      "kind": "string",
+      "values": null,
+      "default": null,
+      "description": "Sets title attribute. The information is most often shown as a tooltip text when the mouse moves over the element.",
+      "deprecated": false,
+      "privacy": "public",
+      "inheritedFrom": null
+    },
+    {
+      "name": "type",
+      "kind": "enum",
+      "values": [
+        "submit",
+        "reset",
+        "button"
+      ],
+      "default": null,
+      "description": "The type of button. Matches HTML5 Button Spec.",
+      "deprecated": false,
+      "privacy": "public",
+      "inheritedFrom": null
+    },
+    {
+      "name": "value",
+      "kind": "string",
+      "values": null,
+      "default": null,
+      "description": "Defines the value associated with the button which is submitted with the form data.",
+      "deprecated": false,
+      "privacy": "public",
+      "inheritedFrom": null
+    },
+    {
+      "name": "variant",
+      "kind": "enum",
+      "values": [
+        "primary",
+        "secondary",
+        "tertiary",
+        "ghost",
+        "flat"
+      ],
+      "default": "primary",
+      "description": "Sets the button variant.",
+      "deprecated": false,
+      "privacy": "public",
+      "inheritedFrom": null
+    },
+    {
+      "name": "buttonhref",
+      "kind": "string",
+      "values": null,
+      "default": null,
+      "description": "When set, renders the button as an anchor (`<a>`) pointing to this URL. This exposes the `link` CSS part in place of `button`. Security: the value is used as an `href` without scheme sanitization — do not pass untrusted input, as `javascript:` URLs will execute on activation.",
+      "deprecated": false,
+      "privacy": "public",
+      "inheritedFrom": null
+    },
+    {
+      "name": "buttontarget",
+      "kind": "string",
+      "values": null,
+      "default": null,
+      "description": "Sets the `target` of the generated link (e.g. `_blank`, `_self`). Only applies when `buttonHref` is set. When using `_blank`, also set `buttonRel=\"noopener noreferrer\"` to prevent reverse tabnabbing.",
+      "deprecated": false,
+      "privacy": "public",
+      "inheritedFrom": null
+    },
+    {
+      "name": "buttonrel",
+      "kind": "string",
+      "values": null,
+      "default": null,
+      "description": "Sets the `rel` of the generated link (e.g. `noopener noreferrer`). Only applies when `buttonHref` is set.",
+      "deprecated": false,
+      "privacy": "public",
+      "inheritedFrom": null
+    },
+    {
+      "name": "static",
+      "kind": "boolean",
+      "values": null,
+      "default": "false",
+      "description": "If true, the button will be static and not respond to user interactions.",
+      "deprecated": false,
+      "privacy": "public",
+      "inheritedFrom": null
+    },
+    {
+      "name": "layout",
+      "kind": "string",
+      "values": null,
+      "default": "default",
+      "description": "Defines the layout of an element.",
+      "deprecated": false,
+      "privacy": "public",
+      "inheritedFrom": "AuroElement"
+    },
+    {
+      "name": "appearance",
+      "kind": "enum",
+      "values": [
+        "default",
+        "inverse"
+      ],
+      "default": "default",
+      "description": "Defines whether the button will be on lighter or darker backgrounds.",
+      "deprecated": false,
+      "privacy": "public",
+      "inheritedFrom": "AuroElement"
+    },
+    {
+      "name": "ondark",
+      "kind": "boolean",
+      "values": null,
+      "default": "false",
+      "description": "DEPRECATED - use `appearance` attribute.",
+      "deprecated": "Use the `appearance` attribute instead.",
+      "privacy": "public",
+      "inheritedFrom": "AuroElement"
+    }
+  ],
+  "slots": [
+    {
+      "name": "(default)",
+      "description": "Default slot for the text of the button."
+    },
+    {
+      "name": "ariaLabel",
+      "description": "Use this slot to pass an aria-label to the HTML5 button."
+    },
+    {
+      "name": "ariaLabel.loading",
+      "description": "Use this slot to pass an aria-label to the HTML5 button when in loading state."
+    }
+  ]
+}

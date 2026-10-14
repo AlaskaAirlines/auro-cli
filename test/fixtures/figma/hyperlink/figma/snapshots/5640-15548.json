@@ -1,0 +1,79 @@
+{
+  "name": "Auro toolkit",
+  "lastModified": "2026-10-08T18:20:21Z",
+  "version": "2408308242154344844",
+  "nodes": {
+    "5640:15548": {
+      "document": {
+        "id": "5640:15548",
+        "name": "Hyperlink/CTA Button",
+        "type": "COMPONENT_SET",
+        "componentPropertyDefinitions": {
+          "Show Icon#5640:47": {
+            "type": "BOOLEAN",
+            "defaultValue": true
+          },
+          "Label#5640:48": {
+            "type": "TEXT",
+            "defaultValue": "Hyperlink label"
+          },
+          "⮑ Icon#5640:49": {
+            "type": "INSTANCE_SWAP",
+            "defaultValue": "20658:33615",
+            "preferredValues": [
+              {
+                "type": "COMPONENT",
+                "key": "e25e777f73e96ad5f57c83a81f4f4569c4053d19"
+              },
+              {
+                "type": "COMPONENT",
+                "key": "71bd2ef25d88a7fb1217d4137390402ec6cbaaec"
+              }
+            ]
+          },
+          "State": {
+            "type": "VARIANT",
+            "defaultValue": "Default",
+            "variantOptions": [
+              "Default",
+              "Focused",
+              "Hover"
+            ]
+          },
+          "Type": {
+            "type": "VARIANT",
+            "defaultValue": "Primary",
+            "variantOptions": [
+              "Primary",
+              "Secondary"
+            ]
+          },
+          "Inverse": {
+            "type": "VARIANT",
+            "defaultValue": "False",
+            "variantOptions": [
+              "False",
+              "True"
+            ]
+          },
+          "Size": {
+            "type": "VARIANT",
+            "defaultValue": "Default",
+            "variantOptions": [
+              "Default",
+              "Small"
+            ]
+          },
+          "Rounded": {
+            "type": "VARIANT",
+            "defaultValue": "No",
+            "variantOptions": [
+              "Yes",
+              "No"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

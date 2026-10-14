@@ -1,0 +1,207 @@
+{
+ "schemaVersion": "1.0.0",
+ "modules": [
+  {
+   "kind": "javascript-module",
+   "path": "src/auro-button.js",
+   "declarations": [
+    {
+     "kind": "class",
+     "name": "AuroButton",
+     "tagName": "auro-button",
+     "customElement": true,
+     "attributes": [
+      {
+       "name": "shape",
+       "type": {
+        "text": "'rounded' | 'pill' | 'circle' | 'square'"
+       },
+       "default": "'rounded'",
+       "description": "Defines the shape of the button.",
+       "inheritedFrom": {
+        "name": "AuroElement",
+        "module": "x.js"
+       }
+      },
+      {
+       "name": "size",
+       "type": {
+        "text": "'xs' | 'sm' | 'md' | 'lg' | 'xl'"
+       },
+       "default": "'md'",
+       "description": "Defines the size of the button.",
+       "inheritedFrom": {
+        "name": "AuroElement",
+        "module": "x.js"
+       }
+      },
+      {
+       "name": "autofocus",
+       "type": {
+        "text": "boolean"
+       },
+       "default": "false",
+       "description": "This Boolean attribute lets you specify that the button should have input focus when the page loads, unless overridden by the user."
+      },
+      {
+       "name": "disabled",
+       "type": {
+        "text": "boolean"
+       },
+       "default": "false",
+       "description": "If set to true, button will become disabled and not allow for interactions."
+      },
+      {
+       "name": "fluid",
+       "type": {
+        "text": "boolean"
+       },
+       "default": "false",
+       "description": "Alters the shape of the button to be full width of its parent container."
+      },
+      {
+       "name": "loading",
+       "type": {
+        "text": "boolean"
+       },
+       "default": "false",
+       "description": "If set to true button text will be replaced with `auro-loader` and become disabled."
+      },
+      {
+       "name": "loadingtext",
+       "type": {
+        "text": "string"
+       },
+       "description": "DEPRECATED - Use `slot=\"ariaLabel.loading\"` instead.",
+       "deprecated": "Use `slot=\"ariaLabel.loading\"` instead."
+      },
+      {
+       "name": "tindex",
+       "type": {
+        "text": "string"
+       },
+       "description": "Populates `tabindex` to define the focusable sequence in keyboard navigation."
+      },
+      {
+       "name": "tabindex",
+       "type": {
+        "text": "string"
+       },
+       "description": "Populates `tabindex` to define the focusable sequence in keyboard navigation. Must be used with \".\" to ensure the host element does not retain a reference to the `tabindex` attribute. Example: `<auro-button .tabindex=\"${this.disabled ? '-1' : '0'}\"></auro-button>`."
+      },
+      {
+       "name": "title",
+       "type": {
+        "text": "string"
+       },
+       "description": "Sets title attribute. The information is most often shown as a tooltip text when the mouse moves over the element."
+      },
+      {
+       "name": "type",
+       "type": {
+        "text": "'submit' | 'reset' | 'button'"
+       },
+       "description": "The type of button. Matches HTML5 Button Spec."
+      },
+      {
+       "name": "value",
+       "type": {
+        "text": "string"
+       },
+       "description": "Defines the value associated with the button which is submitted with the form data."
+      },
+      {
+       "name": "variant",
+       "type": {
+        "text": "'primary' | 'secondary' | 'tertiary' | 'ghost' | 'flat'"
+       },
+       "default": "'primary'",
+       "description": "Sets the button variant."
+      },
+      {
+       "name": "buttonhref",
+       "type": {
+        "text": "string"
+       },
+       "description": "When set, renders the button as an anchor (`<a>`) pointing to this URL. This exposes the `link` CSS part in place of `button`. Security: the value is used as an `href` without scheme sanitization — do not pass untrusted input, as `javascript:` URLs will execute on activation."
+      },
+      {
+       "name": "buttontarget",
+       "type": {
+        "text": "string"
+       },
+       "description": "Sets the `target` of the generated link (e.g. `_blank`, `_self`). Only applies when `buttonHref` is set. When using `_blank`, also set `buttonRel=\"noopener noreferrer\"` to prevent reverse tabnabbing."
+      },
+      {
+       "name": "buttonrel",
+       "type": {
+        "text": "string"
+       },
+       "description": "Sets the `rel` of the generated link (e.g. `noopener noreferrer`). Only applies when `buttonHref` is set."
+      },
+      {
+       "name": "static",
+       "type": {
+        "text": "boolean"
+       },
+       "default": "false",
+       "description": "If true, the button will be static and not respond to user interactions."
+      },
+      {
+       "name": "layout",
+       "type": {
+        "text": "string"
+       },
+       "default": "'default'",
+       "description": "Defines the layout of an element.",
+       "inheritedFrom": {
+        "name": "AuroElement",
+        "module": "x.js"
+       }
+      },
+      {
+       "name": "appearance",
+       "type": {
+        "text": "'default' | 'inverse'"
+       },
+       "default": "'default'",
+       "description": "Defines whether the button will be on lighter or darker backgrounds.",
+       "inheritedFrom": {
+        "name": "AuroElement",
+        "module": "x.js"
+       }
+      },
+      {
+       "name": "ondark",
+       "type": {
+        "text": "boolean"
+       },
+       "default": "false",
+       "description": "DEPRECATED - use `appearance` attribute.",
+       "deprecated": "Use the `appearance` attribute instead.",
+       "inheritedFrom": {
+        "name": "AuroElement",
+        "module": "x.js"
+       }
+      }
+     ],
+     "members": [],
+     "slots": [
+      {
+       "name": "",
+       "description": "Default slot for the text of the button."
+      },
+      {
+       "name": "ariaLabel",
+       "description": "Use this slot to pass an aria-label to the HTML5 button."
+      },
+      {
+       "name": "ariaLabel.loading",
+       "description": "Use this slot to pass an aria-label to the HTML5 button when in loading state."
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

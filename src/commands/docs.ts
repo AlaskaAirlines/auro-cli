@@ -1,7 +1,9 @@
+import process from "node:process";
 import { program } from "commander";
 import ora from "ora";
-import { api, cem, docs, serve, watchDocs } from "#scripts/docs/index.ts";
 import { withServerOptions } from "#commands/_sharedOptions.js";
+import { api, cem, docs, serve, watchDocs } from "#scripts/docs/index.ts";
+import { codeConnect } from "#scripts/figma/code-connect.ts";
 
 let docsCommand = program
   .command("docs")
@@ -11,8 +13,18 @@ let docsCommand = program
   .option("-w, --watch", "Watch for changes and rebuild docs", false)
   .option("-r, --readme-template <url>", "URL to the README template file")
   .option("--skip-readme", "Skip README.md processing", false)
-  
-  docsCommand = withServerOptions(docsCommand);
+  .option(
+    "--figma",
+    "Fetch the Figma data (needs FIGMA_ACCESS_TOKEN), then build the Code Connect files (dist/figma/<tag>.figma.ts, figma/<tag>.mismatch.md, figma/<tag>.translate.md). Skipped for components not in the Figma connector config",
+    false,
+  )
+  .option(
+    "--figma-check",
+    "For CI: only check the Code Connect files; write nothing and exit 1 if the translate or mismatch file is out of date",
+    false,
+  );
+
+docsCommand = withServerOptions(docsCommand);
 
 /** Options accepted by the `docs` action (the server options pass through). */
 export interface DocsOptions {
@@ -22,6 +34,8 @@ export interface DocsOptions {
   serve?: boolean;
   readmeTemplate?: string;
   skipReadme?: boolean;
+  figma?: boolean;
+  figmaCheck?: boolean;
   [key: string]: unknown;
 }
 
@@ -32,20 +46,40 @@ export interface DocsSteps {
   docs: typeof docs;
   serve: typeof serve;
   watchDocs: typeof watchDocs;
+  /** Code Connect build; defaults to the real one when a test does not stub it. */
+  codeConnect?: typeof codeConnect;
 }
 
 /** The real docs steps. Exported so tests can stub them on the registered command. */
-export const defaultDocsSteps: DocsSteps = { cem, api, docs, serve, watchDocs };
+export const defaultDocsSteps: DocsSteps = {
+  cem,
+  api,
+  docs,
+  serve,
+  watchDocs,
+  codeConnect,
+};
 
 /**
  * Run the `docs` command. Exits 1 if any step fails, except that in watch mode
  * a docs build failure is reported and the server and watcher still start, so
- * fixing the docs triggers a rebuild.
+ * fixing the docs triggers a rebuild. `--figma-check` skips everything else and
+ * exits with the Code Connect result (0 current, 1 stale, 2 bad input).
  */
 export async function runDocs(
   options: DocsOptions,
   steps: DocsSteps = defaultDocsSteps,
 ): Promise<void> {
+  const connect = steps.codeConnect ?? codeConnect;
+
+  if (options.figmaCheck) {
+    const code = await connect({ check: true });
+    if (code !== 0) {
+      process.exit(code);
+    }
+    return;
+  }
+
   try {
     if (options.cem) {
       await steps.cem();
@@ -65,6 +99,13 @@ export async function runDocs(
       }
     }
 
+    if (options.figma) {
+      const code = await connect({});
+      if (code !== 0) {
+        process.exit(code);
+      }
+    }
+
     if (options.serve) {
       await steps.serve(options);
     }
@@ -73,7 +114,9 @@ export async function runDocs(
       await steps.watchDocs(options);
     }
   } catch (error) {
-    ora().fail(`Docs failed: ${error instanceof Error ? error.message : String(error)}`);
+    ora().fail(
+      `Docs failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
     process.exit(1);
   }
 }

@@ -1,0 +1,55 @@
+{
+  "name": "Auro toolkit",
+  "lastModified": "2026-10-08T18:20:21Z",
+  "version": "2408308242154344844",
+  "nodes": {
+    "21546:579": {
+      "document": {
+        "id": "21546:579",
+        "name": "Hyperlink/Hyperlink-Nav",
+        "type": "COMPONENT_SET",
+        "componentPropertyDefinitions": {
+          "Label#21544:21": {
+            "type": "TEXT",
+            "defaultValue": "Hyperlink label"
+          },
+          "Right Icon#21544:28": {
+            "type": "BOOLEAN",
+            "defaultValue": true
+          },
+          "⮑ Icon#21544:35": {
+            "type": "INSTANCE_SWAP",
+            "defaultValue": "20658:34113",
+            "preferredValues": [
+              {
+                "type": "COMPONENT",
+                "key": "0034cee8088bbff3e0dc382af0c84a1da97ed279"
+              }
+            ]
+          },
+          "Left Icon#21544:42": {
+            "type": "BOOLEAN",
+            "defaultValue": false
+          },
+          "State": {
+            "type": "VARIANT",
+            "defaultValue": "Default",
+            "variantOptions": [
+              "Default",
+              "Focused",
+              "Hover"
+            ]
+          },
+          "Inverse": {
+            "type": "VARIANT",
+            "defaultValue": "No",
+            "variantOptions": [
+              "No",
+              "Yes"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

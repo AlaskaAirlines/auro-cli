@@ -1,0 +1,150 @@
+{
+  "tag": "auro-hyperlink",
+  "className": "AuroHyperlink",
+  "attributes": [
+    {
+      "name": "appearance",
+      "kind": "enum",
+      "values": [
+        "default",
+        "inverse"
+      ],
+      "default": "default",
+      "description": "Defines whether the component will be on lighter or darker backgrounds.",
+      "deprecated": false,
+      "privacy": "public",
+      "inheritedFrom": "AuroElement"
+    },
+    {
+      "name": "download",
+      "kind": "boolean",
+      "values": null,
+      "default": null,
+      "description": "If true, the linked resource will be downloaded when the hyperlink is clicked.",
+      "deprecated": false,
+      "privacy": "public",
+      "inheritedFrom": "ComponentBase"
+    },
+    {
+      "name": "fluid",
+      "kind": "boolean",
+      "values": null,
+      "default": null,
+      "description": "If true and `type=\"cta\"`, the hyperlink will have a fluid-width UI.",
+      "deprecated": false,
+      "privacy": "public",
+      "inheritedFrom": "ComponentBase"
+    },
+    {
+      "name": "href",
+      "kind": "string",
+      "values": null,
+      "default": null,
+      "description": "Defines the URL of the linked page.",
+      "deprecated": false,
+      "privacy": "public",
+      "inheritedFrom": "ComponentBase"
+    },
+    {
+      "name": "referrerpolicy",
+      "kind": "boolean",
+      "values": null,
+      "default": null,
+      "description": "If true, sets `strict-origin-when-cross-origin` to control the referrer information sent with requests.",
+      "deprecated": false,
+      "privacy": "public",
+      "inheritedFrom": "ComponentBase"
+    },
+    {
+      "name": "rel",
+      "kind": "string",
+      "values": null,
+      "default": null,
+      "description": "Defines the relationship between the current document and the linked document. Visit [MDN Web Docs](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/rel) for more information.",
+      "deprecated": false,
+      "privacy": "public",
+      "inheritedFrom": "ComponentBase"
+    },
+    {
+      "name": "shape",
+      "kind": "enum",
+      "values": [
+        "rounded",
+        "pill",
+        "circle",
+        "square"
+      ],
+      "default": null,
+      "description": "Defines the shape of the button when using `type=\"cta\"`.",
+      "deprecated": false,
+      "privacy": "public",
+      "inheritedFrom": "AuroElement"
+    },
+    {
+      "name": "size",
+      "kind": "enum",
+      "values": [
+        "xs",
+        "sm",
+        "md",
+        "lg",
+        "xl"
+      ],
+      "default": null,
+      "description": "Defines the size of the button when using `type=\"cta\"`.",
+      "deprecated": false,
+      "privacy": "public",
+      "inheritedFrom": "AuroElement"
+    },
+    {
+      "name": "target",
+      "kind": "string",
+      "values": null,
+      "default": null,
+      "description": "Defines where to open the linked document.",
+      "deprecated": false,
+      "privacy": "public",
+      "inheritedFrom": "ComponentBase"
+    },
+    {
+      "name": "type",
+      "kind": "enum",
+      "values": [
+        "nav",
+        "cta"
+      ],
+      "default": null,
+      "description": "Defines the type of hyperlink.",
+      "deprecated": false,
+      "privacy": "public",
+      "inheritedFrom": "ComponentBase"
+    },
+    {
+      "name": "variant",
+      "kind": "enum",
+      "values": [
+        "primary",
+        "secondary",
+        "tertiary",
+        "ghost",
+        "flat"
+      ],
+      "default": "primary",
+      "description": "Sets button variant option when using `type=\"cta\"`.",
+      "deprecated": false,
+      "privacy": "public",
+      "inheritedFrom": "ComponentBase"
+    },
+    {
+      "name": "ondark",
+      "kind": "boolean",
+      "values": null,
+      "default": null,
+      "description": "Deprecated in favor of `appearance=\"inverse\"`; scheduled for removal in the next major version.",
+      "deprecated": "Use `appearance=\"inverse\"` instead.",
+      "privacy": "public",
+      "inheritedFrom": "ComponentBase"
+    }
+  ],
+  "slots": []
+}
