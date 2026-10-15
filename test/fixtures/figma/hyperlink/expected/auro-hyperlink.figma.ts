@@ -22,6 +22,10 @@ figma.connect('https://www.figma.com/design/if5kIJr2x6Jv9aXpq1ANOp/Auro-toolkit-
   example: ({ variant, size }) => html`
     <auro-hyperlink variant="${variant}" size="${size}"></auro-hyperlink>
   `,
+  imports: [
+    "// npm install @aurodesignsystem/auro-hyperlink@6.2.0",
+    "import '@aurodesignsystem/auro-hyperlink';",
+  ],
 })
 
 // Hyperlink/Hyperlink-Inline
@@ -31,6 +35,10 @@ figma.connect('https://www.figma.com/design/if5kIJr2x6Jv9aXpq1ANOp/Auro-toolkit-
   example: ({  }) => html`
     <auro-hyperlink></auro-hyperlink>
   `,
+  imports: [
+    "// npm install @aurodesignsystem/auro-hyperlink@6.2.0",
+    "import '@aurodesignsystem/auro-hyperlink';",
+  ],
 })
 
 // Hyperlink/Hyperlink-Nav
@@ -40,4 +48,8 @@ figma.connect('https://www.figma.com/design/if5kIJr2x6Jv9aXpq1ANOp/Auro-toolkit-
   example: ({  }) => html`
     <auro-hyperlink></auro-hyperlink>
   `,
+  imports: [
+    "// npm install @aurodesignsystem/auro-hyperlink@6.2.0",
+    "import '@aurodesignsystem/auro-hyperlink';",
+  ],
 })

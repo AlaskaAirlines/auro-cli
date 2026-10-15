@@ -11,6 +11,13 @@ const enumValues = (t) => {
   return parts.every((p) => /^['"].*['"]$/.test(p)) ? parts.map(unquote) : null;
 };
 const clean = (s) => (s ?? "").replace(/\s+/g, " ").trim();
+// category, relevantWhen and requiredWhen exist only in a CEM built with the logical CEM annotations; an older CEM has none of them and they are left out of the map.
+const logicalFields = (x) =>
+  Object.fromEntries(
+    ["category", "relevantWhen", "requiredWhen"]
+      .filter((k) => x[k] != null)
+      .map((k) => [k, x[k]]),
+  );
 
 export function run(argv, ctx) {
   return guard("gen-cem-map", () => {
@@ -59,11 +66,13 @@ export function run(argv, ctx) {
           : false,
         privacy: member?.privacy ?? "public",
         inheritedFrom: a.inheritedFrom?.name ?? null,
+        ...logicalFields(a),
       };
     });
     const slots = (decl.slots ?? []).map((s) => ({
       name: s.name || "(default)",
       description: clean(s.description),
+      ...logicalFields(s),
     }));
 
     const map = { tag, className: decl.name, attributes, slots };

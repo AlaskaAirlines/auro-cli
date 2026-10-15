@@ -1,6 +1,6 @@
 /**
  * Code Connect config: which components have it, and where each one is designed in
- * Figma. `auro docs --figma` only acts on a tag listed here, so repos that are not
+ * Figma. `auro docs --cem` only acts on a tag listed here, so repos that are not
  * listed are skipped.
  *
  * Adding a component or changing a node id needs an auro-cli release.
@@ -23,7 +23,10 @@ export const FIGMA_COMPONENTS: Record<string, string[]> = {
   "auro-accordion": ["11755-19978"],
   "auro-alert": ["22104-1968"],
   "auro-badge": ["2143-10490"],
-  "auro-button": ["1571-3356"],
+  "auro-button": [
+    "https://www.figma.com/design/VpUz89Ov6ImBpY5YvzYbZW/Auro-toolkit?node-id=25502-3539",
+  ],
+  "auro-carousel": ["3693-13840"],
   "auro-checkbox": ["1643-7158"],
   "auro-checkbox-group": ["1643-7070", "1643-7183"],
   "auro-combobox": ["2364-15054"],
@@ -32,7 +35,11 @@ export const FIGMA_COMPONENTS: Record<string, string[]> = {
   "auro-datepicker": ["3770-15527", "7244-26936"],
   "auro-dialog": ["22366-5736"],
   "auro-drawer": ["22366-7080"],
-  "auro-hyperlink": ["5640-15548", "21546-558", "21546-579"],
+  "auro-hyperlink": [
+    "https://www.figma.com/design/VpUz89Ov6ImBpY5YvzYbZW/Auro-toolkit?node-id=25506-7722",
+    "https://www.figma.com/design/VpUz89Ov6ImBpY5YvzYbZW/Auro-toolkit?node-id=25533-14911",
+    "https://www.figma.com/design/VpUz89Ov6ImBpY5YvzYbZW/Auro-toolkit?node-id=25533-14950",
+  ],
   "auro-input": ["1608-2812"],
   "auro-radio": ["2158-10682"],
   "auro-radio-group": ["2158-10718"],
@@ -86,6 +93,7 @@ export const DESIGN_ATTRIBUTES: Record<string, string[]> = {
   "auro-accordion": ["chevron", "alignright", "expandup"],
   "auro-alert": ["noicon"],
   "auro-badge": ["label", "pill", "target"],
+  "auro-carousel": ["displayarrows"],
   "auro-checkbox": ["checked"],
   "auro-checkbox-group": ["horizontal"],
   "auro-combobox": ["checkmark", "triggericon"],

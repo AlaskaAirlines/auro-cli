@@ -148,7 +148,7 @@ export function resolveFigmaContext(cwd: string): Resolution {
       tag,
       figmaDir,
       snapshotDir: path.join(figmaDir, "snapshots"),
-      genDir: path.join(cwd, "dist", "figma"),
+      genDir: figmaDir,
       sourceDir: inMonorepo ? root : cwd,
       cemPath,
       figmaNodes,

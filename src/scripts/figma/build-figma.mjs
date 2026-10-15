@@ -117,7 +117,7 @@ export function run(argv, runCtx) {
             const vals = Object.entries(x.pairs)
               .map(
                 ([o, v]) =>
-                  `      ${q(o)}: ${q(x.complete ? v : `${x.attr}="${v}"`)},`,
+                  `      ${q(o)}: ${q(x.complete ? v : `${x.attr}="${v}"`)},${x.fallback.includes(o) ? ` // default value: ${x.attr} is required` : ""}`,
               )
               .join("\n");
             propLines.push(
@@ -134,13 +134,18 @@ export function run(argv, runCtx) {
             argNames.push(x.attr);
             tagAttrs.push(`\${${x.attr}}`);
           } else {
+            const isDefault = x.slot === "(default)";
             let v = x.slot.replace(/[^a-zA-Z0-9]/g, "");
+            if (isDefault) v = "defaultSlot";
             if (!v || /^\d/.test(v) || RESERVED.has(v) || argNames.includes(v))
               v = `slot${v.charAt(0).toUpperCase()}${v.slice(1)}`;
             while (argNames.includes(v)) v += "_";
             propLines.push(`    ${v}: figma.string(${q(x.figma)}),`);
             argNames.push(v);
-            children.push(`<span slot="${x.slot}">\${${v}}</span>`);
+            // The default slot is plain content; a named slot needs a wrapper carrying slot="<name>".
+            children.push(
+              isDefault ? `\${${v}}` : `<span slot="${x.slot}">\${${v}}</span>`,
+            );
           }
         }
         const open = `${[`<${map.tag}`, ...tagAttrs].join(" ")}>`;
@@ -157,6 +162,10 @@ export function run(argv, runCtx) {
           `  example: ({ ${argNames.join(", ")} }) => html\``,
           body,
           "  `,",
+          "  imports: [",
+          `    ${JSON.stringify(`// npm install ${pkg.name}@${codeVersion}`)},`,
+          `    ${JSON.stringify(`import '${pkg.name}';`)},`,
+          "  ],",
           "})",
           "",
         );
@@ -182,7 +191,7 @@ export function run(argv, runCtx) {
         return 0;
       }
       console.error(
-        `${map.tag}: ${outFile} is ${current === null ? "missing" : "stale"}. Run \`auro docs --figma\`.`,
+        `${map.tag}: ${outFile} is ${current === null ? "missing" : "stale"}. Run \`auro docs --cem\`.`,
       );
       return 1;
     }

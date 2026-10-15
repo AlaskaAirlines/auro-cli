@@ -8,16 +8,15 @@ import { codeConnect } from "#scripts/figma/code-connect.ts";
 let docsCommand = program
   .command("docs")
   .description("Generate API documentation")
-  .option("-c, --cem", "Generate Custom Elements Manifest (CEM) file", false)
+  .option(
+    "-c, --cem",
+    "Generate Custom Elements Manifest (CEM) file, then the Code Connect files (figma/<tag>.figma.ts, figma/<tag>.mismatch.md, figma/<tag>.translate.md) for components in the Figma connector config. The Figma data is fetched with FIGMA_ACCESS_TOKEN; without it Code Connect is skipped with a warning",
+    false,
+  )
   .option("-a, --api", "Creates api md file from CEM", false)
   .option("-w, --watch", "Watch for changes and rebuild docs", false)
   .option("-r, --readme-template <url>", "URL to the README template file")
   .option("--skip-readme", "Skip README.md processing", false)
-  .option(
-    "--figma",
-    "Fetch the Figma data (needs FIGMA_ACCESS_TOKEN), then build the Code Connect files (dist/figma/<tag>.figma.ts, figma/<tag>.mismatch.md, figma/<tag>.translate.md). Skipped for components not in the Figma connector config",
-    false,
-  )
   .option(
     "--figma-check",
     "For CI: only check the Code Connect files; write nothing and exit 1 if the translate or mismatch file is out of date",
@@ -34,7 +33,6 @@ export interface DocsOptions {
   serve?: boolean;
   readmeTemplate?: string;
   skipReadme?: boolean;
-  figma?: boolean;
   figmaCheck?: boolean;
   [key: string]: unknown;
 }
@@ -60,6 +58,16 @@ export const defaultDocsSteps: DocsSteps = {
   codeConnect,
 };
 
+/** Carries the Code Connect exit code past the catch-all that exits 1. */
+class CodeConnectFailure extends Error {
+  code: number;
+
+  constructor(code: number) {
+    super(`Code Connect exited with ${code}`);
+    this.code = code;
+  }
+}
+
 /**
  * Run the `docs` command. Exits 1 if any step fails, except that in watch mode
  * a docs build failure is reported and the server and watcher still start, so
@@ -83,6 +91,12 @@ export async function runDocs(
   try {
     if (options.cem) {
       await steps.cem();
+
+      // Code Connect reads the CEM just built, so it runs only with --cem.
+      const code = await connect({});
+      if (code !== 0) {
+        throw new CodeConnectFailure(code);
+      }
     }
 
     if (options.api) {
@@ -99,13 +113,6 @@ export async function runDocs(
       }
     }
 
-    if (options.figma) {
-      const code = await connect({});
-      if (code !== 0) {
-        process.exit(code);
-      }
-    }
-
     if (options.serve) {
       await steps.serve(options);
     }
@@ -114,6 +121,9 @@ export async function runDocs(
       await steps.watchDocs(options);
     }
   } catch (error) {
+    if (error instanceof CodeConnectFailure) {
+      process.exit(error.code);
+    }
     ora().fail(
       `Docs failed: ${error instanceof Error ? error.message : String(error)}`,
     );
