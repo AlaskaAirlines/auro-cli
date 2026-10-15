@@ -32,7 +32,7 @@ Run `auro <command> --help` for options on any command. Defaults are shown where
 |---------|------|
 | `auro dev` | Runs the dev server for a component. |
 | `auro build` | Builds a component. |
-| `auro docs` | Generates API docs from the Custom Elements Manifest. `--figma` also builds the Code Connect file. |
+| `auro docs` | Generates API docs from the Custom Elements Manifest. `--cem` also builds the Code Connect file. |
 | `auro test` | Runs the web test runner. |
 
 **Repo maintenance**
@@ -65,7 +65,7 @@ Runs the dev server for a component. Builds first, then serves.
 - `-o, --open`: open the browser once the server is up.
 - `-w, --watch`: rebuild on change.
 - `-m, --module-paths [paths...]`: path(s) to a node_modules folder.
-- `--skip-docs`: skip doc generation (default: off).
+- `--skip-docs`: skip doc generation, including the CEM and Code Connect (default: off).
 - `-r, --readme-template <url>`: URL to the README template.
 - `--wca-input [files...]`: source file(s) to analyze for API docs.
 - `--wca-output [files...]`: output file(s) for API docs.
@@ -76,7 +76,7 @@ Builds a component.
 
 - `-m, --module-paths [paths...]`: path(s) to a node_modules folder.
 - `-w, --watch`: rebuild on change.
-- `--skip-docs`: skip doc generation (default: off).
+- `--skip-docs`: skip doc generation, including the CEM and Code Connect (default: off).
 - `-r, --readme-template <url>`: URL to the README template.
 - `--wca-input [files...]`: source file(s) to analyze for API docs.
 - `--wca-output [files...]`: output file(s) for API docs.
@@ -85,12 +85,11 @@ Builds a component.
 
 Generates API documentation from the Custom Elements Manifest.
 
-- `-c, --cem`: generate the Custom Elements Manifest (default: off).
+- `-c, --cem`: generate the Custom Elements Manifest (default: off), then build the Code Connect files for components in the Figma connector config. Code Connect runs every time the CEM is generated, so `auro build` and `auro dev` (and their watch modes) build it too. It is skipped when the CEM is skipped (`--skip-docs`, or `auro docs` without `--cem`), and also (with a warning) when `FIGMA_ACCESS_TOKEN` is not set. It fetches the Figma data from the Figma API and saves it in `figma/snapshots/`, then builds the files from `custom-elements.json`, that data and `figma/<tag>.translate.md`. It writes the gitignored `dist/figma/<tag>.cem-map.json` and `dist/figma/<tag>.figma.ts` (each `figma.connect` carries an `imports` entry with the literal `// npm install <package>@<version>` line, read from `package.json` or the latest CHANGELOG entry, and the `import '<package>';` line), refreshes `figma/<tag>.mismatch.md`, and adds `TBD` rows for new gaps to `figma/<tag>.translate.md` (creating it the first time). Only components in the Figma connector config (`src/scripts/figma/figma-connector.config.ts`, which holds the Figma file URL and each tag's component set node id) are built; any other repo is skipped with exit code 0. Adding a component, or changing its Figma URL, is a change to that file and needs an auro-cli release.
 - `-a, --api`: create `api.md` from the CEM (default: off).
 - `-w, --watch`: rebuild docs on change (default: off).
 - `-r, --readme-template <url>`: URL to the README template.
 - `--skip-readme`: skip README.md processing (default: off).
-- `--figma`: fetch the Figma data from the Figma API (needs `FIGMA_ACCESS_TOKEN`) and save it in `figma/snapshots/`, then build the Code Connect files from `custom-elements.json`, that data and `figma/<tag>.translate.md`. It writes the gitignored `dist/figma/<tag>.cem-map.json` and `dist/figma/<tag>.figma.ts`, refreshes `figma/<tag>.mismatch.md`, and adds `TBD` rows for new gaps to `figma/<tag>.translate.md` (creating it the first time). Only components in the Figma connector config (`src/scripts/figma/figma-connector.config.ts`, which holds the Figma file URL and each tag's component set node id) are built; any other repo is skipped with exit code 0. Adding a component, or changing its Figma URL, is a change to that file and needs an auro-cli release.
 - `--figma-check`: for CI. Skips doc generation, writes nothing committed, and exits 1 if the translate or mismatch file is out of date (2 on bad input).
 - `-s, --serve`: start a server.
 - `-p, --port <number>`: server port.

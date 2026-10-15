@@ -81,10 +81,7 @@ export function run(argv, runCtx) {
         re: /^##\s+Figma text properties\b/i,
         title: "## Figma text properties -> slots",
         cols: 3,
-        head: [
-          "| Figma property | Slot (or n/a) | Notes |",
-          "|---|---|---|",
-        ],
+        head: ["| Figma property | Slot (or n/a) | Notes |", "|---|---|---|"],
         key: (c) => norm(c[0]),
       },
       other: {
@@ -189,7 +186,10 @@ export function run(argv, runCtx) {
     };
     const figmaProp = (c, text) =>
       props.some(
-        (p) => (p.type === "TEXT") === text && p.type !== "VARIANT" && norm(p.name) === norm(c[0]),
+        (p) =>
+          (p.type === "TEXT") === text &&
+          p.type !== "VARIANT" &&
+          norm(p.name) === norm(c[0]),
       );
     const gone = {
       forward: (c) =>
@@ -211,7 +211,7 @@ export function run(argv, runCtx) {
           ? "the Figma property or option no longer exists"
           : name === "slots"
             ? "the code slot no longer exists"
-            : "the code attribute or value no longer exists, or is deprecated or private"
+            : "the code attribute or value no longer exists, is deprecated or private, or (in a CEM with categories) is not ui and not design-related"
         : "the name-match rules now cover this, so it is no longer a gap (keep it if it is an intentional override of that match)";
 
     for (const [name, sec] of Object.entries(SECTIONS)) {
@@ -311,7 +311,7 @@ export function run(argv, runCtx) {
         return 0;
       }
       console.error(
-        `${tag}: ${translatePath} is ${exists ? `out of date (+${added} / -${removed} rows${commented ? `, ${commented} prune-candidate comment${commented === 1 ? "" : "s"} to update` : ""})` : "missing"}. Run \`auro docs --figma\` and commit the result.`,
+        `${tag}: ${translatePath} is ${exists ? `out of date (+${added} / -${removed} rows${commented ? `, ${commented} prune-candidate comment${commented === 1 ? "" : "s"} to update` : ""})` : "missing"}. Run \`auro docs --cem\` and commit the result.`,
       );
       return 1;
     }

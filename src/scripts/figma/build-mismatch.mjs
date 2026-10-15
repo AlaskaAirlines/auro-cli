@@ -63,6 +63,7 @@ export function run(argv, runCtx) {
       addressedAttrs,
       unAttrs,
       excluded,
+      notBound,
       unSlots,
       boundFigma,
       unFigma,
@@ -140,7 +141,7 @@ export function run(argv, runCtx) {
     );
 
     const noFigma = nodes.length === 0;
-    const gapSummary = `${design ? `Design-related code attributes with no Figma counterpart: **${designAttrs.length} of ${eligible.filter(isDesign).length}**; functionality-related ones are listed separately in PART 3 (${functionAttrs.length} of ${eligible.length - eligible.filter(isDesign).length})` : `Code attributes with no Figma counterpart: **${unAttrs.length} of ${eligible.length}**`} (${excluded.length} more excluded as deprecated or private).`;
+    const gapSummary = `${design ? `Design-related code attributes with no Figma counterpart: **${designAttrs.length} of ${eligible.filter(isDesign).length}**; functionality-related ones are listed separately in PART 3 (${functionAttrs.length} of ${eligible.length - eligible.filter(isDesign).length})` : `Code attributes with no Figma counterpart: **${unAttrs.length} of ${eligible.length}**`} (${excluded.length} more excluded as deprecated or private${ctx.categorized ? `, ${notBound.length} more not bound because their category is not ui and they are not design-related` : ""}).`;
     const mdBlocks = {
       summary: [
         noFigma
@@ -165,7 +166,7 @@ export function run(argv, runCtx) {
           ? "# PART 1 — Matched"
           : "# PART 1 — Matched by name (before translate)",
         "",
-        `${addressedAttrs.size} of ${eligible.length} bindable attributes (${eligible.length + excluded.length} in the CEM; ${excluded.length} deprecated or private excluded) and ${slotRows.length} of ${map.slots.length} slots match a Figma property by name. An attribute can appear more than once if more than one Figma property matches it.`,
+        `${addressedAttrs.size} of ${eligible.length} bindable attributes (${eligible.length + excluded.length + notBound.length} in the CEM; ${excluded.length} deprecated or private excluded${ctx.categorized ? `; ${notBound.length} not ui and not design-related left out` : ""}) and ${slotRows.length} of ${map.slots.length} slots match a Figma property by name. An attribute can appear more than once if more than one Figma property matches it.`,
         "",
         "### Attributes",
         "",
@@ -230,6 +231,23 @@ export function run(argv, runCtx) {
             ]
           : ["_none_"]),
         "",
+        ...(ctx.categorized
+          ? [
+              "## Code attributes not bound (category is not ui and not design-related)",
+              "",
+              ...(notBound.length
+                ? [
+                    "| attribute | category | kind / values | flags |",
+                    "|---|---|---|---|",
+                    ...notBound.map(
+                      (a) =>
+                        `| \`${a.name}\` | ${a.category ?? ""} | ${fmtValues(a)} | ${flagsOf(a)} |`,
+                    ),
+                  ]
+                : ["_none_"]),
+              "",
+            ]
+          : []),
         "## Code slots with no Figma counterpart",
         "",
         ...(unSlots.length
@@ -256,10 +274,7 @@ export function run(argv, runCtx) {
         "## Figma variant options with no code counterpart (all variant properties)",
         "",
         ...(unOptions.length
-          ? unOptions.map(
-              ({ p, o }) =>
-                `- ${fig(p.nodeId, p.name)} = ${o}`,
-            )
+          ? unOptions.map(({ p, o }) => `- ${fig(p.nodeId, p.name)} = ${o}`)
           : ["_none_"]),
       ],
       ...(design
@@ -364,7 +379,7 @@ export function run(argv, runCtx) {
         return 0;
       }
       console.error(
-        `${map.tag}: ${mismatchFile} is ${existingMd === null ? "missing" : "stale"}. Run \`auro docs --figma\` and commit the result.`,
+        `${map.tag}: ${mismatchFile} is ${existingMd === null ? "missing" : "stale"}. Run \`auro docs --cem\` and commit the result.`,
       );
       return 1;
     }

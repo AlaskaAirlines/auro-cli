@@ -37,6 +37,10 @@ function stubSteps(docsError?: Error): { steps: DocsSteps; ran: string[] } {
       },
       serve: step("serve"),
       watchDocs: step("watchDocs"),
+      codeConnect: async () => {
+        ran.push("codeConnect");
+        return 0;
+      },
     },
   };
 }
@@ -53,7 +57,49 @@ test("runs the requested steps and doesn't exit on success", async (t) => {
 
   await runDocs({ cem: true, api: true, serve: true }, steps);
 
-  assert.deepEqual(ran, ["cem", "api", "docs", "serve"]);
+  assert.deepEqual(ran, ["cem", "codeConnect", "api", "docs", "serve"]);
+});
+
+test("Code Connect is skipped when --cem is not given", async (t) => {
+  mockExit(t);
+  quiet(t);
+  const { steps, ran } = stubSteps();
+
+  await runDocs({ api: true }, steps);
+
+  assert.deepEqual(ran, ["api", "docs"]);
+});
+
+test("a failing Code Connect step exits with its code and stops the run", async (t) => {
+  mockExit(t);
+  quiet(t);
+  const { steps, ran } = stubSteps();
+  steps.codeConnect = async () => 2;
+
+  await assert.rejects(
+    runDocs({ cem: true, api: true }, steps),
+    (err: ExitError) => {
+      assert.equal(err.code, 2);
+      return true;
+    },
+  );
+  assert.deepEqual(ran, ["cem"]);
+});
+
+test("--figma-check runs only the Code Connect check", async (t) => {
+  mockExit(t);
+  quiet(t);
+  const { steps, ran } = stubSteps();
+  let checked: boolean | undefined;
+  steps.codeConnect = async (options) => {
+    checked = options?.check;
+    return 0;
+  };
+
+  await runDocs({ cem: true, figmaCheck: true }, steps);
+
+  assert.equal(checked, true);
+  assert.deepEqual(ran, []);
 });
 
 test("exits 1 when the docs build fails", async (t) => {

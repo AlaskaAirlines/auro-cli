@@ -1,6 +1,6 @@
 /**
  * Code Connect config: which components have it, and where each one is designed in
- * Figma. `auro docs --figma` only acts on a tag listed here, so repos that are not
+ * Figma. `auro docs --cem` only acts on a tag listed here, so repos that are not
  * listed are skipped.
  *
  * Adding a component or changing a node id needs an auro-cli release.

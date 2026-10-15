@@ -117,7 +117,7 @@ export function run(argv, runCtx) {
             const vals = Object.entries(x.pairs)
               .map(
                 ([o, v]) =>
-                  `      ${q(o)}: ${q(x.complete ? v : `${x.attr}="${v}"`)},`,
+                  `      ${q(o)}: ${q(x.complete ? v : `${x.attr}="${v}"`)},${x.fallback.includes(o) ? ` // default value: ${x.attr} is required` : ""}`,
               )
               .join("\n");
             propLines.push(
@@ -157,6 +157,10 @@ export function run(argv, runCtx) {
           `  example: ({ ${argNames.join(", ")} }) => html\``,
           body,
           "  `,",
+          "  imports: [",
+          `    ${JSON.stringify(`// npm install ${pkg.name}@${codeVersion}`)},`,
+          `    ${JSON.stringify(`import '${pkg.name}';`)},`,
+          "  ],",
           "})",
           "",
         );
@@ -182,7 +186,7 @@ export function run(argv, runCtx) {
         return 0;
       }
       console.error(
-        `${map.tag}: ${outFile} is ${current === null ? "missing" : "stale"}. Run \`auro docs --figma\`.`,
+        `${map.tag}: ${outFile} is ${current === null ? "missing" : "stale"}. Run \`auro docs --cem\`.`,
       );
       return 1;
     }

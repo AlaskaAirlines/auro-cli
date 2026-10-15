@@ -240,7 +240,9 @@ export function loadComponent(
   // baseline keeps the format errors found while parsing (a row that cannot be read), but not the checks against the CEM and Figma:
   // a row that points at something that is gone is what build-translate reports as a prune candidate
   // slots a text row maps a Figma property to: they need no row of their own in the slots table
-  const mappedSlots = new Set(text.filter((x) => x.slot).map((x) => norm(x.slot)));
+  const mappedSlots = new Set(
+    text.filter((x) => x.slot).map((x) => norm(x.slot)),
+  );
   if (opts.baseline) {
     forward.length = 0;
     reverse.length = 0;
@@ -300,7 +302,7 @@ export function loadComponent(
   const nodes = nodeRefs.map((r) => {
     if (!fs.existsSync(r.snapshotPath))
       fail(
-        `no saved Figma data for node ${r.nodeId}: ${r.snapshotPath} is missing. Run \`auro docs --figma\` and commit the result`,
+        `no saved Figma data for node ${r.nodeId}: ${r.snapshotPath} is missing. Run \`auro docs --cem\` and commit the result`,
       );
     const figmaJson = readJson(r.snapshotPath);
     const doc = figmaJson.nodes?.[r.nodeId]?.document;
@@ -313,9 +315,18 @@ export function loadComponent(
   });
 
   const ignored = new Set((ctx.ignoredAttributes ?? []).map(norm));
-  const eligible = map.attributes.filter(
-    (a) => !a.deprecated && a.privacy === "public" && !ignored.has(norm(a.name)),
+  const bindable = map.attributes.filter(
+    (a) =>
+      !a.deprecated && a.privacy === "public" && !ignored.has(norm(a.name)),
   );
+  // A CEM built with the logical CEM annotations puts a category on its attributes. Then only the ui ones and the design-related ones
+  // from the config are bound; a CEM without categories keeps every bindable attribute.
+  const categorized = map.attributes.some((a) => a.category);
+  const designNames = new Set((ctx.designAttributes ?? []).map(norm));
+  const inScope = (a) =>
+    !categorized || a.category === "ui" || designNames.has(norm(a.name));
+  const eligible = bindable.filter(inScope);
+  const outOfScope = bindable.filter((a) => !inScope(a));
   const attrByNorm = new Map(eligible.map((a) => [norm(a.name), a]));
   const slotByNorm = new Map(map.slots.map((s) => [norm(s.name), s]));
   const props = nodes.flatMap((n) =>
@@ -358,7 +369,8 @@ export function loadComponent(
     else if (
       x.prop &&
       !text.some(
-        (t) => norm(t.prop) === norm(x.prop) && norm(t.slot ?? "") === norm(x.slot),
+        (t) =>
+          norm(t.prop) === norm(x.prop) && norm(t.slot ?? "") === norm(x.slot),
       )
     )
       errors.push(
@@ -378,7 +390,7 @@ export function loadComponent(
       const a = attrByNorm.get(norm(f.attr));
       if (!a)
         errors.push(
-          `${f.where}: attribute "${f.attr}" is not a bindable CEM attribute (missing, deprecated or private)`,
+          `${f.where}: attribute "${f.attr}" is not a bindable CEM attribute (missing, deprecated, private, or not ui and not design-related)`,
         );
       else if (a.kind === "enum" && !a.values.includes(f.value))
         errors.push(
@@ -395,7 +407,7 @@ export function loadComponent(
     const ra = attrByNorm.get(norm(r.attr));
     if (!ra)
       errors.push(
-        `${r.where}: attribute "${r.attr}" is not a bindable CEM attribute (missing, deprecated or private)`,
+        `${r.where}: attribute "${r.attr}" is not a bindable CEM attribute (missing, deprecated, private, or not ui and not design-related)`,
       );
     else if (ra.kind === "enum" && !ra.values.includes(r.value))
       errors.push(
@@ -443,6 +455,22 @@ export function loadComponent(
       ),
     ]),
   );
+  // An attribute with requiredWhen must never be left empty (undefined or null) in the generated file. A boolean attribute has no
+  // value for "off" other than leaving it out, so a required boolean is not bound at all; an enum is filled up (see below).
+  const warnedRequired = new Set();
+  const warnRequired = (message) => {
+    if (warnedRequired.has(message)) return;
+    warnedRequired.add(message);
+    warnings.push(message);
+  };
+  const isBoolean = (a) => a?.kind === "boolean";
+  const requiredBoolean = (a) => {
+    if (!isBoolean(a) || !a.requiredWhen) return false;
+    warnRequired(
+      `${a.name} is required (requiredWhen ${a.requiredWhen}) and boolean, so a Figma state without it would leave it empty: not bound`,
+    );
+    return true;
+  };
   const usedByNode = new Map(); // nodeId -> attributes already bound in that node (a second binding of the same attribute gets a suffixed key)
   const bound = []; // {kind:'enum'|'boolean'|'slot', ...}
   const stateBlocks = []; // {prop, option, attr}
@@ -479,7 +507,7 @@ export function loadComponent(
       });
       continue;
     } // rule 4
-    if (p.type === "BOOLEAN" && a?.kind === "boolean") {
+    if (p.type === "BOOLEAN" && isBoolean(a) && !requiredBoolean(a)) {
       bound.push({
         kind: "boolean",
         nodeId: p.nodeId,
@@ -528,6 +556,25 @@ export function loadComponent(
         ] = f.value;
       }
     for (const [attr, pairs] of pairsByAttr) {
+      const cemAttr = attrByNorm.get(norm(attr));
+      const fallback = [];
+      if (cemAttr.requiredWhen) {
+        if (requiredBoolean(cemAttr)) continue;
+        // a required enum: an option no row maps takes the attribute's default, and with no default it stays empty and is reported
+        for (const o of p.variantOptions) {
+          if (o in pairs) continue;
+          if (
+            cemAttr.default != null &&
+            cemAttr.values?.includes(cemAttr.default)
+          ) {
+            pairs[o] = cemAttr.default;
+            fallback.push(o);
+          } else
+            warnRequired(
+              `${cemAttr.name} is required (requiredWhen ${cemAttr.requiredWhen}) but has no default, so ${p.name} = ${o} leaves it empty`,
+            );
+        }
+      }
       const ordered = Object.fromEntries(
         p.variantOptions.filter((o) => o in pairs).map((o) => [o, pairs[o]]),
       );
@@ -544,6 +591,7 @@ export function loadComponent(
         key,
         pairs: ordered,
         complete: p.variantOptions.every((o) => o in pairs),
+        fallback,
       });
     }
     // rule 6: a True/False variant property named like a CEM boolean attribute binds it (True adds the bare attribute, False adds nothing); a translate row for the property owns it instead
@@ -551,7 +599,8 @@ export function loadComponent(
     const falseOption = p.variantOptions.find((o) => norm(o) === "false");
     const namedBoolean = attrByNorm.get(norm(p.name));
     if (
-      namedBoolean?.kind === "boolean" &&
+      isBoolean(namedBoolean) &&
+      !requiredBoolean(namedBoolean) &&
       trueOption &&
       falseOption &&
       p.variantOptions.length === 2 &&
@@ -569,9 +618,10 @@ export function loadComponent(
       continue;
     }
     // rules 2 and 3: option name equals a CEM boolean attribute
-    const matched = p.variantOptions.filter(
-      (o) => attrByNorm.get(norm(o))?.kind === "boolean",
-    );
+    const matched = p.variantOptions.filter((o) => {
+      const at = attrByNorm.get(norm(o));
+      return isBoolean(at) && !requiredBoolean(at);
+    });
     if (matched.length) {
       if (p.defaultValue !== undefined)
         stateBlocks.push({
@@ -622,6 +672,8 @@ export function loadComponent(
     map,
     nodes,
     eligible,
+    outOfScope,
+    categorized,
     ignored,
     attrByNorm,
     props,
@@ -633,12 +685,24 @@ export function loadComponent(
 
 // What the binding leaves unaddressed (and what it covers), shared by the mismatch and translate scripts.
 export function gaps(c) {
-  const { bound, stateBlocks, eligible, ignored, map, props, norm } = c;
+  const {
+    bound,
+    stateBlocks,
+    eligible,
+    outOfScope,
+    categorized,
+    ignored,
+    map,
+    props,
+    norm,
+  } = c;
   const enumBound = bound.filter((x) => x.kind === "enum");
   const coveredValues = new Map(); // attr -> Set of values some Figma option emits
   for (const x of enumBound) {
     if (!coveredValues.has(x.attr)) coveredValues.set(x.attr, new Set());
-    for (const v of Object.values(x.pairs)) coveredValues.get(x.attr).add(v);
+    // an option bound only as the default of a required attribute is a fallback, not a match
+    for (const [o, v] of Object.entries(x.pairs))
+      if (!x.fallback?.includes(o)) coveredValues.get(x.attr).add(v);
   }
   const addressedAttrs = new Set([
     ...bound.filter((x) => x.kind !== "slot").map((x) => x.attr),
@@ -646,7 +710,8 @@ export function gaps(c) {
   ]);
   const unAttrs = eligible.filter((a) => !addressedAttrs.has(a.name));
   const excluded = map.attributes.filter(
-    (a) => (a.deprecated || a.privacy !== "public") && !ignored.has(norm(a.name)),
+    (a) =>
+      (a.deprecated || a.privacy !== "public") && !ignored.has(norm(a.name)),
   );
   const boundSlots = new Set(
     bound.filter((x) => x.kind === "slot").map((x) => x.slot),
@@ -663,7 +728,9 @@ export function gaps(c) {
     new Set([
       ...enumBound
         .filter((x) => x.nodeId === p.nodeId && norm(x.figma) === norm(p.name))
-        .flatMap((x) => Object.keys(x.pairs)),
+        .flatMap((x) =>
+          Object.keys(x.pairs).filter((o) => !x.fallback?.includes(o)),
+        ),
       ...stateBlocks
         .filter((b) => b.nodeId === p.nodeId && norm(b.prop) === norm(p.name))
         .map((b) => b.option),
@@ -681,6 +748,7 @@ export function gaps(c) {
     addressedAttrs,
     unAttrs,
     excluded,
+    notBound: categorized ? outOfScope : [],
     unSlots,
     boundFigma,
     unFigma,

@@ -33,6 +33,10 @@ figma.connect('https://www.figma.com/design/if5kIJr2x6Jv9aXpq1ANOp/Auro-toolkit-
   example: ({ variant, appearance, size, shape }) => html`
     <auro-button variant="${variant}" appearance="${appearance}" size="${size}" ${shape}></auro-button>
   `,
+  imports: [
+    "// npm install @aurodesignsystem/auro-button@11.5.1",
+    "import '@aurodesignsystem/auro-button';",
+  ],
 })
 
 // Button / State=Loading
@@ -63,6 +67,10 @@ figma.connect('https://www.figma.com/design/if5kIJr2x6Jv9aXpq1ANOp/Auro-toolkit-
   example: ({ variant, appearance, size, shape }) => html`
     <auro-button loading variant="${variant}" appearance="${appearance}" size="${size}" ${shape}></auro-button>
   `,
+  imports: [
+    "// npm install @aurodesignsystem/auro-button@11.5.1",
+    "import '@aurodesignsystem/auro-button';",
+  ],
 })
 
 // Button / State=Disabled
@@ -93,4 +101,8 @@ figma.connect('https://www.figma.com/design/if5kIJr2x6Jv9aXpq1ANOp/Auro-toolkit-
   example: ({ variant, appearance, size, shape }) => html`
     <auro-button disabled variant="${variant}" appearance="${appearance}" size="${size}" ${shape}></auro-button>
   `,
+  imports: [
+    "// npm install @aurodesignsystem/auro-button@11.5.1",
+    "import '@aurodesignsystem/auro-button';",
+  ],
 })

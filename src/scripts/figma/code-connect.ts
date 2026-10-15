@@ -1,6 +1,7 @@
 /**
- * Code Connect, run by `auro docs --figma` for the components in the Figma connector
- * config. It first fetches the Figma data from the Figma API (needs `FIGMA_ACCESS_TOKEN`)
+ * Code Connect, run for the components in the Figma connector config right
+ * after the CEM is built (`auro docs --cem`, `auro build`, `auro dev`). It first fetches the Figma data from the Figma API
+ * (needs `FIGMA_ACCESS_TOKEN`; without it the whole step is skipped with a warning)
  * and saves it in `figma/snapshots/`. From the built `custom-elements.json`, that
  * data and `figma/<tag>.translate.md` it then writes the CEM map and
  * `<tag>.figma.ts` (gitignored, in `dist/figma/`), tops up the translate file with
@@ -24,6 +25,8 @@ import { run as genCemMap } from "#scripts/figma/gen-cem-map.mjs";
 
 export interface CodeConnectOptions {
   check?: boolean;
+  /** Don't print the "not configured, skipping" line (used by every `auro build`). */
+  quiet?: boolean;
 }
 
 /** Run the Code Connect steps in `cwd` and return the exit code. */
@@ -33,7 +36,11 @@ export async function codeConnect(
 ): Promise<number> {
   const resolved = resolveFigmaContext(cwd);
   if (resolved.kind === "skip") {
-    console.log(`Code Connect not configured (${resolved.reason}), skipping.`);
+    if (!options.quiet) {
+      console.log(
+        `Code Connect not configured (${resolved.reason}), skipping.`,
+      );
+    }
     return 0;
   }
   if (resolved.kind === "error") {
@@ -47,9 +54,16 @@ export async function codeConnect(
     !existsSync(path.join(ctx.figmaDir, `${ctx.tag}.translate.md`))
   ) {
     console.error(
-      `auro docs: ${ctx.tag} is in the Figma connector config but figma/${ctx.tag}.translate.md is missing. Run \`auro docs --figma\` and commit the result.`,
+      `auro docs: ${ctx.tag} is in the Figma connector config but figma/${ctx.tag}.translate.md is missing. Run \`auro docs --cem\` and commit the result.`,
     );
     return 1;
+  }
+
+  if (!options.check && !process.env.FIGMA_ACCESS_TOKEN) {
+    console.warn(
+      `auro docs: FIGMA_ACCESS_TOKEN is not set, skipping Code Connect for ${ctx.tag}.`,
+    );
+    return 0;
   }
 
   const check = options.check ? ["--check"] : [];

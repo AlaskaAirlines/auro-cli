@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { cp, readFile, rm, writeFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { cp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { type TestContext, test } from "node:test";
@@ -8,9 +9,10 @@ import { codeConnect } from "../src/scripts/figma/code-connect.ts";
 import { figmaNodesFor } from "../src/scripts/figma/figma-connector.config.ts";
 import { captureError, tempCwd } from "./support.ts";
 
+const REPO = fileURLToPath(new URL("..", import.meta.url));
 const FIXTURES = fileURLToPath(new URL("./fixtures/figma", import.meta.url));
 
-/** Every `--figma` run fetches, so serve the saved snapshots in `cwd` as the Figma API (404 for a node with none). */
+/** Every Code Connect run fetches, so serve the saved snapshots in `cwd` as the Figma API (404 for a node with none). */
 function mockFigmaApi(t: TestContext, cwd: string) {
   const original = process.env.FIGMA_ACCESS_TOKEN;
   process.env.FIGMA_ACCESS_TOKEN = "test-token";
@@ -60,7 +62,7 @@ const read = (...p: string[]) => readFile(path.join(...p), "utf-8");
 const expected = (name: string, file: string) =>
   read(FIXTURES, name, "expected", file);
 
-test("standalone repo: docs --figma matches the reference output", async (t) => {
+test("standalone repo: docs --cem matches the reference output", async (t) => {
   const { cwd, tag } = await stage(t, "button");
   t.mock.method(console, "log", () => {});
 
@@ -80,7 +82,7 @@ test("standalone repo: docs --figma matches the reference output", async (t) => 
   );
 });
 
-test("component with several Figma sets: docs --figma matches the reference output", async (t) => {
+test("component with several Figma sets: docs --cem matches the reference output", async (t) => {
   const { cwd, tag } = await stage(t, "hyperlink");
   t.mock.method(console, "log", () => {});
 
@@ -99,6 +101,26 @@ test("component with several Figma sets: docs --figma matches the reference outp
     await expected("hyperlink", `${tag}.figma.ts`),
   );
 });
+
+for (const name of ["button", "hyperlink"] as const) {
+  test(`${name}: every figma.connect has an imports entry with the install version and the package import`, async (t) => {
+    const { cwd, tag } = await stage(t, name);
+    t.mock.method(console, "log", () => {});
+    assert.equal(await codeConnect({}, cwd), 0);
+
+    const out = await read(cwd, "dist", "figma", `${tag}.figma.ts`);
+    const pkg = `@aurodesignsystem/${tag}`;
+    const connects = out.match(/^figma\.connect\(/gm)?.length ?? 0;
+    const installs = out.match(
+      new RegExp(`^ {4}"// npm install ${pkg}@\\d+\\.\\d+\\.\\d+\\S*",$`, "gm"),
+    )?.length;
+    const imports = out.split(`    "import '${pkg}';",`).length - 1;
+
+    assert.ok(connects > 0);
+    assert.equal(installs, connects);
+    assert.equal(imports, connects);
+  });
+}
 
 test("--check exits 0 when up to date and never writes the committed files", async (t) => {
   const { cwd, tag } = await stage(t, "button");
@@ -136,7 +158,10 @@ test("--check exits 1 when the translate file lacks a row for a gap, and a run a
   const file = path.join(cwd, "figma", `${tag}.translate.md`);
   const text = await readFile(file, "utf-8");
   const row = text.split("\n").find((l) => /^\| `download` \|/.test(l));
-  assert.ok(row, "the generated translate file has a row for the download attribute");
+  assert.ok(
+    row,
+    "the generated translate file has a row for the download attribute",
+  );
   await writeFile(file, text.replace(`${row}\n`, ""));
 
   assert.equal(await codeConnect({ check: true }, cwd), 1);
@@ -162,6 +187,14 @@ test("a repo without figma/ is skipped with exit 0", async (t) => {
 
   assert.equal(await codeConnect({}, cwd), 0);
   assert.match(String(log.mock.calls[0].arguments[0]), /not configured/);
+});
+
+test("a repo without figma/ is skipped silently with quiet (the build path)", async (t) => {
+  const cwd = await tempCwd(t);
+  const log = t.mock.method(console, "log", () => {});
+
+  assert.equal(await codeConnect({ quiet: true }, cwd), 0);
+  assert.equal(log.mock.calls.length, 0);
 });
 
 test("a component that is not in the config is skipped, even with a figma/ directory", async (t) => {
@@ -238,14 +271,16 @@ test("a run fetches the Figma data from the API, and --check does not", async (t
   assert.equal(urls.length, calls, "--check does not call the Figma API");
 });
 
-test("a run without FIGMA_ACCESS_TOKEN exits 2", async (t) => {
-  const { cwd } = await stage(t, "button");
+test("a run without FIGMA_ACCESS_TOKEN warns and skips, writing nothing", async (t) => {
+  const { cwd, tag, urls } = await stage(t, "button");
   t.mock.method(console, "log", () => {});
-  const errors = captureError(t);
+  const warn = t.mock.method(console, "warn", () => {});
   delete process.env.FIGMA_ACCESS_TOKEN;
 
-  assert.equal(await codeConnect({}, cwd), 2);
-  assert.match(errors(), /FIGMA_ACCESS_TOKEN/);
+  assert.equal(await codeConnect({}, cwd), 0);
+  assert.match(String(warn.mock.calls[0]?.arguments[0]), /FIGMA_ACCESS_TOKEN/);
+  assert.equal(urls.length, 0, "the Figma API was not called");
+  await assert.rejects(read(cwd, "dist", "figma", `${tag}.figma.ts`));
 });
 
 test("the config turns a node id into a Figma URL and leaves other tags empty", () => {
@@ -267,10 +302,7 @@ test("a variant option that holds one code value as a whole word binds it when t
   const tr = path.join(cwd, "figma", `${tag}.translate.md`);
   const rows = (await readFile(tr, "utf-8"))
     .split("\n")
-    .filter(
-      (l) =>
-        !l.startsWith("| Size | ") && !l.startsWith("| `size` | "),
-    )
+    .filter((l) => !l.startsWith("| Size | ") && !l.startsWith("| `size` | "))
     .join("\n");
   await writeFile(tr, rows);
   assert.equal(await codeConnect({}, cwd), 0);
@@ -295,3 +327,151 @@ test("mismatch.md lists design-related attributes in PART 2 and the rest in PART
   assert.match(functionality, /\| `autofocus` \|/);
   assert.doesNotMatch(functionality, /\| `fluid` \|/);
 });
+
+/** Rewrite the staged `custom-elements.json` of the button fixture: `edit` gets each attribute of `auro-button`. */
+async function editCem(
+  cwd: string,
+  edit: (attr: Record<string, unknown>) => void,
+) {
+  const file = path.join(cwd, "custom-elements.json");
+  const cem = JSON.parse(await readFile(file, "utf-8"));
+  for (const m of cem.modules)
+    for (const d of m.declarations ?? [])
+      if (d.tagName === "auro-button") d.attributes.forEach(edit);
+  await writeFile(file, JSON.stringify(cem, null, 2));
+}
+
+test("a CEM with categories binds only ui attributes and the design list, and lists the rest as not bound", async (t) => {
+  const { cwd, tag } = await stage(t, "button");
+  t.mock.method(console, "log", () => {});
+  await editCem(cwd, (a) => {
+    if (a.name === "title") a.category = "ui";
+    if (a.name === "autofocus") a.category = "behavior";
+  });
+  assert.equal(await codeConnect({}, cwd), 0);
+
+  const map = JSON.parse(
+    await read(cwd, "dist", "figma", `${tag}.cem-map.json`),
+  );
+  assert.equal(
+    map.attributes.find((a: { name: string }) => a.name === "title").category,
+    "ui",
+  );
+  // design-related names stay bound whatever their category (here: none)
+  const ts = await read(cwd, "dist", "figma", `${tag}.figma.ts`);
+  assert.match(ts, /variant: figma\.enum\('Type'/);
+
+  const md = await read(cwd, "figma", `${tag}.mismatch.md`);
+  const notBound = md.slice(
+    md.indexOf("## Code attributes not bound"),
+    md.indexOf("## Code slots with no Figma counterpart"),
+  );
+  assert.match(notBound, /\| `autofocus` \| behavior \|/);
+  assert.match(notBound, /\| `static` \| {2}\|/);
+  assert.doesNotMatch(notBound, /\| `title` \|/);
+  assert.doesNotMatch(notBound, /\| `fluid` \|/);
+  assert.match(md.slice(md.indexOf("# PART 3")), /\| `title` \|/);
+});
+
+test("a CEM without categories keeps every bindable attribute and no not-bound section", async (t) => {
+  const { cwd, tag } = await stage(t, "button");
+  t.mock.method(console, "log", () => {});
+  assert.equal(await codeConnect({}, cwd), 0);
+  const md = await read(cwd, "figma", `${tag}.mismatch.md`);
+  assert.doesNotMatch(md, /not bound/);
+});
+
+test("a required enum never leaves an option empty: unmapped options take the default", async (t) => {
+  const { cwd, tag } = await stage(t, "button");
+  t.mock.method(console, "log", () => {});
+  await editCem(cwd, (a) => {
+    if (a.name === "shape") a.requiredWhen = "always";
+  });
+  assert.equal(await codeConnect({}, cwd), 0);
+
+  const ts = await read(cwd, "dist", "figma", `${tag}.figma.ts`);
+  assert.match(
+    ts,
+    /shape: figma\.enum\('Rounded', \{\n {6}'False': 'rounded', \/\/ default value: shape is required\n {6}'True': 'rounded',/,
+  );
+  assert.match(ts, /shape="\$\{shape\}"/);
+  assert.doesNotMatch(ts, /\$\{shape\}>/);
+});
+
+test("a required boolean is not bound, because off would leave it empty", async (t) => {
+  const { cwd, tag } = await stage(t, "button");
+  t.mock.method(console, "log", () => {});
+  const errors = t.mock.method(console, "error", () => {});
+  await editCem(cwd, (a) => {
+    if (a.name === "disabled") a.requiredWhen = "always";
+  });
+  assert.equal(await codeConnect({}, cwd), 0);
+
+  const ts = await read(cwd, "dist", "figma", `${tag}.figma.ts`);
+  assert.doesNotMatch(ts, /disabled/);
+  assert.ok(
+    errors.mock.calls.some((c) =>
+      String(c.arguments[0]).includes("disabled is required"),
+    ),
+  );
+});
+
+/** Run `figma connect parse` (the Code Connect html parser) over the generated file; it needs `@figma/code-connect` v1, the last major with framework parsers. */
+async function parseWithCodeConnect(t: TestContext, cwd: string, tag: string) {
+  const work = await tempCwd(t);
+  await cp(
+    path.join(cwd, "dist", "figma", `${tag}.figma.ts`),
+    path.join(work, `${tag}.figma.ts`),
+  );
+  await symlink(
+    path.join(REPO, "node_modules"),
+    path.join(work, "node_modules"),
+  );
+  await writeFile(
+    path.join(work, "figma.config.json"),
+    JSON.stringify({
+      codeConnect: { parser: "html", include: ["*.figma.ts"] },
+    }),
+  );
+  const cli = path.join(
+    REPO,
+    "node_modules",
+    "@figma",
+    "code-connect",
+    "bin",
+    "figma",
+  );
+  return spawnSync(
+    process.execPath,
+    [
+      cli,
+      "connect",
+      "parse",
+      "--skip-update-check",
+      "--exit-on-unreadable-files",
+    ],
+    { cwd: work, encoding: "utf-8" },
+  );
+}
+
+for (const name of ["button", "hyperlink"] as const) {
+  test(`${name}: the generated .figma.ts passes the Code Connect html parser`, async (t) => {
+    const { cwd, tag } = await stage(t, name);
+    t.mock.method(console, "log", () => {});
+    assert.equal(await codeConnect({}, cwd), 0);
+
+    const result = await parseWithCodeConnect(t, cwd, tag);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const docs = JSON.parse(result.stdout.slice(result.stdout.indexOf("[")));
+    const connects = (
+      await read(cwd, "dist", "figma", `${tag}.figma.ts`)
+    ).match(/^figma\.connect\(/gm);
+    assert.ok(connects?.length, "the file has figma.connect() calls");
+    assert.equal(
+      docs.length,
+      connects.length,
+      "every figma.connect() was parsed",
+    );
+  });
+}
