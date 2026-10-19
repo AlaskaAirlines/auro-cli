@@ -5,9 +5,31 @@ on:
     branches:
       - 'dev'
 
+permissions:
+  contents: write
+  deployments: write
+  issues: write
+  pull-requests: write
+  actions: write
+
 jobs:
-  action:
-    uses: AlaskaAirlines/auro-actions/.github/workflows/release-candidate.yml@main
-    secrets:
-      GH_TOKEN: ${{ secrets.GH_TOKEN }}
-      ADO_TOKEN: ${{ secrets.ADO_TOKEN }}
+  workflow:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.1
+      - name: Install dependencies
+        run: npm clean-install
+      - name: Build
+        run: npm run build
+      - name: Run auro rc-workflow
+        run: npm run auro-internal -- rc-workflow
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+          ADO_TOKEN: ${{ secrets.ADO_TOKEN }}
