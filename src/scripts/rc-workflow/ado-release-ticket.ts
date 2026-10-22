@@ -13,6 +13,12 @@ const ADO_PROJECT = "E_Retain_Content";
 // Tag that identifies a Release Candidate ticket in ADO.
 const RELEASE_TICKET_TAG = "auro-rcs";
 
+// Release tickets are User Stories. `Closed` is the only state in ADO's
+// Completed category and `Removed` the only one in its Removed category, so a
+// ticket in either has shipped or was abandoned. `Resolved` is In Progress and
+// stays a candidate.
+const CLOSED_STATES = new Set(["closed", "removed"]);
+
 export interface ReleaseTicket {
   id: number;
   url: string;
@@ -81,6 +87,33 @@ function hasReleaseTag(workItem: WorkItem): boolean {
     .includes(RELEASE_TICKET_TAG);
 }
 
+/**
+ * Checks whether a work item is still open, meaning its `System.State` isn't
+ * `Closed` or `Removed`. A work item with no state counts as open.
+ */
+function isOpen(workItem: WorkItem): boolean {
+  const state = workItem.fields?.["System.State"];
+  return typeof state !== "string" || !CLOSED_STATES.has(state.toLowerCase());
+}
+
+/**
+ * Keeps only the Release tickets that are still open and logs the ones it
+ * drops. A commit can mention a work item from a release that already shipped,
+ * or a carried-over ticket can stay linked to the previous sprint's Release
+ * ticket, and either one links in that closed Release ticket too.
+ */
+export function filterOpenReleaseTickets(tickets: WorkItem[]): WorkItem[] {
+  const open = tickets.filter(isOpen);
+  const closed = tickets.filter((ticket) => !isOpen(ticket));
+  if (closed.length > 0) {
+    console.log(
+      `Ignoring ${closed.length} closed Release ticket(s):` +
+        `\n  ${closed.map(describeTicket).join("\n  ")}`,
+    );
+  }
+  return open;
+}
+
 /** Lowercase and collapse separators so "auro-accordion" matches "Auro Accordion". */
 function normalizeName(value: string): string {
   return value
@@ -124,7 +157,8 @@ function titleMatchesRepo(workItem: WorkItem, names: string[]): boolean {
 function describeTicket(workItem: WorkItem): string {
   const title = workItem.fields?.["System.Title"] ?? "(no title)";
   const areaPath = workItem.fields?.["System.AreaPath"] ?? "(no area path)";
-  return `#${workItem.id} "${title}" [${areaPath}]`;
+  const state = workItem.fields?.["System.State"] ?? "(no state)";
+  return `#${workItem.id} "${title}" [${areaPath}] (${state})`;
 }
 
 /**
@@ -166,17 +200,16 @@ export function selectReleaseTicketForRepo(
 }
 
 /**
- * Given the ids of committed work items, resolve the single ADO Release ticket
- * (the related work item tagged `auro-rcs`) that the RC PR should reference.
- * When more than one is linked, the ticket for `repo` is selected by Area Path
- * or title.
+ * Resolves the open ADO Release ticket (tagged `auro-rcs`) that the RC PR
+ * references, from the ids of the committed work items. It ignores closed
+ * Release tickets and, when several open ones are linked, picks the one for
+ * `repo` by Area Path or title. It returns `null` when the commits link to no
+ * open Release ticket, and the caller then skips the Release PR.
  *
- * Returns null when the new commits do not roll up to a Release ticket (no
- * `AB#<id>` references, no linked work items, or none tagged `auro-rcs`) — the
- * caller should skip creating the Release PR in that case.
- *
- * @throws if several Release tickets are found and exactly one cannot be
- *   attributed to `repo`.
+ * @throws If `workItemIds` isn't empty and the `ADO_TOKEN` environment variable
+ *   isn't set.
+ * @throws If several open Release tickets are linked and neither Area Path nor
+ *   title narrows them to one for `repo`.
  */
 export async function findReleaseTicket(
   workItemIds: number[],
@@ -220,21 +253,24 @@ export async function findReleaseTicket(
     return null;
   }
 
-  // 3. Fetch the related items with their tags and keep the ones tagged auro-rcs.
+  // 3. Fetch the related items with their tags and keep the open ones tagged
+  //    auro-rcs.
   const relatedItems = await witApi.getWorkItems(
     [...relatedIds],
-    ["System.Title", "System.Tags", "System.AreaPath"],
+    ["System.Title", "System.Tags", "System.AreaPath", "System.State"],
     undefined,
     undefined,
     WorkItemErrorPolicy.Omit,
     ADO_PROJECT,
   );
 
-  const releaseTickets = (relatedItems ?? []).filter(hasReleaseTag);
+  const releaseTickets = filterOpenReleaseTickets(
+    (relatedItems ?? []).filter(hasReleaseTag),
+  );
 
   if (releaseTickets.length === 0) {
     console.log(
-      `No Release ticket (tagged "${RELEASE_TICKET_TAG}") is linked to the committed work items (${workItemIds.join(", ")}).`,
+      `No open Release ticket (tagged "${RELEASE_TICKET_TAG}") is linked to the committed work items (${workItemIds.join(", ")}).`,
     );
     return null;
   }
