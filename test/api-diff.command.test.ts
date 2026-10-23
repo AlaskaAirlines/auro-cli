@@ -343,8 +343,10 @@ const [cwd, hang] = process.argv.slice(2);
 await runApiDiff("dev", "feature", { cwd, commands: { install: hang, build: hang } });
 `,
     );
-    // An install that outlives the test unless the signal stops it.
-    const hang = `"${process.execPath}" -e "setTimeout(() => {}, 30000)"`;
+    // An install that outlives the test unless the signal stops it. Compound
+    // (`|| true`), so the shell forks it as a grandchild the way it does
+    // `npm ci || npm install`, and it keeps writing into the worktree like npm.
+    const hang = `"${process.execPath}" -e "const d = process.cwd(); setInterval(() => require('fs').mkdirSync(d + '/node_modules/x' + Date.now(), { recursive: true }), 20)" || true`;
     const child = spawn(
       process.execPath,
       ["--import", REGISTER, script, cwd, hang],
@@ -361,11 +363,25 @@ await runApiDiff("dev", "feature", { cwd, commands: { install: hang, build: hang
         ?.slice("worktree ".length);
     }
     assert.ok(worktree, "the rebuild never added a worktree");
+    // Signal only once the install is running and writing.
+    for (let i = 0; i < 100; i++) {
+      if (existsSync(path.join(worktree, "node_modules"))) {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    assert.ok(
+      existsSync(path.join(worktree, "node_modules")),
+      "the install never started",
+    );
 
     child.kill("SIGTERM");
     const [code] = await once(child, "exit");
     assert.equal(code, 143);
     assert.equal(git(cwd, "worktree", "list").split("\n").length, 1);
+    assert.equal(existsSync(worktree), false);
+    // Nothing is left running to recreate it.
+    await new Promise((resolve) => setTimeout(resolve, 300));
     assert.equal(existsSync(worktree), false);
   },
 );
