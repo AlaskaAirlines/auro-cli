@@ -28,6 +28,8 @@ import {
   type BuildCommands,
   buildManifestAt,
   changedFiles,
+  type Generator,
+  generatorsDiffer,
   listCommits,
   mergeBase,
   resolveRef,
@@ -55,6 +57,11 @@ export interface ApiDiffOptions {
   manifest?: string;
   /** Commands that install and build a checkout so it writes its manifest. */
   commands?: Partial<BuildCommands>;
+  /**
+   * Manifests to compare instead of building or reading them from git, such as
+   * the ones published to npm for each version.
+   */
+  manifests?: { base: Manifest; head: Manifest };
 }
 
 /** The analysis result; `required` and `reasons` lead so the JSON reads well. */
@@ -75,6 +82,11 @@ export interface ApiDiffResult {
   commits: DeclaredCommit[];
   /** Release config the declared bump was read with (`default` = shared rules). */
   releaseConfig: string;
+  /**
+   * The generator (auro-cli and CEM analyzer versions) each rebuilt ref
+   * installed, or `null` when nothing was rebuilt.
+   */
+  generators: { base: Generator | null; head: Generator | null } | null;
   /** Anything that limited the analysis, such as a base that wouldn't build. */
   warnings: string[];
 }
@@ -82,6 +94,7 @@ export interface ApiDiffResult {
 export const DEFAULT_COMMANDS: BuildCommands = {
   install: "npm ci --no-audit --no-fund",
   build: "npm run build",
+  pin: "npm install --no-save --no-audit --no-fund",
 };
 
 const DEFAULT_MANIFEST = "custom-elements.json";
@@ -139,80 +152,127 @@ export function formatSummary(
   return `${declaredText} Code requires ${required}: ${shown}${more}.`;
 }
 
+/** What {@link loadManifests} loads and how. */
+interface LoadOptions {
+  baseSha: string;
+  headSha: string;
+  manifestPath: string;
+  rebuild: boolean;
+  commands: BuildCommands;
+}
+
+/** The loaded manifests, plus what's needed to attribute their differences. */
+interface Loaded {
+  manifests: { base: Manifest; head: Manifest } | null;
+  /** The base rebuilt with the head's generator, when the two differ. */
+  baseWithHeadGenerator: Manifest | null;
+  generators: { base: Generator | null; head: Generator | null } | null;
+}
+
 /**
  * Load the manifests at both refs. With `rebuild`, each ref is built in a
- * throwaway worktree. A head that won't build is an error (fail closed). A base
- * that won't build falls back to its committed manifest, then to skipping the
- * comparison, with a warning either way (fail open): the PR shouldn't be blocked
- * by a base it didn't break.
+ * throwaway worktree with its own dependencies, so the comparison is between
+ * the manifests that actually ship. A head that won't build is an error (fail
+ * closed). A base that won't build falls back to its committed manifest, then to
+ * skipping the comparison, with a warning either way (fail open): the PR
+ * shouldn't be blocked by a base it didn't break.
+ *
+ * When the refs install different generators (a PR that upgrades auro-cli), the
+ * base is built once more with the head's generator, so each change can be
+ * attributed to the code or to the upgrade.
  */
 async function loadManifests(
   cwd: string,
-  baseSha: string,
-  headSha: string,
-  manifestPath: string,
-  rebuild: boolean,
-  commands: BuildCommands,
+  options: LoadOptions,
   warnings: string[],
-): Promise<{ base: Manifest; head: Manifest } | null> {
+): Promise<Loaded> {
+  const { baseSha, headSha, manifestPath, rebuild, commands } = options;
   const committed = async (sha: string) =>
     parseJson<Manifest>(await showFile(cwd, sha, manifestPath));
+  const none: Loaded = {
+    manifests: null,
+    baseWithHeadGenerator: null,
+    generators: null,
+  };
 
-  let head: Manifest | null;
-  if (rebuild) {
-    try {
-      head = (await buildManifestAt(
-        cwd,
-        headSha,
-        manifestPath,
-        commands,
-      )) as Manifest;
-    } catch (error) {
-      throw new Error(
-        `Could not build ${manifestPath} at the head ref: ${(error as Error).message}`,
-      );
-    }
-  } else {
-    head = await committed(headSha);
-  }
-
-  let base: Manifest | null = null;
-  if (rebuild) {
-    try {
-      base = (await buildManifestAt(
-        cwd,
-        baseSha,
-        manifestPath,
-        commands,
-      )) as Manifest;
-    } catch (error) {
-      base = await committed(baseSha);
+  if (!rebuild) {
+    const head = await committed(headSha);
+    const base = await committed(baseSha);
+    if (!head || !base) {
       warnings.push(
-        base
-          ? `The base ref didn't build, so its committed ${manifestPath} was used: ${(error as Error).message.split("\n")[0]}`
-          : `The base ref didn't build and has no committed ${manifestPath}, so the public API wasn't compared.`,
+        `No ${manifestPath} at the ${head ? "base" : "head"} ref, so the public API wasn't compared.`,
       );
+      return none;
     }
-  } else {
-    base = await committed(baseSha);
+    return { ...none, manifests: { base, head } };
   }
 
-  if (!head) {
-    warnings.push(
-      `No ${manifestPath} at the head ref, so the public API wasn't compared.`,
+  let head: { manifest: unknown; generator: Generator | null };
+  try {
+    head = await buildManifestAt(cwd, headSha, manifestPath, commands);
+  } catch (error) {
+    throw new Error(
+      `Could not build ${manifestPath} at the head ref: ${(error as Error).message}`,
     );
-    return null;
   }
-  if (!base) {
-    // A failed rebuild already explained itself above.
-    if (!rebuild) {
+
+  let base: { manifest: unknown; generator: Generator | null } | null = null;
+  try {
+    base = await buildManifestAt(cwd, baseSha, manifestPath, commands);
+  } catch (error) {
+    const fallback = await committed(baseSha);
+    warnings.push(
+      fallback
+        ? `The base ref didn't build, so its committed ${manifestPath} was used: ${(error as Error).message.split("\n")[0]}`
+        : `The base ref didn't build and has no committed ${manifestPath}, so the public API wasn't compared.`,
+    );
+    if (!fallback) {
+      return { ...none, generators: { base: null, head: head.generator } };
+    }
+    base = { manifest: fallback, generator: null };
+  }
+
+  let baseWithHeadGenerator: Manifest | null = null;
+  if (
+    head.generator &&
+    base.generator &&
+    generatorsDiffer(base.generator, head.generator)
+  ) {
+    try {
+      baseWithHeadGenerator = (
+        await buildManifestAt(
+          cwd,
+          baseSha,
+          manifestPath,
+          commands,
+          head.generator,
+        )
+      ).manifest as Manifest;
+    } catch (error) {
       warnings.push(
-        `No ${manifestPath} at the base ref, so the public API wasn't compared.`,
+        `The base didn't build with the head's generator, so changes couldn't be split between the code and the generator upgrade: ${(error as Error).message.split("\n")[0]}`,
       );
     }
-    return null;
   }
-  return { base, head };
+
+  return {
+    manifests: {
+      base: base.manifest as Manifest,
+      head: head.manifest as Manifest,
+    },
+    baseWithHeadGenerator,
+    generators: { base: base.generator, head: head.generator },
+  };
+}
+
+/** Describe a generator for messages, e.g. "auro-cli 4.0.0". */
+function describeGenerator(generator: Generator | null): string {
+  if (!generator) {
+    return "unknown";
+  }
+  return generator.auroCli
+    ? `auro-cli ${generator.auroCli}`
+    : `analyzer ${generator.analyzer}`;
 }
 
 /** Analyze the changes between `baseRef` and `headRef`. */
@@ -244,18 +304,41 @@ export async function runApiDiff(
   // so skip the expensive rebuild otherwise (e.g. "reconcile dev with main" PRs,
   // whose diff from the merge base is empty).
   const changes: ApiChange[] = [];
+  let generators: Loaded["generators"] = null;
+  let fromUpgrade = 0;
   if (files.some((file) => !isUnpublishedPath(file))) {
-    const manifests = await loadManifests(
-      cwd,
-      ancestor,
-      head,
-      manifestPath,
-      rebuild,
-      commands,
-      warnings,
-    );
-    if (manifests) {
-      changes.push(...diffManifests(manifests.base, manifests.head));
+    const loaded: Loaded = options.manifests
+      ? {
+          manifests: options.manifests,
+          baseWithHeadGenerator: null,
+          generators: null,
+        }
+      : await loadManifests(
+          cwd,
+          { baseSha: ancestor, headSha: head, manifestPath, rebuild, commands },
+          warnings,
+        );
+    generators = loaded.generators;
+    if (loaded.manifests) {
+      const shipped = diffManifests(
+        loaded.manifests.base,
+        loaded.manifests.head,
+      );
+      if (loaded.baseWithHeadGenerator) {
+        // What the code changed: the same generator on both sides. Anything
+        // else in the shipped diff came from the generator upgrade.
+        const fromCode = new Set(
+          diffManifests(
+            loaded.baseWithHeadGenerator,
+            loaded.manifests.head,
+          ).map((change) => change.message),
+        );
+        for (const change of shipped) {
+          change.cause = fromCode.has(change.message) ? "code" : "generator";
+        }
+        fromUpgrade = shipped.filter((c) => c.cause === "generator").length;
+      }
+      changes.push(...shipped);
     }
   }
   changes.push(
@@ -275,18 +358,29 @@ export async function runApiDiff(
     );
   }
 
+  let summary = formatSummary(
+    declared.bump,
+    required,
+    sorted,
+    declared.commits,
+  );
+  if (fromUpgrade > 0 && generators) {
+    summary += ` ${fromUpgrade} of the manifest changes come from upgrading ${describeGenerator(generators.base)} to ${describeGenerator(generators.head)}, not from the component's code; they still change the published manifest.`;
+  }
+
   return {
     required,
     reasons: sorted.map((change) => change.message),
     declared: declared.bump,
     outcome: compareBumps(declared.bump, required),
-    summary: formatSummary(declared.bump, required, sorted, declared.commits),
+    summary,
     base,
     head,
     mergeBase: ancestor,
     changes: sorted,
     commits: declared.commits,
     releaseConfig: releaseConfig.source,
+    generators,
     warnings,
   };
 }

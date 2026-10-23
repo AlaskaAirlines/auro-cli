@@ -14,6 +14,12 @@ export interface ApiChange {
   source: "manifest" | "package" | "files";
   /** Human-readable reason, e.g. "Removed attribute `ondark` from `<auro-button>`". */
   message: string;
+  /**
+   * For manifest changes when the PR also changes the generator: whether the
+   * component's code or the generator upgrade produced the change. Either way
+   * it changes the published manifest, so it counts toward the required bump.
+   */
+  cause?: "code" | "generator";
 }
 
 /** Result of comparing the declared bump against the required bump. */
