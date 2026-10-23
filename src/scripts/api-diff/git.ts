@@ -113,7 +113,7 @@ const SIGNALS: NodeJS.Signals[] = ["SIGINT", "SIGTERM"];
  */
 function onSignal(signal: NodeJS.Signals): void {
   for (const child of activeChildren) {
-    child.kill(signal);
+    killTree(child);
   }
   for (const [dir, cwd] of activeWorktrees) {
     try {
@@ -127,6 +127,28 @@ function onSignal(signal: NodeJS.Signals): void {
     rmSync(dir, { recursive: true, force: true });
   }
   process.exit(128 + (constants.signals[signal] ?? 0));
+}
+
+/** Whether commands run in their own process group (POSIX only). */
+const GROUPED = process.platform !== "win32";
+
+/**
+ * Kill a command and everything it started. Commands run through a shell, so
+ * the child is `sh` and the real work (`npm ci`) is its child: killing only
+ * the shell orphans npm, which keeps writing into the worktree while it's
+ * being removed. SIGKILL, because the process exits straight after and nothing
+ * may write into the worktree once it's being removed.
+ */
+function killTree(child: ChildProcess): void {
+  try {
+    if (GROUPED && child.pid) {
+      process.kill(-child.pid, "SIGKILL");
+    } else {
+      child.kill("SIGKILL");
+    }
+  } catch {
+    // Already exited.
+  }
 }
 
 /** Track a worktree so a signal removes it; the handlers live only while one exists. */
@@ -154,6 +176,8 @@ function runCommand(command: string, cwd: string): Promise<void> {
     const child = spawn(command, {
       cwd,
       shell: true,
+      // Its own process group, so a signal can stop the whole tree (killTree).
+      detached: GROUPED,
       stdio: ["ignore", "pipe", "pipe"],
       env: { ...process.env, HUSKY: "0" },
     });
