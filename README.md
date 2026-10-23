@@ -201,19 +201,21 @@ auro api-diff origin/dev
 
 Everything is compared from the merge base of the two refs, so only the PR's own changes and commits count.
 
-**Required bump.** The highest bump among these changes:
+**Required bump.** [Auro Release Versioning Rules](docs/versioning-rules.md) lists every rule, with examples. In short, the manifest is the contract: AI tools and other automation build pages from it, and the published TypeScript types come from the same JSDoc. So any change to it counts, whether or not runtime behavior changed. The test is whether markup that was valid before still is. The required bump is the highest among these changes:
 
 | Change | Bump |
 |---|---|
-| Element removed or renamed; public attribute, property, method, event, slot, CSS part or CSS custom property removed or made private; type narrowed or replaced; attribute stops reflecting; default value changed, added or removed | Major |
+| Element removed or renamed; public attribute, property, method, event, slot, CSS part or CSS custom property removed or made private; type narrowed or replaced; attribute stops reflecting; default value changed | Major |
+| `requiredWhen` added, or made broader or different; `minimum`/`maximum` added or tightened; made `readonly`; method parameter removed, made required, or a required one added | Major |
 | `exports` entry, `main`, `types` or `files` entry removed; `exports` added where there was none; peer or runtime dependency moved to a new major; `engines` tightened | Major |
 | Element or public member added; private member made public; type widened; `exports` entry added | Minor |
+| `requiredWhen` removed or narrowed; `minimum`/`maximum` loosened or removed; made writable; deprecated or un-deprecated; `relevantWhen` or `category` added, changed or removed; a default documented or its documentation removed; optional method parameter added | Minor |
 | Any file under `src/` or `demo/`, or a `README.md` | Patch |
 | Only `test/`, `.github/`, `docs/` or other unpublished files | None |
 
-Only public API counts. Members are filtered on the manifest's `privacy` field, not on name prefixes. Attributes backed by a private or `@internal` property don't count. Default values are compared after normalizing quotes, so `'md'` and `"md"` are the same.
+Only public API counts. Members are filtered on the manifest's `privacy` field, not on name prefixes. Attributes backed by a private or `@internal` property don't count. Formatting differences don't count: quote style, `'a', 'b'` vs `'a' | 'b'`, a braced default like `{'md'}`, and attribute name case (HTML attribute names are case-insensitive).
 
-The manifest is rebuilt at both refs in temporary git worktrees, by default with `npm ci` and `npm run build`. The rebuild is skipped when only `test/`, `.github/` or `docs/` changed. If the head doesn't build, the check errors (fails closed). If the base doesn't build, the check uses the base's committed manifest, or skips the API comparison, and says so in `warnings` (fails open): a PR shouldn't be blocked by a base it didn't break.
+The manifest is rebuilt at both refs in temporary git worktrees, by default with `npm ci` and `npm run build`, each with its own dependencies, so the comparison is between the manifests that actually ship. When the PR upgrades auro-cli or the CEM analyzer, newer versions can write the manifest differently, which changes the contract even though the component's code didn't. Those changes count, but the base is also built with the head's versions so each change is marked as coming from the code or from the upgrade (`cause` in the JSON, and a note in the summary). The rebuild is skipped when only `test/`, `.github/` or `docs/` changed. If the head doesn't build, the check errors (fails closed). If the base doesn't build, the check uses the base's committed manifest, or skips the API comparison, and says so in `warnings` (fails open): a PR shouldn't be blocked by a base it didn't break.
 
 **Declared bump.** The highest bump among the non-merge commits, worked out by `@semantic-release/commit-analyzer` with the repo's own release config (usually `@aurodesignsystem/auro-config/releaserc`, including its custom rules: `refactor`, `style` and `docs(README)` release a patch). The analyzer is loaded from the repo's own `node_modules`, so the check reads commits exactly as the release will. Run `npm ci` in the repo first: the check errors when the analyzer isn't installed. If the repo's release config can't be resolved, the shared rules are used and `warnings` says so. The PR title never counts, because merge commits don't affect the version.
 
