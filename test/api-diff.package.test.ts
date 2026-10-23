@@ -11,6 +11,7 @@ import {
   diffChangedFiles,
   diffPackageJson,
   isPublishedPath,
+  isPublishedTarget,
   type PackageJson,
 } from "../src/scripts/api-diff/package-diff.ts";
 
@@ -177,4 +178,73 @@ test("the changed-files reason lists at most five files", () => {
   const files = Array.from({ length: 7 }, (_, i) => `src/f${i}.js`);
   const [change] = diffChangedFiles(files);
   assert.match(change.message, /`src\/f4\.js` and 2 more$/u);
+});
+
+test("an export whose target was never published isn't API: removing or adding one is a patch", () => {
+  const files = ["dist/**/*", "demo/**/*", "README.md"];
+  assert.deepEqual(
+    diff(
+      {
+        files,
+        exports: {
+          ".": "./dist/a.js",
+          "./package-lock.json": "./package-lock.json",
+        },
+      },
+      { files, exports: { ".": "./dist/a.js" } },
+    ),
+    [
+      [
+        "patch",
+        "Removed export `./package-lock.json`, which never resolved: its target isn't in the published package",
+      ],
+    ],
+  );
+  // Like the packages that export a custom-elements.json they don't publish.
+  assert.deepEqual(
+    diff(
+      { files, exports: { ".": "./dist/a.js" } },
+      {
+        files,
+        exports: {
+          ".": "./dist/a.js",
+          "./custom-elements.json": "./custom-elements.json",
+        },
+      },
+    ),
+    [
+      [
+        "patch",
+        "Added export `./custom-elements.json`, which won't resolve: its target isn't in the published package",
+      ],
+    ],
+  );
+});
+
+test("exports covered by files, by npm's always-published files, or with no files list are API", () => {
+  const files = ["custom-elements.json", "dist/**/*", "demo/**/*"];
+  const exports = {
+    ".": "./dist/registered.js",
+    "./custom-elements.json": "./custom-elements.json",
+    "./package.json": "./package.json",
+    "./readme.md": "./README.md",
+    "./demo/*.js": "./demo/*.min.js",
+    "./class": { types: "./dist/index.d.ts", default: "./dist/index.js" },
+  };
+  assert.deepEqual(
+    diff({ files, exports }, { files, exports: {} }).map(([bump]) => bump),
+    Array(6).fill("major"),
+  );
+  assert.deepEqual(diff({ exports: { "./x": "./x.js" } }, { exports: {} }), [
+    ["major", "Removed export `./x`"],
+  ]);
+});
+
+test("isPublishedTarget", () => {
+  assert.equal(isPublishedTarget("./package-lock.json"), false);
+  assert.equal(isPublishedTarget("./node_modules/x/index.js"), false);
+  assert.equal(isPublishedTarget("./LICENSE", ["dist"]), true);
+  assert.equal(isPublishedTarget("./dist/a/b.js", ["dist"]), true);
+  assert.equal(isPublishedTarget("./distro/a.js", ["dist"]), false);
+  assert.equal(isPublishedTarget("./demo/*.md", ["demo/**/*"]), true);
 });

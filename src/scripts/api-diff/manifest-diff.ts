@@ -22,14 +22,38 @@ import type {
 } from "#utils/cem.js";
 import type { ApiChange } from "./bump.ts";
 
+/**
+ * Usage metadata Auro's CEM plugins add, which tooling (including AI tools that
+ * build pages from the manifest) acts on. The manifest is the contract, so these
+ * count as API.
+ */
+interface Metadata {
+  requiredWhen?: string;
+  relevantWhen?: string;
+  category?: string;
+  minimum?: number;
+  maximum?: number;
+  readonly?: boolean;
+  deprecated?: boolean | string;
+}
+
+/** A method parameter. */
+interface Parameter {
+  name: string;
+  type?: { text?: string };
+  optional?: boolean;
+  rest?: boolean;
+}
+
 /** Member fields the comparison reads beyond the shared {@link CemMember} shape. */
-interface DiffMember extends CemMember {
+interface DiffMember extends CemMember, Metadata {
   attribute?: string;
   reflects?: boolean;
+  parameters?: Parameter[];
 }
 
 /** Attribute fields the comparison reads beyond the shared {@link CemAttribute} shape. */
-interface DiffAttribute extends CemAttribute {
+interface DiffAttribute extends CemAttribute, Metadata {
   internal?: boolean;
 }
 
@@ -84,8 +108,23 @@ export function normalizeValue(value: string): string {
 }
 
 /**
+ * Normalize a default value: as {@link normalizeValue}, and also unwrap a lone
+ * literal the analyzer sometimes emits in braces (`{'default'}` for `'default'`).
+ */
+export function normalizeDefault(value: string): string {
+  const normalized = normalizeValue(value);
+  const braced =
+    /^\{\s*("[^"]*"|-?\d+(?:\.\d+)?|true|false|null|undefined)\s*\}$/u.exec(
+      normalized,
+    );
+  return braced ? braced[1] : normalized;
+}
+
+/**
  * Split a type on its top-level `|`, ignoring bars nested inside brackets or
- * string literals. Each part is normalized.
+ * string literals. Each part is normalized. A top-level `,` splits too: older
+ * Auro JSDoc wrote unions as `{'a', 'b'}`, which the manifest records as
+ * `'a', 'b'`.
  */
 export function splitUnion(typeText: string): string[] {
   const parts: string[] = [];
@@ -107,7 +146,7 @@ export function splitUnion(typeText: string): string[] {
     ) {
       // The `>` of an arrow (`=>`) isn't a closing bracket.
       depth--;
-    } else if (char === "|" && depth === 0) {
+    } else if ((char === "|" || char === ",") && depth === 0) {
       parts.push(current);
       current = "";
       continue;
@@ -115,7 +154,41 @@ export function splitUnion(typeText: string): string[] {
     current += char;
   }
   parts.push(current);
-  return parts.map(normalizeValue).filter((part) => part.length > 0);
+  // JSDoc sometimes names the wrapper (`String`) for the primitive (`string`).
+  const primitives: Record<string, string> = {
+    String: "string",
+    Number: "number",
+    Boolean: "boolean",
+  };
+  return parts
+    .map(normalizeValue)
+    .filter((part) => part.length > 0)
+    .map((part) => primitives[part] ?? part);
+}
+
+/** The primitive a literal type belongs to (`"sm"` → `string`), or `null`. */
+function primitiveOf(part: string): string | null {
+  if (/^".*"$/u.test(part)) {
+    return "string";
+  }
+  if (/^-?\d+(?:\.\d+)?$/u.test(part)) {
+    return "number";
+  }
+  if (part === "true" || part === "false") {
+    return "boolean";
+  }
+  return null;
+}
+
+/**
+ * Whether a union accepts a type part: it lists the part, or the primitive a
+ * literal part belongs to, so `'a' | 'b'` → `string` widens instead of replacing.
+ */
+function covers(union: string[], part: string): boolean {
+  const primitive = primitiveOf(part);
+  return (
+    union.includes(part) || (primitive !== null && union.includes(primitive))
+  );
 }
 
 /**
@@ -132,8 +205,8 @@ function compareType(
   }
   const base = splitUnion(baseText);
   const head = splitUnion(headText);
-  const removed = base.filter((part) => !head.includes(part));
-  const added = head.filter((part) => !base.includes(part));
+  const removed = base.filter((part) => !covers(head, part));
+  const added = head.filter((part) => !covers(base, part));
   if (removed.length === 0 && added.length === 0) {
     return null;
   }
@@ -159,40 +232,209 @@ function compareType(
   };
 }
 
-/** Classify a default-value change on one public attribute or property. */
+/**
+ * Classify a default-value change on one public attribute or property: a
+ * different value is major; documenting a default or removing its documentation
+ * is minor.
+ */
 function compareDefault(
   what: string,
   baseDefault: string | undefined,
   headDefault: string | undefined,
 ): ApiChange | null {
-  const base =
-    baseDefault === undefined ? undefined : normalizeValue(baseDefault);
-  const head =
-    headDefault === undefined ? undefined : normalizeValue(headDefault);
+  // A default of `undefined` is the same as no default.
+  const normalize = (value: string | undefined) => {
+    const normalized =
+      value === undefined ? undefined : normalizeDefault(value);
+    return normalized === "undefined" ? undefined : normalized;
+  };
+  const base = normalize(baseDefault);
+  const head = normalize(headDefault);
   if (base === head) {
     return null;
   }
-  let message: string;
+  // Documenting a default, or dropping its documentation, is guidance: markup
+  // that worked before still does, but tooling may now write different markup.
+  // A different value changes what markup that omits it does.
   if (base === undefined) {
-    message = `Added default \`${head}\` to ${what}`;
-  } else if (head === undefined) {
-    message = `Removed default \`${base}\` from ${what}`;
-  } else {
-    message = `Changed default of ${what} from \`${base}\` to \`${head}\``;
+    return {
+      bump: "minor",
+      source: "manifest",
+      message: `Added default \`${head}\` to ${what}`,
+    };
   }
-  return { bump: "major", source: "manifest", message };
+  if (head === undefined) {
+    return {
+      bump: "minor",
+      source: "manifest",
+      message: `Removed default \`${base}\` from ${what}`,
+    };
+  }
+  return {
+    bump: "major",
+    source: "manifest",
+    message: `Changed default of ${what} from \`${base}\` to \`${head}\``,
+  };
 }
 
-/** Index a declaration's members by {@link memberKey}. */
+/** Whether a manifest entry has a usable name (the analyzer sometimes emits none). */
+function isNamed(entry: { name?: unknown }): boolean {
+  return typeof entry.name === "string" && entry.name !== "";
+}
+
+/**
+ * Classify changes to the usage metadata of one property, attribute, slot or
+ * method. The test is whether markup that was valid before still is: a new or
+ * broader requirement, a tighter bound, or becoming read-only breaks it (major);
+ * looser rules, deprecations and guidance (`relevantWhen`, `category`) don't, but
+ * are new information tooling acts on (minor).
+ */
+export function compareMetadata(
+  what: string,
+  base: Metadata,
+  head: Metadata,
+): ApiChange[] {
+  const changes: ApiChange[] = [];
+  const push = (bump: ApiChange["bump"], message: string) =>
+    changes.push({ bump, source: "manifest", message });
+
+  const fromReq = base.requiredWhen;
+  const toReq = head.requiredWhen;
+  if (fromReq !== toReq) {
+    if (fromReq === undefined) {
+      push("major", `Made ${what} required when \`${toReq}\``);
+    } else if (toReq === undefined) {
+      push("minor", `Made ${what} no longer required`);
+    } else if (fromReq === "always") {
+      push("minor", `Made ${what} required only when \`${toReq}\``);
+    } else {
+      // Always required, or required under a different condition: markup that
+      // met the old condition can now be missing it.
+      push(
+        "major",
+        `Changed when ${what} is required from \`${fromReq}\` to \`${toReq}\``,
+      );
+    }
+  }
+
+  const bound = (
+    key: "minimum" | "maximum",
+    tighter: (a: number, b: number) => boolean,
+  ) => {
+    const from = base[key];
+    const to = head[key];
+    if (from === to) {
+      return;
+    }
+    const label = key === "minimum" ? "minimum" : "maximum";
+    if (from === undefined) {
+      push("major", `Added ${label} \`${to}\` to ${what}`);
+    } else if (to === undefined) {
+      push("minor", `Removed ${label} \`${from}\` from ${what}`);
+    } else if (tighter(to, from)) {
+      push(
+        "major",
+        `Tightened ${label} of ${what} from \`${from}\` to \`${to}\``,
+      );
+    } else {
+      push(
+        "minor",
+        `Loosened ${label} of ${what} from \`${from}\` to \`${to}\``,
+      );
+    }
+  };
+  bound("minimum", (to, from) => to > from);
+  bound("maximum", (to, from) => to < from);
+
+  if (!base.readonly && head.readonly) {
+    push("major", `Made ${what} read-only`);
+  } else if (base.readonly && !head.readonly) {
+    push("minor", `Made ${what} writable`);
+  }
+
+  if (!base.deprecated && head.deprecated) {
+    push("minor", `Deprecated ${what}`);
+  } else if (base.deprecated && !head.deprecated) {
+    push("minor", `Removed the deprecation of ${what}`);
+  }
+
+  for (const key of ["relevantWhen", "category"] as const) {
+    const from = base[key];
+    const to = head[key];
+    if (from === to) {
+      continue;
+    }
+    if (from === undefined) {
+      push("minor", `Added \`${key}\` \`${to}\` to ${what}`);
+    } else if (to === undefined) {
+      push("minor", `Removed \`${key}\` \`${from}\` from ${what}`);
+    } else {
+      push(
+        "minor",
+        `Changed \`${key}\` of ${what} from \`${from}\` to \`${to}\``,
+      );
+    }
+  }
+
+  return changes;
+}
+
+/**
+ * Compare a method's parameters by position (JavaScript calls don't use the
+ * names): removing one, adding a required one, or making one required breaks
+ * existing calls; adding an optional one doesn't.
+ */
+function compareParameters(
+  what: string,
+  base: Parameter[] = [],
+  head: Parameter[] = [],
+): ApiChange[] {
+  const changes: ApiChange[] = [];
+  const push = (bump: ApiChange["bump"], message: string) =>
+    changes.push({ bump, source: "manifest", message });
+  const isOptional = (p: Parameter) => Boolean(p.optional || p.rest);
+  for (let i = 0; i < Math.max(base.length, head.length); i++) {
+    const from = base[i];
+    const to = head[i];
+    if (from && !to) {
+      push("major", `Removed parameter \`${from.name}\` from ${what}`);
+    } else if (!from && to) {
+      push(
+        isOptional(to) ? "minor" : "major",
+        `Added ${isOptional(to) ? "optional" : "required"} parameter \`${to.name}\` to ${what}`,
+      );
+    } else if (from && to) {
+      const param = `parameter \`${to.name}\` of ${what}`;
+      if (isOptional(from) && !isOptional(to)) {
+        push("major", `Made ${param} required`);
+      } else if (!isOptional(from) && isOptional(to)) {
+        push("minor", `Made ${param} optional`);
+      }
+      const typeChange = compareType(param, from.type?.text, to.type?.text);
+      if (typeChange) {
+        changes.push(typeChange);
+      }
+    }
+  }
+  return changes;
+}
+
+/** Index a declaration's members by {@link memberKey}, skipping nameless ones. */
 function indexMembers(declaration: CemDeclaration): Map<string, DiffMember> {
   const members = new Map<string, DiffMember>();
   for (const member of declaration.members ?? []) {
+    if (!isNamed(member)) {
+      continue;
+    }
     members.set(memberKey(member), member);
   }
   return members;
 }
 
-/** Public attributes of a declaration, keyed by attribute name. */
+/**
+ * Public attributes of a declaration, keyed by lower-cased name: HTML attribute
+ * names are case-insensitive, so `tIndex` and `tindex` are the same attribute.
+ */
 function publicAttributes(
   declaration: CemDeclaration,
   members: Map<string, DiffMember>,
@@ -200,10 +442,14 @@ function publicAttributes(
   const attributes = new Map<string, DiffAttribute>();
   for (const attr of (declaration.attributes ?? []) as DiffAttribute[]) {
     const backing = attr.fieldName ? members.get(attr.fieldName) : undefined;
-    if (attr.internal || (backing && !isPublicMember(backing))) {
+    if (
+      !isNamed(attr) ||
+      attr.internal ||
+      (backing && !isPublicMember(backing))
+    ) {
       continue;
     }
-    attributes.set(attr.name, attr);
+    attributes.set(attr.name.toLowerCase(), attr);
   }
   return attributes;
 }
@@ -247,10 +493,16 @@ function diffMembers(
       });
       continue;
     }
+    const what = `${label} \`${base.name}\` on ${on}`;
+    changes.push(...compareMetadata(what, base, head));
+    if (base.kind === "method") {
+      changes.push(
+        ...compareParameters(what, base.parameters, head.parameters),
+      );
+    }
     if (base.kind !== "field") {
       continue;
     }
-    const what = `${label} \`${base.name}\` on ${on}`;
     if (base.reflects && !head.reflects) {
       changes.push({
         bump: "major",
@@ -308,8 +560,14 @@ function diffAttributes(
   const on = `\`<${tag}>\``;
   const basePublic = publicAttributes(base, baseMembers);
   const headPublic = publicAttributes(head, headMembers);
-  const headAll = new Set((head.attributes ?? []).map((a) => a.name));
-  const baseAll = new Set((base.attributes ?? []).map((a) => a.name));
+  const allNames = (declaration: CemDeclaration) =>
+    new Set(
+      (declaration.attributes ?? [])
+        .filter(isNamed)
+        .map((a) => a.name.toLowerCase()),
+    );
+  const headAll = allNames(head);
+  const baseAll = allNames(base);
 
   const hasPublicBacking = (
     attr: DiffAttribute,
@@ -319,13 +577,14 @@ function diffAttributes(
     return backing !== undefined && isPublicMember(backing);
   };
 
-  for (const [name, baseAttr] of basePublic) {
-    const headAttr = headPublic.get(name);
+  for (const [key, baseAttr] of basePublic) {
+    const { name } = baseAttr;
+    const headAttr = headPublic.get(key);
     if (!headAttr) {
       changes.push({
         bump: "major",
         source: "manifest",
-        message: headAll.has(name)
+        message: headAll.has(key)
           ? `Made attribute \`${name}\` on ${on} private`
           : `Removed attribute \`${name}\` from ${on}`,
       });
@@ -346,16 +605,17 @@ function diffAttributes(
         changes.push(change);
       }
     }
+    changes.push(...compareMetadata(what, baseAttr, headAttr));
   }
 
-  for (const name of headPublic.keys()) {
-    if (basePublic.has(name)) {
+  for (const [key, { name }] of headPublic) {
+    if (basePublic.has(key)) {
       continue;
     }
     changes.push({
       bump: "minor",
       source: "manifest",
-      message: baseAll.has(name)
+      message: baseAll.has(key)
         ? `Made private attribute \`${name}\` on ${on} public`
         : `Added attribute \`${name}\` to ${on}`,
     });
@@ -374,8 +634,15 @@ function diffNamed(
   const describe = (name: string) =>
     label === "slot" && name === "" ? "default slot" : `${label} \`${name}\``;
   const on = `\`<${tag}>\``;
-  const baseNames = new Set((base ?? []).map((entry) => entry.name));
-  const headNames = new Set((head ?? []).map((entry) => entry.name));
+  // Nameless entries are analyzer noise, except the default slot (`""`).
+  const names = (entries: CemNamed[] | undefined) =>
+    new Set(
+      (entries ?? [])
+        .map((entry) => entry.name)
+        .filter((name) => typeof name === "string"),
+    );
+  const baseNames = names(base);
+  const headNames = names(head);
   const changes: ApiChange[] = [];
   for (const name of baseNames) {
     if (!headNames.has(name)) {
@@ -398,11 +665,34 @@ function diffNamed(
   return changes;
 }
 
+/** Compare the usage metadata of slots present in both manifests. */
+function diffSlotMetadata(
+  tag: string,
+  base: CemDeclaration,
+  head: CemDeclaration,
+): ApiChange[] {
+  const headSlots = new Map(
+    (head.slots ?? []).map((slot) => [slot.name, slot as Metadata]),
+  );
+  return (base.slots ?? []).flatMap((slot) => {
+    const match = headSlots.get(slot.name);
+    if (typeof slot.name !== "string" || !match) {
+      return [];
+    }
+    const what =
+      slot.name === ""
+        ? `default slot of \`<${tag}>\``
+        : `slot \`${slot.name}\` on \`<${tag}>\``;
+    return compareMetadata(what, slot as Metadata, match);
+  });
+}
+
 /** Compare the full public API of one element present in both manifests. */
 function diffElement(tag: string, base: CemDeclaration, head: CemDeclaration) {
   const baseMembers = indexMembers(base);
   const headMembers = indexMembers(head);
   return [
+    ...diffSlotMetadata(tag, base, head),
     ...diffAttributes(tag, base, head, baseMembers, headMembers),
     ...diffMembers(tag, baseMembers, headMembers),
     ...diffNamed(tag, "event", base.events, head.events),

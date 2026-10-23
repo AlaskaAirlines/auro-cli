@@ -10,7 +10,7 @@ import {
   execFileSync,
   spawn,
 } from "node:child_process";
-import { rmSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { constants, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -205,26 +205,117 @@ function runCommand(command: string, cwd: string): Promise<void> {
 export interface BuildCommands {
   install: string;
   build: string;
+  /** Installs packages over the checkout's own; the `name@version` list is appended. */
+  pin: string;
+}
+
+const AURO_CLI = "@aurodesignsystem/auro-cli";
+const ANALYZER = "@custom-elements-manifest/analyzer";
+
+/**
+ * The packages that write a checkout's manifest. Upgrading them (new plugins,
+ * new type formatting) can change the published manifest without any change to
+ * the component's code.
+ */
+export interface Generator {
+  auroCli?: string;
+  analyzer?: string;
+}
+
+/** Where a package is installed in `dir`: hoisted, or nested under auro-cli. */
+function packageDir(dir: string, pkg: string): string | null {
+  for (const candidate of [
+    join(dir, "node_modules", pkg),
+    join(dir, "node_modules", AURO_CLI, "node_modules", pkg),
+  ]) {
+    if (existsSync(join(candidate, "package.json"))) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+async function installedVersion(
+  dir: string,
+  pkg: string,
+): Promise<string | undefined> {
+  const at = packageDir(dir, pkg);
+  if (!at) {
+    return undefined;
+  }
+  return JSON.parse(await readFile(join(at, "package.json"), "utf-8")).version;
+}
+
+/** Whether two generators are different versions. */
+export function generatorsDiffer(a: Generator, b: Generator): boolean {
+  return a.auroCli !== b.auroCli || a.analyzer !== b.analyzer;
+}
+
+/** The generator installed in `dir`, or `null` when neither package is there. */
+async function detectGenerator(dir: string): Promise<Generator | null> {
+  const auroCli = await installedVersion(dir, AURO_CLI);
+  const analyzer = await installedVersion(dir, ANALYZER);
+  return auroCli || analyzer ? { auroCli, analyzer } : null;
+}
+
+/**
+ * The command that writes only the manifest: the repo's own `analyze` script
+ * (auro-formkit has one), else the analyzer with auro-cli's config, which is
+ * what `auro build` runs. `null` when neither exists (auro-cli before 3.5).
+ */
+async function manifestCommand(dir: string): Promise<string | null> {
+  const pkg = JSON.parse(await readFile(join(dir, "package.json"), "utf-8"));
+  if (pkg.scripts?.analyze) {
+    return "npm run analyze";
+  }
+  const cliDir = packageDir(dir, AURO_CLI);
+  const analyzerDir = packageDir(dir, ANALYZER);
+  const config = cliDir
+    ? join(cliDir, "dist", "configs", "custom-elements-manifest.config.mjs")
+    : null;
+  if (!config || !existsSync(config) || !analyzerDir) {
+    return null;
+  }
+  return `node "${join(analyzerDir, "cem.js")}" analyze --config "${config}"`;
 }
 
 /**
  * Check out `sha` in a temporary worktree, install and build it, and return the
- * parsed manifest at `manifestPath`. The worktree is always removed, including
- * when `worktree add` fails or the process is interrupted.
+ * parsed manifest at `manifestPath` and the generator the checkout installed.
+ * The worktree is always removed, including when `worktree add` fails or the
+ * process is interrupted.
+ *
+ * With `pin`, those generator versions are installed over the checkout's own
+ * and only the manifest is generated, not the full build (which falls back to
+ * the full build when the checkout has no way to generate the manifest alone).
+ * That shows what the checkout's code produces under another generator.
  */
 export async function buildManifestAt(
   cwd: string,
   sha: string,
   manifestPath: string,
   commands: BuildCommands,
-): Promise<unknown> {
+  pin?: Generator,
+): Promise<{ manifest: unknown; generator: Generator | null }> {
   const dir = await mkdtemp(join(tmpdir(), "auro-api-diff-"));
   trackWorktree(dir, cwd);
   try {
     await git(cwd, ["worktree", "add", "--detach", "--force", dir, sha]);
     await runCommand(commands.install, dir);
-    await runCommand(commands.build, dir);
-    return JSON.parse(await readFile(join(dir, manifestPath), "utf-8"));
+    if (pin) {
+      const pins = [
+        pin.auroCli && `${AURO_CLI}@${pin.auroCli}`,
+        pin.analyzer && `${ANALYZER}@${pin.analyzer}`,
+      ].filter(Boolean);
+      await runCommand(`${commands.pin} ${pins.join(" ")}`, dir);
+    }
+    const generator = await detectGenerator(dir);
+    const generate = pin ? await manifestCommand(dir) : null;
+    await runCommand(generate ?? commands.build, dir);
+    return {
+      manifest: JSON.parse(await readFile(join(dir, manifestPath), "utf-8")),
+      generator,
+    };
   } finally {
     await git(cwd, ["worktree", "remove", "--force", dir]).catch(() => {});
     await rm(dir, { recursive: true, force: true }).catch(() => {});

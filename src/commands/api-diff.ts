@@ -74,7 +74,8 @@ export async function runApiDiffCommand(
     if (result.changes.length > 0) {
       console.error("\nChanges:");
       for (const change of result.changes) {
-        console.error(`  [${change.bump}] ${change.message}`);
+        const from = change.cause === "generator" ? " (generator upgrade)" : "";
+        console.error(`  [${change.bump}] ${change.message}${from}`);
       }
     }
     if (result.commits.length > 0) {
