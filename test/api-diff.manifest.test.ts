@@ -12,6 +12,7 @@ import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import {
   diffManifests,
+  normalizeDefault,
   normalizeValue,
   splitUnion,
 } from "../src/scripts/api-diff/manifest-diff.ts";
@@ -259,7 +260,7 @@ test("an attribute that stops reflecting is major; starting to reflect isn't a c
   assert.deepEqual(diff(plain, reflects), []);
 });
 
-test("a default value changed, added or removed is major", () => {
+test("a changed default value is major; documenting a default or removing its documentation is minor", () => {
   const none = manifest({ members: [field("size")] });
   const md = manifest({ members: [field("size", { default: '"md"' })] });
   const lg = manifest({ members: [field("size", { default: '"lg"' })] });
@@ -270,10 +271,10 @@ test("a default value changed, added or removed is major", () => {
     ],
   ]);
   assert.deepEqual(diff(none, md), [
-    ["major", 'Added default `"md"` to property `size` on `<auro-button>`'],
+    ["minor", 'Added default `"md"` to property `size` on `<auro-button>`'],
   ]);
   assert.deepEqual(diff(md, none), [
-    ["major", 'Removed default `"md"` from property `size` on `<auro-button>`'],
+    ["minor", 'Removed default `"md"` from property `size` on `<auro-button>`'],
   ]);
 });
 
@@ -343,4 +344,257 @@ test("widening a union that contains a function type is minor", () => {
       "Widened type of property `onChange` on `<auro-button>` (added `undefined`)",
     ],
   ]);
+});
+
+test("attribute names are compared case-insensitively, as HTML does", () => {
+  const camel = manifest({ attributes: [{ name: "tIndex" }] });
+  const lower = manifest({ attributes: [{ name: "tindex" }] });
+  assert.deepEqual(diff(camel, lower), []);
+  assert.deepEqual(diff(camel, manifest()), [
+    ["major", "Removed attribute `tIndex` from `<auro-button>`"],
+  ]);
+});
+
+test("nameless entries are ignored, but the default slot isn't", () => {
+  const base = manifest({ slots: [{ name: "" }] });
+  const head = manifest({
+    attributes: [{}],
+    members: [{ kind: "field" }],
+    events: [{ description: "no name" }],
+    slots: [{ name: "" }],
+  });
+  assert.deepEqual(diff(base, head), []);
+});
+
+test("a comma-separated literal list is the same type as a union", () => {
+  const comma = manifest({
+    members: [field("size", { type: { text: "'sm', 'md'" } })],
+  });
+  const union = manifest({
+    members: [field("size", { type: { text: '"sm" | "md"' } })],
+  });
+  assert.deepEqual(diff(comma, union), []);
+});
+
+test("a braced lone literal default is the same default", () => {
+  const braced = manifest({
+    members: [field("layout", { default: "{'default'}" })],
+  });
+  const plain = manifest({
+    members: [field("layout", { default: '"default"' })],
+  });
+  assert.deepEqual(diff(braced, plain), []);
+  assert.equal(normalizeDefault("{null}"), "null");
+  assert.equal(normalizeDefault("{ a: 1 }"), "{ a: 1 }");
+});
+
+/** Diff one property whose metadata goes from `from` to `to`. */
+function metadataDiff(
+  from: Record<string, unknown>,
+  to: Record<string, unknown>,
+): Array<[string, string]> {
+  return diff(
+    manifest({ members: [field("size", from)] }),
+    manifest({ members: [field("size", to)] }),
+  );
+}
+const SIZE = "property `size` on `<auro-button>`";
+
+test("a new or broader requiredWhen is major; dropping or narrowing one is minor", () => {
+  assert.deepEqual(metadataDiff({}, { requiredWhen: "isDropdown" }), [
+    ["major", `Made ${SIZE} required when \`isDropdown\``],
+  ]);
+  assert.deepEqual(
+    metadataDiff({ requiredWhen: "isDropdown" }, { requiredWhen: "always" }),
+    [
+      [
+        "major",
+        `Changed when ${SIZE} is required from \`isDropdown\` to \`always\``,
+      ],
+    ],
+  );
+  assert.deepEqual(
+    metadataDiff({ requiredWhen: "isDropdown" }, { requiredWhen: "isModal" }),
+    [
+      [
+        "major",
+        `Changed when ${SIZE} is required from \`isDropdown\` to \`isModal\``,
+      ],
+    ],
+  );
+  assert.deepEqual(
+    metadataDiff({ requiredWhen: "always" }, { requiredWhen: "isDropdown" }),
+    [["minor", `Made ${SIZE} required only when \`isDropdown\``]],
+  );
+  assert.deepEqual(metadataDiff({ requiredWhen: "always" }, {}), [
+    ["minor", `Made ${SIZE} no longer required`],
+  ]);
+});
+
+test("tightening a bound is major; loosening or removing one is minor", () => {
+  assert.deepEqual(metadataDiff({}, { minimum: 0 }), [
+    ["major", `Added minimum \`0\` to ${SIZE}`],
+  ]);
+  assert.deepEqual(metadataDiff({ minimum: 0 }, { minimum: 1 }), [
+    ["major", `Tightened minimum of ${SIZE} from \`0\` to \`1\``],
+  ]);
+  assert.deepEqual(metadataDiff({ maximum: 10 }, { maximum: 5 }), [
+    ["major", `Tightened maximum of ${SIZE} from \`10\` to \`5\``],
+  ]);
+  assert.deepEqual(metadataDiff({ minimum: 1 }, { minimum: 0 }), [
+    ["minor", `Loosened minimum of ${SIZE} from \`1\` to \`0\``],
+  ]);
+  assert.deepEqual(metadataDiff({ maximum: 5 }, {}), [
+    ["minor", `Removed maximum \`5\` from ${SIZE}`],
+  ]);
+});
+
+test("becoming read-only is major; becoming writable is minor", () => {
+  assert.deepEqual(metadataDiff({}, { readonly: true }), [
+    ["major", `Made ${SIZE} read-only`],
+  ]);
+  assert.deepEqual(metadataDiff({ readonly: true }, {}), [
+    ["minor", `Made ${SIZE} writable`],
+  ]);
+});
+
+test("deprecating, relevantWhen and category changes are minor guidance", () => {
+  assert.deepEqual(metadataDiff({}, { deprecated: "Use variant" }), [
+    ["minor", `Deprecated ${SIZE}`],
+  ]);
+  assert.deepEqual(
+    metadataDiff({ deprecated: "Use variant" }, { deprecated: "Use shape" }),
+    [],
+  );
+  assert.deepEqual(metadataDiff({}, { relevantWhen: "isDropdown" }), [
+    ["minor", `Added \`relevantWhen\` \`isDropdown\` to ${SIZE}`],
+  ]);
+  assert.deepEqual(metadataDiff({ category: "layout" }, { category: "a11y" }), [
+    ["minor", `Changed \`category\` of ${SIZE} from \`layout\` to \`a11y\``],
+  ]);
+  assert.deepEqual(metadataDiff({ relevantWhen: "isDropdown" }, {}), [
+    ["minor", `Removed \`relevantWhen\` \`isDropdown\` from ${SIZE}`],
+  ]);
+});
+
+test("slot and unbacked attribute metadata is compared; backed attributes report once", () => {
+  assert.deepEqual(
+    diff(
+      manifest({ slots: [{ name: "label" }] }),
+      manifest({ slots: [{ name: "label", requiredWhen: "always" }] }),
+    ),
+    [["major", "Made slot `label` on `<auro-button>` required when `always`"]],
+  );
+  assert.deepEqual(
+    diff(
+      manifest({ attributes: [{ name: "tindex" }] }),
+      manifest({ attributes: [{ name: "tindex", minimum: -1 }] }),
+    ),
+    [["major", "Added minimum `-1` to attribute `tindex` on `<auro-button>`"]],
+  );
+  const backed = (extra: Record<string, unknown>) =>
+    manifest({
+      attributes: [{ name: "size", fieldName: "size", ...extra }],
+      members: [field("size", extra)],
+    });
+  assert.deepEqual(diff(backed({}), backed({ readonly: true })), [
+    ["major", `Made ${SIZE} read-only`],
+  ]);
+});
+
+test("method parameters: removing or requiring one is major; adding an optional one is minor", () => {
+  const method = (...parameters: Record<string, unknown>[]) =>
+    manifest({ members: [{ kind: "method", name: "focus", parameters }] });
+  const FOCUS = "method `focus` on `<auro-button>`";
+  assert.deepEqual(diff(method({ name: "options" }), method()), [
+    ["major", `Removed parameter \`options\` from ${FOCUS}`],
+  ]);
+  assert.deepEqual(
+    diff(method(), method({ name: "options", optional: true })),
+    [["minor", `Added optional parameter \`options\` to ${FOCUS}`]],
+  );
+  assert.deepEqual(diff(method(), method({ name: "options" })), [
+    ["major", `Added required parameter \`options\` to ${FOCUS}`],
+  ]);
+  assert.deepEqual(
+    diff(method({ name: "a", optional: true }), method({ name: "a" })),
+    [["major", `Made parameter \`a\` of ${FOCUS} required`]],
+  );
+  // Renaming a parameter doesn't change how it's called.
+  assert.deepEqual(diff(method({ name: "a" }), method({ name: "b" })), []);
+});
+
+test("literal unions and their primitive: narrowing to literals is major, widening to the primitive is minor", () => {
+  const typed = (text: string) =>
+    manifest({ members: [field("size", { type: { text } })] });
+  assert.deepEqual(diff(typed("string"), typed("'sm' | 'md'")), [
+    ["major", `Narrowed type of ${SIZE} (removed \`string\`)`],
+  ]);
+  assert.deepEqual(diff(typed("'sm' | 'md'"), typed("string")), [
+    ["minor", `Widened type of ${SIZE} (added \`string\`)`],
+  ]);
+  assert.deepEqual(diff(typed("1 | 2"), typed("number")), [
+    ["minor", `Widened type of ${SIZE} (added \`number\`)`],
+  ]);
+  assert.deepEqual(diff(typed("'sm' | 'md'"), typed("number")), [
+    ["major", `Changed type of ${SIZE} from \`"sm" | "md"\` to \`number\``],
+  ]);
+});
+
+test("a wrapper type name is the primitive, and an `undefined` default is no default", () => {
+  const typed = (text: string) =>
+    manifest({ members: [field("role", { type: { text } })] });
+  assert.deepEqual(diff(typed("String"), typed("string")), []);
+  assert.deepEqual(
+    diff(typed("Boolean | undefined"), typed("boolean | undefined")),
+    [],
+  );
+  assert.deepEqual(metadataDiff({ default: "undefined" }, {}), []);
+  assert.deepEqual(metadataDiff({}, { default: "undefined" }), []);
+});
+
+/**
+ * Regression cases from the Phase 0 replay of past releases: the manifests each
+ * release published to npm, stored minified in fixtures/api-diff/ (`.min.json`,
+ * so Biome leaves them as they are).
+ */
+async function published(name: string): Promise<Manifest> {
+  const raw = await readFile(
+    new URL(`./fixtures/api-diff/${name}.min.json`, import.meta.url),
+    "utf-8",
+  );
+  return JSON.parse(raw);
+}
+
+test("auro-button 12.4.0 → 12.4.1: only formatting and attribute case changed, so no API change", async () => {
+  // Once flagged major: `tIndex` → `tindex` and `loadingText` → `loadingtext`
+  // read as removed and added attributes.
+  assert.deepEqual(
+    diffManifests(
+      await published("auro-button-12.4.0"),
+      await published("auro-button-12.4.1"),
+    ),
+    [],
+  );
+});
+
+test("auro-nav 4.1.0 → 4.1.1: hiding inherited hyperlink properties is major", async () => {
+  // Released as a `perf:` patch; the JSDoc marked inherited properties private.
+  const changes = diffManifests(
+    await published("auro-nav-4.1.0"),
+    await published("auro-nav-4.1.1"),
+  );
+  const majors = changes.filter((c) => c.bump === "major");
+  assert.equal(majors.length, 52);
+  assert.ok(
+    majors.some(
+      (c) =>
+        c.message === "Removed attribute `download` from `<auro-anchorlink>`",
+    ),
+  );
+  assert.ok(
+    majors.some((c) =>
+      /^Made property `\w+` on `<auro-anchorlink>` private$/u.test(c.message),
+    ),
+  );
 });

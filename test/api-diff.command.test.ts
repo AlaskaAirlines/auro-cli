@@ -25,6 +25,7 @@ import { fileURLToPath } from "node:url";
 import { runApiDiffCommand } from "../src/commands/api-diff.ts";
 import { SHARED_ANALYZER_OPTIONS } from "../src/scripts/api-diff/declared.ts";
 import { runApiDiff } from "../src/scripts/api-diff/index.ts";
+import type { Manifest } from "../src/utils/cem.ts";
 import {
   captureError,
   captureWrite,
@@ -326,6 +327,148 @@ test("the manifest is rebuilt at both refs in worktrees that are cleaned up", as
   assert.equal(git(cwd, "worktree", "list").split("\n").length, 1);
 });
 
+/**
+ * A fake generator: `install` writes the auro-cli and analyzer versions in
+ * `generator.json` into node_modules, `pin` overwrites them with `name@version`
+ * arguments, and the fake analyzer's `cem.js` writes `api.json` to `built.json`
+ * plus a `gen-<auro-cli version>` attribute, so the output depends on the
+ * generator version the way real formatting changes do.
+ */
+const FAKE_GENERATOR = `
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+const [mode, ...specs] = process.argv.slice(2);
+const versions = mode === "install"
+  ? JSON.parse(readFileSync("generator.json", "utf-8"))
+  : Object.fromEntries(specs.map((s) => [s.slice(0, s.lastIndexOf("@")), s.slice(s.lastIndexOf("@") + 1)]));
+for (const [name, version] of Object.entries(versions)) {
+  const dir = "node_modules/" + name;
+  mkdirSync(dir + "/dist/configs", { recursive: true });
+  writeFileSync(dir + "/package.json", JSON.stringify({ name, version }));
+  writeFileSync(dir + "/dist/configs/custom-elements-manifest.config.mjs", "export default {};\\n");
+  copyFileSync("fake-cem.mjs", dir + "/cem.js");
+}
+`;
+const FAKE_CEM = `
+import { readFileSync, writeFileSync } from "node:fs";
+const read = (file) => JSON.parse(readFileSync(file, "utf-8"));
+const { version } = read("node_modules/@aurodesignsystem/auro-cli/package.json");
+const manifest = read("api.json");
+manifest.modules[0].declarations[0].attributes.push({ name: "gen-" + version });
+writeFileSync("built.json", JSON.stringify(manifest));
+`;
+const ANALYZER_CEM = "node_modules/@custom-elements-manifest/analyzer/cem.js";
+const generatorCommands = {
+  install: "node gen.mjs install",
+  pin: "node gen.mjs pin",
+  build: `node ${ANALYZER_CEM}`,
+};
+
+/** A built-manifest repo whose generator goes from auro-cli 4.0.0 to 5.0.0 on `feature`. */
+async function generatorRepo(t: TestContext): Promise<string> {
+  const cwd = await tempCwd(t);
+  await initRepo(cwd);
+  const generator = (auroCli: string) => ({
+    "@aurodesignsystem/auro-cli": auroCli,
+    "@custom-elements-manifest/analyzer": "0.11.0",
+  });
+  await commit(cwd, "feat: initial release", {
+    "package.json": { name: "x", customElements: "built.json" },
+    ".releaserc.json": RELEASERC,
+    ".gitignore": "built.json\n",
+    "gen.mjs": FAKE_GENERATOR,
+    "fake-cem.mjs": FAKE_CEM,
+    "generator.json": generator("4.0.0"),
+    "api.json": button("ondark"),
+    "src/a.js": "a\n",
+  });
+  git(cwd, "checkout", "-q", "-b", "feature");
+  await commit(cwd, "build: upgrade auro-cli", {
+    "generator.json": generator("5.0.0"),
+    "src/a.js": "b\n",
+  });
+  return cwd;
+}
+
+test("a generator upgrade's manifest changes count, attributed to the upgrade", async (t) => {
+  const cwd = await generatorRepo(t);
+  const result = await runApiDiff("dev", "feature", {
+    cwd,
+    commands: generatorCommands,
+  });
+  // The published manifest changed, so the change counts toward the bump.
+  assert.equal(result.required, "major");
+  const manifest = result.changes.filter((c) => c.source === "manifest");
+  assert.deepEqual(
+    manifest.map((c) => [c.message, c.cause]),
+    [
+      ["Removed attribute `gen-4.0.0` from `<auro-button>`", "generator"],
+      ["Added attribute `gen-5.0.0` to `<auro-button>`", "generator"],
+    ],
+  );
+  assert.deepEqual(result.generators, {
+    base: { auroCli: "4.0.0", analyzer: "0.11.0" },
+    head: { auroCli: "5.0.0", analyzer: "0.11.0" },
+  });
+  assert.match(
+    result.summary,
+    /2 of the manifest changes come from upgrading auro-cli 4\.0\.0 to auro-cli 5\.0\.0/u,
+  );
+});
+
+test("with a generator upgrade, code changes are still attributed to the code", async (t) => {
+  const cwd = await generatorRepo(t);
+  await commit(cwd, "feat: add fluid", {
+    "api.json": button("ondark", "fluid"),
+  });
+  const result = await runApiDiff("dev", "feature", {
+    cwd,
+    commands: generatorCommands,
+  });
+  const causes = Object.fromEntries(
+    result.changes
+      .filter((c) => c.source === "manifest")
+      .map((c) => [c.message, c.cause]),
+  );
+  assert.equal(causes["Added attribute `fluid` to `<auro-button>`"], "code");
+  assert.equal(
+    causes["Removed attribute `gen-4.0.0` from `<auro-button>`"],
+    "generator",
+  );
+});
+
+test("without a generator change, nothing extra is built or attributed", async (t) => {
+  const cwd = await generatorRepo(t);
+  git(cwd, "checkout", "-q", "dev");
+  git(cwd, "checkout", "-q", "-b", "same-generator");
+  await commit(cwd, "feat: add fluid", {
+    "api.json": button("ondark", "fluid"),
+  });
+  const result = await runApiDiff("dev", "same-generator", {
+    cwd,
+    // Pinning would fail; it must not run.
+    commands: { ...generatorCommands, pin: "node -e process.exit(1)" },
+  });
+  assert.deepEqual(result.reasons.slice(0, 1), [
+    "Added attribute `fluid` to `<auro-button>`",
+  ]);
+  assert.ok(result.changes.every((c) => c.cause === undefined));
+  assert.deepEqual(result.warnings, []);
+});
+
+test("if the base won't build with the head's generator, the changes still count, unattributed", async (t) => {
+  const cwd = await generatorRepo(t);
+  const result = await runApiDiff("dev", "feature", {
+    cwd,
+    commands: { ...generatorCommands, pin: "node -e process.exit(1)" },
+  });
+  assert.equal(result.required, "major");
+  assert.ok(result.changes.every((c) => c.cause === undefined));
+  assert.match(
+    result.warnings[0],
+    /couldn't be split between the code and the generator upgrade/u,
+  );
+});
+
 const REGISTER = new URL("./register.mjs", import.meta.url).href;
 const INDEX = new URL("../src/scripts/api-diff/index.ts", import.meta.url).href;
 
@@ -385,6 +528,25 @@ await runApiDiff("dev", "feature", { cwd, commands: { install: hang, build: hang
     assert.equal(existsSync(worktree), false);
   },
 );
+
+test("supplied manifests are compared instead of building", async (t) => {
+  const cwd = await buildRepo(t);
+  await commit(cwd, "fix: x", { "src/a.js": "b\n" });
+  const result = await runApiDiff("dev", "feature", {
+    cwd,
+    // Would fail if anything were built.
+    commands: { install: "node -e 0", build: "node -e process.exit(1)" },
+    manifests: {
+      base: button("ondark") as Manifest,
+      head: button() as Manifest,
+    },
+  });
+  assert.equal(
+    result.reasons[0],
+    "Removed attribute `ondark` from `<auro-button>`",
+  );
+  assert.equal(result.outcome, "fail");
+});
 
 test("changes confined to tests, CI and docs skip the rebuild", async (t) => {
   const cwd = await buildRepo(t);

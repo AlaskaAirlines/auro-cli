@@ -36,6 +36,75 @@ function exportSubpaths(exports: unknown): Set<string> {
   return new Set(["."]);
 }
 
+/** The file targets an export entry maps to, across conditions and fallbacks. */
+function exportTargets(exports: unknown, subpath: string): string[] {
+  let entry: unknown = exports;
+  if (
+    typeof exports === "object" &&
+    exports !== null &&
+    !Array.isArray(exports)
+  ) {
+    const map = exports as Record<string, unknown>;
+    if (Object.keys(map).every((key) => key.startsWith("."))) {
+      entry = map[subpath];
+    }
+  }
+  const targets: string[] = [];
+  const walk = (value: unknown) => {
+    if (typeof value === "string") {
+      targets.push(value);
+    } else if (Array.isArray(value)) {
+      value.forEach(walk);
+    } else if (value && typeof value === "object") {
+      Object.values(value).forEach(walk);
+    }
+  };
+  walk(entry);
+  return targets;
+}
+
+/** Files npm never publishes, whatever `files` says. */
+const NEVER_PUBLISHED = /^(package-lock\.json|\.npmrc|node_modules\/|\.git\/)/u;
+/** Files npm always publishes, whatever `files` says. */
+const ALWAYS_PUBLISHED =
+  /^(package\.json|readme(\.[^/]*)?|licen[cs]e(\.[^/]*)?)$/iu;
+
+/** The part of a path or glob before its first wildcard. */
+function literalPrefix(path: string): string {
+  const star = path.indexOf("*");
+  return star === -1 ? path : path.slice(0, star);
+}
+
+/**
+ * Whether an export target is in the published package: not a file npm never
+ * publishes, and covered by `files` (or always published, or no `files` list).
+ * Wildcard targets and `files` globs are compared by their literal prefixes.
+ */
+export function isPublishedTarget(target: string, files?: string[]): boolean {
+  const path = target.replace(/^\.\//u, "");
+  if (NEVER_PUBLISHED.test(path)) {
+    return false;
+  }
+  if (!files || ALWAYS_PUBLISHED.test(path)) {
+    return true;
+  }
+  const targetPrefix = literalPrefix(path);
+  return files.some((entry) => {
+    const normalized = entry.replace(/^\.\//u, "").replace(/\/$/u, "");
+    if (!normalized.includes("*")) {
+      return path === normalized || path.startsWith(`${normalized}/`);
+    }
+    return targetPrefix.startsWith(literalPrefix(normalized));
+  });
+}
+
+/** Whether any of an export's targets is in the published package. */
+function resolves(pkg: PackageJson, subpath: string): boolean {
+  return exportTargets(pkg.exports, subpath).some((target) =>
+    isPublishedTarget(target, pkg.files),
+  );
+}
+
 /**
  * The breaking-change line a range targets: its minimum version's major, or
  * `0.<minor>` below 1.0.0, where semver treats a minor bump as breaking.
@@ -133,22 +202,40 @@ export function diffPackageJson(
       message: "Added `exports`, which blocks imports of unlisted paths",
     });
   }
+  // An export whose target isn't in the published package never resolved, so
+  // removing or adding one is a packaging fix, not an API change.
   for (const subpath of baseExports) {
     if (!headExports.has(subpath)) {
-      changes.push({
-        bump: "major",
-        source: "package",
-        message: `Removed export \`${subpath}\``,
-      });
+      changes.push(
+        resolves(base, subpath)
+          ? {
+              bump: "major",
+              source: "package",
+              message: `Removed export \`${subpath}\``,
+            }
+          : {
+              bump: "patch",
+              source: "package",
+              message: `Removed export \`${subpath}\`, which never resolved: its target isn't in the published package`,
+            },
+      );
     }
   }
   for (const subpath of headExports) {
     if (!introduced && !baseExports.has(subpath)) {
-      changes.push({
-        bump: "minor",
-        source: "package",
-        message: `Added export \`${subpath}\``,
-      });
+      changes.push(
+        resolves(head, subpath)
+          ? {
+              bump: "minor",
+              source: "package",
+              message: `Added export \`${subpath}\``,
+            }
+          : {
+              bump: "patch",
+              source: "package",
+              message: `Added export \`${subpath}\`, which won't resolve: its target isn't in the published package`,
+            },
+      );
     }
   }
 
