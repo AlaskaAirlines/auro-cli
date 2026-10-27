@@ -51,6 +51,7 @@ Run `auro <command> --help` for options on any command. Defaults are shown where
 | `auro rc-workflow` | Cuts the RC branch and opens the RC PR. |
 | `auro pr-release` | Sets the PR preview version in `package.json`. |
 | `auro check-commits` (alias `auro cc`) | Classifies commits and can label the PR. |
+| `auro api-diff` | Checks that a PR's commits declare a big enough version bump for its code changes. |
 
 ## Full reference
 
@@ -182,6 +183,61 @@ Reads the repo's commits, classifies each by conventional-commit type, and repor
 - `-l, --set-label`: label the PR by the highest-priority commit type.
 - `-d, --debug`: print detailed commit info.
 - `-r, --release-notes`: generate release notes from the commits.
+
+#### `auro api-diff <baseRef> [headRef]`
+
+Works out the smallest version bump the code changes from `baseRef` to `headRef` (default `HEAD`) require, and checks that the commits declare at least that much. A version number is a promise to consumers, so a `fix:` commit that removes a public attribute shouldn't ship as a patch.
+
+- `--json`: write the result to stdout as JSON.
+- `--enforce`: exit 1 when the commits declare a smaller bump than the code requires (default: off, so the check can run report-only).
+- `--no-rebuild`: compare the committed `custom-elements.json` files instead of rebuilding them. Faster, but only as good as the committed files, and many repos don't commit the manifest.
+- `--manifest <path>`: manifest path from the repo root (default: `customElements` in `package.json`, else `custom-elements.json`).
+- `--install-command <cmd>`: installs dependencies in each rebuilt checkout (default: `npm ci --no-audit --no-fund`).
+- `--build-command <cmd>`: writes the manifest in each rebuilt checkout (default: `npm run build`).
+
+```bash
+auro api-diff origin/dev
+```
+
+Everything is compared from the merge base of the two refs, so only the PR's own changes and commits count.
+
+**Required bump.** [Auro Release Versioning Rules](docs/versioning-rules.md) lists every rule, with examples. In short, the manifest is the contract: AI tools and other automation build pages from it, and the published TypeScript types come from the same JSDoc. So any change to it counts, whether or not runtime behavior changed. The test is whether markup that was valid before still is. The required bump is the highest among these changes:
+
+| Change | Bump |
+|---|---|
+| Element removed or renamed; public attribute, property, method, event, slot, CSS part or CSS custom property removed or made private; type narrowed or replaced; attribute stops reflecting; default value changed | Major |
+| `requiredWhen` added, or made broader or different; `minimum`/`maximum` added or tightened; made `readonly`; method parameter removed, made required, or a required one added | Major |
+| `exports` entry, `main`, `types` or `files` entry removed; `exports` added where there was none; peer or runtime dependency moved to a new major; `engines` tightened | Major |
+| Element or public member added; private member made public; type widened; `exports` entry added | Minor |
+| `requiredWhen` removed or narrowed; `minimum`/`maximum` loosened or removed; made writable; deprecated or un-deprecated; `relevantWhen` or `category` added, changed or removed; a default documented or its documentation removed; optional method parameter added | Minor |
+| Any file under `src/` or `demo/`, or a `README.md` | Patch |
+| Only `test/`, `.github/`, `docs/` or other unpublished files | None |
+
+Only public API counts. Members are filtered on the manifest's `privacy` field, not on name prefixes. Attributes backed by a private or `@internal` property don't count. Formatting differences don't count: quote style, `'a', 'b'` vs `'a' | 'b'`, a braced default like `{'md'}`, and attribute name case (HTML attribute names are case-insensitive).
+
+The manifest is rebuilt at both refs in temporary git worktrees, by default with `npm ci` and `npm run build`, each with its own dependencies, so the comparison is between the manifests that actually ship. When the PR upgrades auro-cli or the CEM analyzer, newer versions can write the manifest differently, which changes the contract even though the component's code didn't. Those changes count, but the base is also built with the head's versions so each change is marked as coming from the code or from the upgrade (`cause` in the JSON, and a note in the summary). The rebuild is skipped when only `test/`, `.github/` or `docs/` changed. If the head doesn't build, the check errors (fails closed). If the base doesn't build, the check uses the base's committed manifest, or skips the API comparison, and says so in `warnings` (fails open): a PR shouldn't be blocked by a base it didn't break.
+
+**Declared bump.** The highest bump among the non-merge commits, worked out by `@semantic-release/commit-analyzer` with the repo's own release config (usually `@aurodesignsystem/auro-config/releaserc`, including its custom rules: `refactor`, `style` and `docs(README)` release a patch). The analyzer is loaded from the repo's own `node_modules`, so the check reads commits exactly as the release will. Run `npm ci` in the repo first: the check errors when the analyzer isn't installed. If the repo's release config can't be resolved, the shared rules are used and `warnings` says so. The PR title never counts, because merge commits don't affect the version.
+
+**Outcome.**
+
+- `fail`: the commits declare less than the code requires. Reword the commits (`fix:` → `feat:`, or add `!` and a `BREAKING CHANGE:` footer).
+- `warn`: no release is required, but the commits declare one (for example, a `fix:` that only touches tests).
+- `pass`: otherwise. Declaring more than required is allowed, because behavior can break without the API changing.
+
+The JSON starts with `required` and `reasons`, followed by `declared`, `outcome`, a one-line `summary` for PR comments, the refs, each change and commit with its bump, the release config used, and any `warnings`:
+
+```json
+{
+  "required": "major",
+  "reasons": ["Removed attribute `ondark` from `<auro-button>`"],
+  "declared": "patch",
+  "outcome": "fail",
+  "summary": "Commits declare `fix` (patch). Code requires major: removed attribute `ondark` from `<auro-button>`."
+}
+```
+
+Exit codes: `0` when the analysis ran, `1` with `--enforce` when the outcome is `fail`, `2` when the analysis couldn't run (an unknown ref, a head that won't build, or no commit-analyzer installed in the repo).
 
 ### AI assistant context
 

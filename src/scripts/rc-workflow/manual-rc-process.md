@@ -30,7 +30,10 @@ The RC workflow coordinates three components:
    references in `AB#<id>` form (e.g. `ci: bump node AB#1597898`). These are the
    **committed work items**.
 2. Each committed work item's ADO relations are inspected to find the linked ticket
-   tagged **`auro-rcs`** — that is the **Release ticket**.
+   tagged **`auro-rcs`** — that is the **Release ticket**. Release tickets that
+   are already **Closed** (or **Removed**) belong to a release that
+   already shipped and are ignored, so mentioning an older ticket in a commit
+   message does not pull in its previous Release ticket.
 3. If more than one Release ticket is linked (e.g. a shared work item links to the
    RC tickets of several repos), the one for the current repo is selected — first
    by an **Area Path** segment naming the repo (`auro-accordion` or `Accordion`),
@@ -38,7 +41,7 @@ The RC workflow coordinates three components:
    (`rc/{ticketId}`) and it is referenced in the PR body.
 
 If the new commits do not link to a Release ticket (no `AB#<id>` references, or the
-referenced work items are not linked to an `auro-rcs` ticket), there is nothing to
+referenced work items are not linked to an open `auro-rcs` ticket), there is nothing to
 release yet — **no Release PR is created**.
 
 ## Step-by-Step Process
@@ -47,7 +50,7 @@ release yet — **no Release PR is created**.
 
 1. On `dev`, list the commits not yet in `main` and note every `AB#<id>` reference.
 2. Open each referenced work item in ADO and find its linked ticket tagged
-   `auro-rcs`. That is the Release ticket. Note its **id** (e.g. `1597900`).
+   `auro-rcs` that is not Closed or Removed. That is the Release ticket. Note its **id** (e.g. `1597900`).
 
 ### 2. Generate Release Notes Locally
 

@@ -14,6 +14,7 @@ import "#commands/test.js";
 import "#commands/agent.ts";
 import "#commands/cem.ts";
 import "#commands/cem-check.ts";
+import "#commands/api-diff.ts";
 import "#commands/context.ts";
 import "#commands/init.ts";
 import "#commands/component.ts";
