@@ -17,6 +17,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { run as buildFigma } from "#scripts/figma/build-figma.mjs";
+import { run as buildIcons } from "#scripts/figma/build-icons.mjs";
 import { run as buildMismatch } from "#scripts/figma/build-mismatch.mjs";
 import { run as buildTranslate } from "#scripts/figma/build-translate.mjs";
 import { resolveFigmaContext, runSteps } from "#scripts/figma/context.js";
@@ -49,6 +50,27 @@ export async function codeConnect(
   }
 
   const { ctx } = resolved;
+  if (ctx.iconLibrary) {
+    // The icon repo: there is no Figma component set to bind, so the mismatch file is code-side only (ctx.noFigma), and build-icons
+    // maps the Figma icon components to <auro-icon>: it tops up the icons table of <tag>.translate.md (its input) and writes the
+    // "unmapped" section of the mismatch file (output only). build-icons reads the Figma API, so `check` (which never fetches) leaves it out.
+    const needsToken = !options.check && !process.env.FIGMA_ACCESS_TOKEN;
+    if (needsToken) {
+      console.warn(
+        `auro docs: FIGMA_ACCESS_TOKEN is not set, skipping the icon mappings for ${ctx.tag}.`,
+      );
+    }
+    return runSteps(
+      [
+        { argv: [], step: genCemMap },
+        { argv: options.check ? ["--check"] : [], step: buildMismatch },
+        ...(options.check || needsToken
+          ? []
+          : [{ argv: [], step: buildIcons }]),
+      ],
+      ctx,
+    );
+  }
   if (
     options.check &&
     !existsSync(path.join(ctx.figmaDir, `${ctx.tag}.translate.md`))

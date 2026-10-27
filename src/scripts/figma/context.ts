@@ -15,6 +15,8 @@ import {
   COMMON_IGNORED_ATTRIBUTES,
   designAttributesFor,
   figmaNodesFor,
+  type IconLibrary,
+  iconLibraryFor,
 } from "./figma-connector.config.js";
 
 export interface FigmaContext {
@@ -39,6 +41,10 @@ export interface FigmaContext {
   ignoredAttributes?: string[];
   /** Limits the CEM to one component's modules in a monorepo. */
   modulePrefix?: string;
+  /** Set for the icon repo: the Figma file and frame whose icon components are mapped to `<auro-icon>`. */
+  iconLibrary?: IconLibrary;
+  /** No Figma component set: only the code side is reported (set for the icon repo). */
+  noFigma?: boolean;
 }
 
 export type Resolution =
@@ -124,7 +130,9 @@ export function resolveFigmaContext(cwd: string): Resolution {
     };
   }
   const tags = customElementTags(cemPath, modulePrefix);
-  const known = tags.filter((t) => figmaNodesFor(t).length);
+  const known = tags.filter(
+    (t) => figmaNodesFor(t).length || iconLibraryFor(t),
+  );
   if (!known.length) {
     return notRegistered(
       tags.length
@@ -156,6 +164,8 @@ export function resolveFigmaContext(cwd: string): Resolution {
       commonDesignAttributes: COMMON_DESIGN_ATTRIBUTES,
       ignoredAttributes: COMMON_IGNORED_ATTRIBUTES,
       modulePrefix,
+      iconLibrary: iconLibraryFor(tag),
+      noFigma: iconLibraryFor(tag) ? true : undefined,
     },
   };
 }

@@ -111,6 +111,8 @@ export function run(argv, runCtx) {
         const argNames = [];
         const tagAttrs = [];
         const children = [];
+        const childSlots = []; // the slot each entry of children is the content of (null for an insert)
+        const inserts = [];
         if (b.attr) tagAttrs.push(b.attr);
         for (const x of nodeBound) {
           if (x.kind === "enum") {
@@ -133,6 +135,25 @@ export function run(argv, runCtx) {
             );
             argNames.push(x.attr);
             tagAttrs.push(`\${${x.attr}}`);
+          } else if (x.kind === "insert") {
+            let v = x.figma
+              .replace(/[^a-zA-Z0-9 ]/g, "")
+              .split(/\s+/)
+              .map((w, i) =>
+                i ? w.charAt(0).toUpperCase() + w.slice(1) : w.toLowerCase(),
+              )
+              .join("");
+            while (RESERVED.has(v) || argNames.includes(v)) v += "_";
+            // `instance(<INSTANCE_SWAP property>)` renders whatever component is swapped in (through its own Code Connect mapping)
+            const inst = x.markup.match(/^instance\((.+)\)$/);
+            const shown = inst
+              ? `figma.instance(${q(inst[1].trim())})`
+              : `html\`${x.markup}\``;
+            propLines.push(
+              `    ${v}: figma.boolean(${q(x.figma)}, { true: ${shown}, false: undefined }),`,
+            );
+            argNames.push(v);
+            inserts.push({ v, slot: x.slot, position: x.position });
           } else {
             const isDefault = x.slot === "(default)";
             let v = x.slot.replace(/[^a-zA-Z0-9]/g, "");
@@ -146,6 +167,21 @@ export function run(argv, runCtx) {
             children.push(
               isDefault ? `\${${v}}` : `<span slot="${x.slot}">\${${v}}</span>`,
             );
+            childSlots.push(x.slot);
+          }
+        }
+        // An insert goes right before or after its slot's content; when that slot is not bound in this block, at the start or end.
+        for (const ins of inserts) {
+          const at = childSlots.indexOf(ins.slot);
+          const code = `\${${ins.v}}`;
+          if (at === -1)
+            ins.position === "before"
+              ? (children.unshift(code), childSlots.unshift(null))
+              : (children.push(code), childSlots.push(null));
+          else {
+            const pos = ins.position === "before" ? at : at + 1;
+            children.splice(pos, 0, code);
+            childSlots.splice(pos, 0, null);
           }
         }
         const open = `${[`<${map.tag}`, ...tagAttrs].join(" ")}>`;

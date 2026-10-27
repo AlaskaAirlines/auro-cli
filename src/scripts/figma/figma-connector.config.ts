@@ -114,6 +114,36 @@ export function designAttributesFor(tag: string): string[] | undefined {
   return own && [...new Set([...own, ...COMMON_DESIGN_ATTRIBUTES])];
 }
 
+/**
+ * Icon libraries: for a tag listed here (the repo that ships the icons) Code Connect maps every
+ * icon component of the Figma file's `frame` to `<auro-icon category name>` instead of binding a
+ * component set. Components with no icon of the same name in @alaskaairux/icons are listed in
+ * `figma/<tag>.unmatched.md` and not mapped.
+ */
+export interface IconLibrary {
+  file: string;
+  frame: string;
+  /**
+   * Categories whose icon names carry a prefix in @alaskaairux/icons that the Figma component
+   * name does not: Figma `hazmat/aerosol-filled` is `<auro-icon category="hazmat"
+   * name="hazmat-aerosol-filled">`.
+   */
+  namePrefixes?: Record<string, string>;
+}
+
+export const FIGMA_ICON_LIBRARIES: Record<string, IconLibrary> = {
+  "auro-icon": {
+    file: "lZwTWQqadBc84DJcZ26RU7",
+    frame: "Icon Library",
+    namePrefixes: { hazmat: "hazmat-" },
+  },
+};
+
+/** The icon library of a tag, if it has one. */
+export function iconLibraryFor(tag: string): IconLibrary | undefined {
+  return FIGMA_ICON_LIBRARIES[tag];
+}
+
 /** Full component set URLs (each with `?node-id=`) for a tag; empty if it is not listed. */
 export function figmaNodesFor(tag: string): string[] {
   return (FIGMA_COMPONENTS[tag] ?? []).map((n) =>

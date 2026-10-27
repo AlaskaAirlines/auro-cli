@@ -152,7 +152,18 @@ export function loadComponent(
             warnings.push(`${where}: TBD translation left unmapped`);
             (section === "other" ? tbdOther : tbdSlots).add(name);
           } else if (section === "other") {
+            // `<markup>` before|after `<slot>`: a BOOLEAN property that adds the markup next to that slot's content when on
+            const ins = (cells[1] ?? "")
+              .trim()
+              .match(/^`(<.+>|instance\(.+\))`\s+(before|after)\s+`([^`]+)`$/);
             if (/^n\/a\b/i.test(tr)) other.push({ prop: name, note, where });
+            else if (ins)
+              other.push({
+                prop: name,
+                note,
+                where,
+                insert: { markup: ins[1], position: ins[2], slot: ins[3] },
+              });
             else
               errors.push(
                 `${where}: unrecognised translation ${cells[1]} (a Figma boolean or instance property can only be n/a for now)`,
@@ -495,7 +506,28 @@ export function loadComponent(
         });
       continue;
     }
-    if (other.some((x) => norm(x.prop) === norm(p.name))) continue; // an n/a row owns the property
+    const otherRow = other.find((x) => norm(x.prop) === norm(p.name));
+    if (otherRow) {
+      // a row owns the property: n/a leaves it unbound, an insert row binds a BOOLEAN to markup placed next to a slot
+      if (otherRow.insert && p.type === "BOOLEAN") {
+        const target = slotByNorm.get(norm(otherRow.insert.slot));
+        if (!target)
+          errors.push(
+            `${otherRow.where}: slot "${otherRow.insert.slot}" is not a slot of ${tag}`,
+          );
+        else
+          bound.push({
+            kind: "insert",
+            nodeId: p.nodeId,
+            figma: p.name,
+            markup: otherRow.insert.markup,
+            position: otherRow.insert.position,
+            slot: target.name,
+            basis: "translate",
+          });
+      }
+      continue;
+    }
     const s = slotByNorm.get(norm(p.name));
     const a = attrByNorm.get(norm(p.name));
     if (p.type === "TEXT" && s) {
@@ -705,7 +737,9 @@ export function gaps(c) {
       if (!x.fallback?.includes(o)) coveredValues.get(x.attr).add(v);
   }
   const addressedAttrs = new Set([
-    ...bound.filter((x) => x.kind !== "slot").map((x) => x.attr),
+    ...bound
+      .filter((x) => x.kind !== "slot" && x.kind !== "insert")
+      .map((x) => x.attr),
     ...stateBlocks.filter((b) => b.attr).map((b) => b.attr),
   ]);
   const unAttrs = eligible.filter((a) => !addressedAttrs.has(a.name));
