@@ -128,7 +128,7 @@ export default class Docs {
       sections.push(element.description);
     }
     
-    // Properties & Attributes table
+    // Properties and attributes table
     const propertiesTable = renderPropertiesAttributesTable(element);
     if (propertiesTable) {
       sections.push(propertiesTable.trim());
@@ -173,9 +173,9 @@ export default class Docs {
       sections.push(slotsTable.trim());
     }
     
-    // CSS Shadow Parts table
+    // CSS shadow parts table
     const cssPartsTable = renderTable(
-      "CSS Shadow Parts",
+      "CSS shadow parts",
       ["name", "description"],
       element.cssParts as unknown as Record<string, unknown>[],
     );
@@ -183,9 +183,9 @@ export default class Docs {
       sections.push(cssPartsTable.trim());
     }
     
-    // CSS Custom Properties table
+    // CSS custom properties table
     const cssPropertiesTable = renderTable(
-      "CSS Custom Properties",
+      "CSS custom properties",
       ["name", "description"],
       element.cssProperties as unknown as Record<string, unknown>[],
     );
@@ -282,7 +282,7 @@ export default class Docs {
 
     const table = markdownTable([headers, ...rows]);
 
-    return `### Properties & Attributes
+    return `### Properties and attributes
 
 ${table}
 `;
