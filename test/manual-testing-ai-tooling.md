@@ -1447,7 +1447,7 @@ private reflections — dropped without a word in
 [manifest.ts](../src/init/editors/manifest.ts)) into a **producer-visible signal**,
 so a component team learns at PR time that a CEM change broke the editor tooling.
 
-It checks the CEM two complementary ways:
+It checks the CEM three complementary ways:
 
 - **Static rules** ([rules.ts](../src/init/cem-check/rules.ts)) read the raw
   declarations and *report* what the prune would silently drop, reusing the exact
@@ -1456,6 +1456,10 @@ It checks the CEM two complementary ways:
   editor-type builders (`buildJsxTypes` / `buildSvelteTypes`) plus the project-pinned
   `tsc --noEmit` against the CEM — the authoritative consumer-path check that catches
   breaks the static rules can't foresee (e.g. a balanced-but-unresolvable `type.text`).
+- **Source rules** ([sourceRules.ts](../src/init/cem-check/sourceRules.ts)) read the
+  JSDoc in each source file the CEM's `modules[].path` lists, for documentation rules
+  the CEM can't show on its own — the [content guidelines](https://github.com/orgs/AlaskaAirlines/discussions/660)
+  that `/auro:doc-review` applies. A listed file that can't be read is skipped.
 
 **Rules and severities:**
 
@@ -1475,6 +1479,7 @@ It checks the CEM two complementary ways:
 | `private-reflection` | warn | an undescribed, private-backed reflected attribute would be pruned |
 | `deprecated-prose-unflagged` | warn | a real class member (attribute/property/field/method) reads as deprecated in its description/summary (a leading, bracketed, or bolded `deprecated`, or an inline `@deprecated`) but has no structural `deprecated` field — **author-fixable** by adding an `@deprecated` JSDoc tag, which surfaces in the generated JSX/Svelte types (not in VS Code HTML custom-data, which has no deprecation field) |
 | `deprecated-prose-unsupported` | warn | an event or slot reads as deprecated in prose but has no `deprecated` field — **not** author-fixable: the analyzer (v0.11.0) never emits `deprecated` for inline `@event`/`@fires`/`@slot` tags, so editors cannot surface it (distinct id so it can be suppressed independently) |
+| `redundant-boolean-default` | warn | a boolean property's JSDoc has `@default false` (reported at `<file>:<line>`) — redundant, because an unset boolean is already off and the CEM records a constructor's `false` on its own (content guidelines › Defaults). A source rule: the CEM alone can't tell the tag from a constructor default |
 | `deprecated-no-detail` | warn | a `deprecated` field is a bare `true` with no message — editors show a strikethrough but no migration target; prefer `@deprecated <what to use instead>` |
 
 **Exit-code contract:** `0` when there are no `error`-severity findings; `1` when
