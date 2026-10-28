@@ -212,3 +212,92 @@ test("cem-check --strict fails on the source finding (exit 1)", async (t) => {
     (err: ExitError) => err.code === 1,
   );
 });
+
+/** Run the source rules over one file with the given contents; return `rule@line` pairs. */
+async function wordFindings(
+  t: import("node:test").TestContext,
+  source: string,
+): Promise<string[]> {
+  const dir = await writeFiles(t, { "a.js": source });
+  return runSourceRules(manifestFor("a.js"), dir).map(
+    (f) => `${f.rule}@${f.path?.split(":")[1]}`,
+  );
+}
+
+test("word-choice flags e.g., i.e., HTML5, and a11y in prose, at each line", async (t) => {
+  const source = `/**
+ * Sets the label, e.g. a name.
+ * Uses the HTML5 input, i.e. the native one.
+ * Helps a11y.
+ */
+const a = 1;
+`;
+  assert.deepEqual(await wordFindings(t, source), [
+    "word-choice@2",
+    "word-choice@3",
+    "word-choice@3",
+    "word-choice@4",
+  ]);
+});
+
+test("word-choice ignores code spans, URLs, inline tags, @category, and @example sections", async (t) => {
+  const source = `/**
+ * Sets the label, such as \`e.g.\` or \`HTML5\`. See https://example.com/e.g./a11y.
+ * @slot label - The label. {@category a11y}
+ * @category a11y
+ * @example
+ * // e.g. an HTML5 input — for a11y
+ * <auro-thing></auro-thing>
+ */
+const a = 1;
+`;
+  assert.deepEqual(await wordFindings(t, source), []);
+});
+
+test("spaced-em-dash flags a spaced em dash but not an unspaced one", async (t) => {
+  const source = `/**
+ * Sets the label — the text people read.
+ * Sets the label—the text people read.
+ */
+const a = 1;
+`;
+  assert.deepEqual(await wordFindings(t, source), ["spaced-em-dash@2"]);
+});
+
+test("deprecated-casing flags DEPRECATED but not sentence-case Deprecated", async (t) => {
+  const source = `/**
+ * DEPRECATED - use \`appearance\` instead.
+ * @event old - Fires when it changes. **DEPRECATED** - Use \`change\`.
+ */
+const a = 1;
+/**
+ * Deprecated: Use \`appearance\` instead.
+ * @deprecated Use \`appearance\` instead.
+ */
+const b = 2;
+`;
+  assert.deepEqual(await wordFindings(t, source), [
+    "deprecated-casing@2",
+    "deprecated-casing@3",
+  ]);
+});
+
+test("filler-opener flags a description or tag description that starts with filler, not mid-sentence", async (t) => {
+  const source = `/**
+ * Used to set the label.
+ * @slot close - Used to replace the close button.
+ * @param {string} layout - This property sets the layout.
+ */
+const a = 1;
+/**
+ * Sets the label, which is used to name the button.
+ * @slot icon - The icon. This property is optional.
+ */
+const b = 2;
+`;
+  assert.deepEqual(await wordFindings(t, source), [
+    "filler-opener@2",
+    "filler-opener@3",
+    "filler-opener@4",
+  ]);
+});
