@@ -283,8 +283,8 @@ function isNamed(entry: { name?: unknown }): boolean {
 }
 
 /**
- * Classify changes to the usage metadata of one property, attribute, slot or
- * method. The test is whether markup that was valid before still is: a new or
+ * Classify changes to the usage metadata of one property, attribute, slot, CSS
+ * part, CSS custom property or method. The test is whether markup that was valid before still is: a new or
  * broader requirement, a tighter bound, or becoming read-only breaks it (major);
  * looser rules, deprecations and guidance (`relevantWhen`, `category`) don't, but
  * are new information tooling acts on (minor).
@@ -665,25 +665,52 @@ function diffNamed(
   return changes;
 }
 
-/** Compare the usage metadata of slots present in both manifests. */
-function diffSlotMetadata(
+/**
+ * The name-only entries that carry usage metadata (`relevantWhen`, `category`, and
+ * others) written as inline tags in their description, with how each is named in
+ * a change message.
+ */
+const METADATA_ENTRIES = [
+  {
+    key: "slots",
+    describe: (name: string, tag: string) =>
+      name === ""
+        ? `default slot of \`<${tag}>\``
+        : `slot \`${name}\` on \`<${tag}>\``,
+  },
+  {
+    key: "cssParts",
+    describe: (name: string, tag: string) =>
+      `CSS part \`${name}\` on \`<${tag}>\``,
+  },
+  {
+    key: "cssProperties",
+    describe: (name: string, tag: string) =>
+      `CSS custom property \`${name}\` on \`<${tag}>\``,
+  },
+] as const;
+
+/** Compare the usage metadata of slots, CSS parts, and CSS custom properties present in both manifests. */
+function diffEntryMetadata(
   tag: string,
   base: CemDeclaration,
   head: CemDeclaration,
 ): ApiChange[] {
-  const headSlots = new Map(
-    (head.slots ?? []).map((slot) => [slot.name, slot as Metadata]),
-  );
-  return (base.slots ?? []).flatMap((slot) => {
-    const match = headSlots.get(slot.name);
-    if (typeof slot.name !== "string" || !match) {
-      return [];
-    }
-    const what =
-      slot.name === ""
-        ? `default slot of \`<${tag}>\``
-        : `slot \`${slot.name}\` on \`<${tag}>\``;
-    return compareMetadata(what, slot as Metadata, match);
+  return METADATA_ENTRIES.flatMap(({ key, describe }) => {
+    const headEntries = new Map(
+      (head[key] ?? []).map((entry) => [entry.name, entry as Metadata]),
+    );
+    return (base[key] ?? []).flatMap((entry) => {
+      const match = headEntries.get(entry.name);
+      if (typeof entry.name !== "string" || !match) {
+        return [];
+      }
+      return compareMetadata(
+        describe(entry.name, tag),
+        entry as Metadata,
+        match,
+      );
+    });
   });
 }
 
@@ -692,7 +719,7 @@ function diffElement(tag: string, base: CemDeclaration, head: CemDeclaration) {
   const baseMembers = indexMembers(base);
   const headMembers = indexMembers(head);
   return [
-    ...diffSlotMetadata(tag, base, head),
+    ...diffEntryMetadata(tag, base, head),
     ...diffAttributes(tag, base, head, baseMembers, headMembers),
     ...diffMembers(tag, baseMembers, headMembers),
     ...diffNamed(tag, "event", base.events, head.events),
