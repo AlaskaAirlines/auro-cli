@@ -502,6 +502,31 @@ test("slot and unbacked attribute metadata is compared; backed attributes report
   ]);
 });
 
+test("CSS part and CSS custom property metadata is compared like slot metadata", () => {
+  assert.deepEqual(
+    diff(
+      manifest({
+        cssParts: [{ name: "link" }],
+        cssProperties: [{ name: "--ds-auro-button-color" }],
+      }),
+      manifest({
+        cssParts: [{ name: "link", relevantWhen: "type === 'cta'" }],
+        cssProperties: [{ name: "--ds-auro-button-color", category: "ui" }],
+      }),
+    ),
+    [
+      [
+        "minor",
+        "Added `relevantWhen` `type === 'cta'` to CSS part `link` on `<auro-button>`",
+      ],
+      [
+        "minor",
+        "Added `category` `ui` to CSS custom property `--ds-auro-button-color` on `<auro-button>`",
+      ],
+    ],
+  );
+});
+
 test("method parameters: removing or requiring one is major; adding an optional one is minor", () => {
   const method = (...parameters: Record<string, unknown>[]) =>
     manifest({ members: [{ kind: "method", name: "focus", parameters }] });
