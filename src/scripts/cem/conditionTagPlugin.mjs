@@ -1,4 +1,7 @@
-import { createPropertyTagPlugin } from "./propertyTagPlugin.mjs";
+import {
+  createPropertyTagPlugin,
+  INLINE_TAG_ENTRIES,
+} from "./propertyTagPlugin.mjs";
 
 const IDENT = "[A-Za-z_$][\\w$]*";
 const BOOLEAN_FORM = new RegExp(`^(!?)(${IDENT})$`, "u");
@@ -125,11 +128,13 @@ const checkType = (condition, typeText) => {
  *
  * On a property, the tag is a block tag. Its value is written to a CEM field of
  * the same name on the property's field and attribute entries, for example
- * `"relevantWhen": "layout === 'snowflake'"`. On a slot, the tag is written
- * inline in the `@slot` description, since JSDoc tags cannot be attached to
- * another tag, for example `@slot label - The label content. {@requiredWhen isDropdown}`.
- * The inline tag is removed from the slot's CEM description and its value is
- * written to a field of the same name on the slot entry. Comparisons are
+ * `"relevantWhen": "layout === 'snowflake'"`. On a slot, CSS part, or CSS custom
+ * property, the tag is written inline in the `@slot`, `@csspart`, or `@cssprop`
+ * description, since JSDoc tags cannot be attached to another tag, for example
+ * `@slot label - The label content. {@requiredWhen isDropdown}` or
+ * `@csspart link - The link. {@relevantWhen type === 'cta'}`. The inline tag is
+ * removed from the entry's CEM description and its value is written to a field
+ * of the same name on the entry. Comparisons are
  * normalized to strict operators and single-quoted strings.
  *
  * `keywords` lists extra values that are accepted as-is, such as `always`. Once
@@ -186,10 +191,12 @@ export function createConditionTagPlugin({ name, tagName, keywords = [] }) {
               entry: member,
               label: `${declaration.name}.${member.name}`,
             })),
-            ...(declaration.slots ?? []).map((slot) => ({
-              entry: slot,
-              label: `${declaration.name} slot "${slot.name}"`,
-            })),
+            ...INLINE_TAG_ENTRIES.flatMap(({ key, label }) =>
+              (declaration[key] ?? []).map((entry) => ({
+                entry,
+                label: `${declaration.name} ${label} "${entry.name}"`,
+              })),
+            ),
           ].filter(
             ({ entry }) =>
               entry[tagName] &&

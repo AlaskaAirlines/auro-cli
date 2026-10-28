@@ -9,10 +9,11 @@
  * matching field in `members` and, when the field has one, its entry in
  * `attributes`.
  *
- * Slots are declared with a single `@slot` tag, so their tags are written inline
- * in the slot description instead, for example `@slot label - The label. {@category a11y}`.
- * Inline tags are removed from the slot's CEM description and converted with the
- * same `toFields`.
+ * Slots, CSS parts, and CSS custom properties are each declared with a single tag
+ * (`@slot`, `@csspart`, `@cssprop`), so their tags are written inline in the
+ * description instead, for example `@slot label - The label. {@category a11y}` or
+ * `@csspart link - The link. {@relevantWhen type === 'cta'}`. Inline tags are
+ * removed from the entry's CEM description and converted with the same `toFields`.
  *
  * Tag values may be written with or without a leading colon (`@category a11y`
  * or `@category: a11y`). Fields are applied in the module link phase, before the
@@ -30,6 +31,16 @@
  * @returns {{ name: string, analyzePhase: Function, moduleLinkPhase: Function, packageLinkPhase?: Function }}
  *   A Custom Elements Manifest analyzer plugin.
  */
+/**
+ * The declaration entries whose tags are written inline in their description,
+ * with the label used for each kind in warnings.
+ */
+export const INLINE_TAG_ENTRIES = [
+  { key: "slots", label: "slot" },
+  { key: "cssParts", label: "CSS part" },
+  { key: "cssProperties", label: "CSS custom property" },
+];
+
 export function createPropertyTagPlugin({
   name,
   tagNames,
@@ -172,33 +183,35 @@ export function createPropertyTagPlugin({
       );
 
       (moduleDoc.declarations ?? []).forEach((declaration) => {
-        (declaration.slots ?? [])
-          .filter((slot) => typeof slot.description === "string")
-          .forEach((slot) => {
-            const tags = [...slot.description.matchAll(inlineTag)].map(
-              (match) => ({
-                name: match[1],
-                text: cleanValue(match[2]),
-              }),
-            );
-
-            if (tags.length) {
-              slot.description = slot.description
-                .replace(inlineTag, "")
-                .replace(/\s{2,}/gu, " ")
-                .trim();
-
-              Object.assign(
-                slot,
-                toFields(tags, {
-                  warn: (message) =>
-                    warn(
-                      `${moduleDoc.path}: ${declaration.name} slot "${slot.name}" ${message}`,
-                    ),
+        INLINE_TAG_ENTRIES.forEach(({ key, label }) => {
+          (declaration[key] ?? [])
+            .filter((entry) => typeof entry.description === "string")
+            .forEach((entry) => {
+              const tags = [...entry.description.matchAll(inlineTag)].map(
+                (match) => ({
+                  name: match[1],
+                  text: cleanValue(match[2]),
                 }),
               );
-            }
-          });
+
+              if (tags.length) {
+                entry.description = entry.description
+                  .replace(inlineTag, "")
+                  .replace(/\s{2,}/gu, " ")
+                  .trim();
+
+                Object.assign(
+                  entry,
+                  toFields(tags, {
+                    warn: (message) =>
+                      warn(
+                        `${moduleDoc.path}: ${declaration.name} ${label} "${entry.name}" ${message}`,
+                      ),
+                  }),
+                );
+              }
+            });
+        });
       });
     },
   };
