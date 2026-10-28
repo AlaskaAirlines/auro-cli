@@ -1,12 +1,15 @@
 /**
  * `auro cem-check <path>` — the executable CEM contract (layer 1 of the CEM
- * contract-enforcement effort). Validates a `custom-elements.json` two ways:
+ * contract-enforcement effort). Validates a `custom-elements.json` three ways:
  *
  *  - **Static rules** ([rules.ts](#init/cem-check/rules.ts)) report what auro-cli's
  *    defensive prune would otherwise drop in silence — the missing producer signal.
  *  - **Generation smoke** ([smoke.ts](#init/cem-check/smoke.ts)) runs the real
  *    editor-type builders + `tsc` against the CEM, the authoritative consumer-path
  *    check.
+ *  - **Source rules** ([sourceRules.ts](#init/cem-check/sourceRules.ts)) read the
+ *    JSDoc in each source file the CEM lists, for documentation rules the CEM alone
+ *    can't show (the doc-review content guidelines).
  *
  * Exit contract: `0` when no `error`-severity findings; `1` when any error (or, with
  * `--strict`, any warning). `--json` emits the findings array to stdout for the
@@ -23,6 +26,7 @@ import { program } from "commander";
 import ora from "ora";
 import { type CemFinding, runContractRules } from "#init/cem-check/rules.js";
 import { runGenerationSmoke } from "#init/cem-check/smoke.js";
+import { runSourceRules } from "#init/cem-check/sourceRules.js";
 import { resolveComponents } from "#init/resolver.js";
 import type { Manifest } from "#utils/cem.js";
 import type { InstalledComponent } from "#utils/detectInstalled.js";
@@ -121,6 +125,8 @@ export async function runCemCheck(
   const findings: CemFinding[] = [
     ...runContractRules(manifest),
     ...runGenerationSmoke(components),
+    // Module paths in the CEM are relative to the repo root, where the CEM sits.
+    ...runSourceRules(manifest, dirname(resolve(cemPath))),
   ];
 
   const errors = findings.filter((f) => f.severity === "error");
@@ -159,7 +165,7 @@ export async function runCemCheck(
 export default program
   .command("cem-check [path]")
   .description(
-    "Validate a custom-elements.json against the CEM contract (structural + parseability rules and an end-to-end generation smoke). Defaults to ./custom-elements.json.",
+    "Validate a custom-elements.json against the CEM contract (structural + parseability rules, an end-to-end generation smoke, and documentation rules on the JSDoc in the source files it lists). Defaults to ./custom-elements.json.",
   )
   .option("--json", "Output the findings as a JSON array on stdout", false)
   .option("--strict", "Treat warnings as errors (any finding fails)", false)
