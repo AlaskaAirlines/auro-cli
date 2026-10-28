@@ -113,6 +113,197 @@ function checkRedundantBooleanDefault(
   });
 }
 
+/** One line of prose in a JSDoc block: its index in `block.lines`, and its text. */
+interface ProseLine {
+  index: number;
+  text: string;
+}
+
+/**
+ * Tags whose value is code or a keyword, not prose, so the word rules skip them:
+ * `@category a11y` is a category, not the word "a11y".
+ */
+const VALUE_TAGS = new Set([
+  "category",
+  "customElement",
+  "default",
+  "forcePrivate",
+  "internal",
+  "maximum",
+  "minimum",
+  "private",
+  "relevantWhen",
+  "requiredWhen",
+  "see",
+  "type",
+]);
+
+/** What the word rules ignore inside a line: code spans, URLs, and `{@tag …}` inline tags. */
+const NOT_PROSE = [/`[^`]*`/gu, /\bhttps?:\/\/\S+/gu, /\{@[^}]*\}/gu];
+
+/**
+ * The prose lines of a block, with code removed. Skips `@example` sections, code
+ * fences, and tags from `VALUE_TAGS`, then blanks out code spans, URLs, and inline
+ * tags, so a rule only ever sees words a reader would read as text.
+ */
+function proseLines(block: JsDocBlock): ProseLine[] {
+  const prose: ProseLine[] = [];
+  let inExample = false;
+  let inFence = false;
+
+  block.lines.forEach((line, index) => {
+    const text = line.trim();
+    if (text.startsWith("```")) {
+      inFence = !inFence;
+      return;
+    }
+    const tag = /^@(\w+)/u.exec(text)?.[1];
+    if (tag !== undefined) {
+      inExample = tag === "example";
+      if (inExample || VALUE_TAGS.has(tag)) {
+        return;
+      }
+    }
+    // Blank lines carry no words, and skipping them keeps a block's first prose
+    // line its real first line of text (a block usually opens with a bare `/**`).
+    if (inFence || inExample || text === "") {
+      return;
+    }
+    prose.push({
+      index,
+      text: NOT_PROSE.reduce(
+        (rest, pattern) => rest.replace(pattern, " "),
+        text,
+      ),
+    });
+  });
+
+  return prose;
+}
+
+/** Push one word-rule finding at `line` of the block. */
+function pushWordFinding(
+  findings: CemFinding[],
+  modulePath: string,
+  block: JsDocBlock,
+  line: ProseLine,
+  rule: string,
+  message: string,
+): void {
+  findings.push({
+    rule,
+    severity: "warn",
+    path: `${modulePath}:${block.line + line.index}`,
+    message,
+  });
+}
+
+/** Words the guidelines replace, with what to write instead (content guidelines › Word choices). */
+const WORD_CHOICES: ReadonlyArray<{ pattern: RegExp; message: string }> = [
+  {
+    pattern: /\be\.g\./iu,
+    message:
+      'uses "e.g." — write "for example" or "such as". Some tools also end the summary at its first period (content guidelines › Word choices).',
+  },
+  {
+    pattern: /\bi\.e\./iu,
+    message:
+      'uses "i.e." — write "that is". Some tools also end the summary at its first period (content guidelines › Word choices).',
+  },
+  {
+    pattern: /\bHTML5\b/u,
+    message:
+      'uses "HTML5" — name the element instead, such as "the inner `<button>` element" (content guidelines › Word choices).',
+  },
+  {
+    pattern: /\ba11y\b/iu,
+    message:
+      'uses "a11y" — write "accessibility", or name the people affected, such as "screen reader users" (content guidelines › Word choices).',
+  },
+];
+
+/** A description that opens with filler instead of saying what the item does. */
+const FILLER_OPENER =
+  /^(?:This (?:property|attribute|Boolean|boolean)\b|Used to\b)/u;
+
+/**
+ * The places a description starts: the block's first prose line when it isn't a
+ * tag, and the text after ` - ` on a tag line such as `@slot name - …`.
+ */
+function descriptionStarts(prose: ProseLine[]): ProseLine[] {
+  return prose.flatMap((line, i) => {
+    if (line.text.startsWith("@")) {
+      const separator = line.text.indexOf(" - ");
+      return separator === -1
+        ? []
+        : [{ index: line.index, text: line.text.slice(separator + 3).trim() }];
+    }
+    return i === 0 ? [line] : [];
+  });
+}
+
+/**
+ * Push the word-rule warnings for one block (content guidelines › Word choices,
+ * Formatting › Dashes, Structure › No filler openers, Deprecations). These are the
+ * checks a pattern can make without false positives; anything that needs judgment,
+ * such as "will" for current behavior, stays with `/auro:doc-review`.
+ */
+function checkWords(
+  findings: CemFinding[],
+  modulePath: string,
+  block: JsDocBlock,
+): void {
+  const prose = proseLines(block);
+
+  for (const line of prose) {
+    for (const { pattern, message } of WORD_CHOICES) {
+      if (pattern.test(line.text)) {
+        pushWordFinding(
+          findings,
+          modulePath,
+          block,
+          line,
+          "word-choice",
+          message,
+        );
+      }
+    }
+    if (line.text.includes(" — ")) {
+      pushWordFinding(
+        findings,
+        modulePath,
+        block,
+        line,
+        "spaced-em-dash",
+        'has a spaced em dash (" — ") — use a colon or a new sentence, or an em dash with no spaces (content guidelines › Formatting › Dashes).',
+      );
+    }
+    if (/\bDEPRECATED\b/u.test(line.text)) {
+      pushWordFinding(
+        findings,
+        modulePath,
+        block,
+        line,
+        "deprecated-casing",
+        'writes "DEPRECATED" in capitals — use "Deprecated:" in sentence case, followed by what to use instead (content guidelines › Deprecations).',
+      );
+    }
+  }
+
+  for (const start of descriptionStarts(prose)) {
+    if (FILLER_OPENER.test(start.text)) {
+      pushWordFinding(
+        findings,
+        modulePath,
+        block,
+        start,
+        "filler-opener",
+        'starts with filler ("This property …" or "Used to …") — start with a verb that says what it does, such as "Sets the …" (content guidelines › Structure › No filler openers).',
+      );
+    }
+  }
+}
+
 /**
  * Run the source rules over every source file the manifest lists, resolving each
  * `modules[].path` against `rootDir` (the directory the CEM sits in). Returns every
@@ -145,6 +336,7 @@ export function runSourceRules(
 
     for (const block of findJsDocBlocks(source)) {
       checkRedundantBooleanDefault(findings, modulePath, block);
+      checkWords(findings, modulePath, block);
     }
   }
 
