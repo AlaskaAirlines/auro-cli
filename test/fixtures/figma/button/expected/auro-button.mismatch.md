@@ -1,7 +1,7 @@
 <!-- build-mismatch:begin summary -->
 # auro-button — what matches by name and what does not, before translate
 
-Sources: CEM from `origin/main` (auro-button.cem-map.json) and Figma component set **Button** (node 1571:3356). Pairing: exact name equality after lowercasing and trimming, and nothing else. This is the gap before `auro-button.translate.md`: nothing from that file is applied or noted here, and every item in PART 2 and PART 3 gets a row in it. Scope: attributes and slots only.
+Sources: CEM from `origin/main` (auro-button.cem-map.json) and Figma component set **Button** (node 25502:3539). Pairing: exact name equality after lowercasing and trimming, and nothing else. This is the gap before `auro-button.translate.md`: nothing from that file is applied or noted here, and every item in PART 2 and PART 3 gets a row in it. Scope: attributes and slots only.
 
 Matched by name: 2 of 10 Figma properties (`Type`, `State`), with 2 extra state blocks. Design-related code attributes with no Figma counterpart: **6 of 9**; functionality-related ones are listed separately in PART 3 (9 of 9) (2 more excluded as deprecated or private). Figma properties with no code counterpart: **8 of 10**.
 <!-- build-mismatch:end summary -->

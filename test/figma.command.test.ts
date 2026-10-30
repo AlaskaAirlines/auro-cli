@@ -287,7 +287,7 @@ test("the config turns a node id into a Figma URL and leaves other tags empty", 
   const [button] = figmaNodesFor("auro-button");
   assert.equal(
     button,
-    "https://www.figma.com/design/if5kIJr2x6Jv9aXpq1ANOp/Auro-toolkit---Fork---Code-Connect-Test?node-id=1571-3356",
+    "https://www.figma.com/design/VpUz89Ov6ImBpY5YvzYbZW/Auro-toolkit?node-id=25502-3539",
   );
   assert.deepEqual(figmaNodesFor("auro-unknown"), []);
 });
@@ -295,7 +295,7 @@ test("the config turns a node id into a Figma URL and leaves other tags empty", 
 test("a variant option that holds one code value as a whole word binds it when the property is named like the attribute", async (t) => {
   const { cwd, tag } = await stage(t, "button");
   t.mock.method(console, "log", () => {});
-  const snap = path.join(cwd, "figma", "snapshots", "1571-3356.json");
+  const snap = path.join(cwd, "figma", "snapshots", "25502-3539.json");
   const text = await readFile(snap, "utf-8");
   await writeFile(snap, text.replaceAll("Large [56px]", "lg [56px]"));
   // drop the translate row that used to carry this option, so only the name rule can bind it
@@ -350,9 +350,7 @@ test("a CEM with categories binds only ui attributes and the design list, and li
   });
   assert.equal(await codeConnect({}, cwd), 0);
 
-  const map = JSON.parse(
-    await read(cwd, "figma", `${tag}.cem-map.json`),
-  );
+  const map = JSON.parse(await read(cwd, "figma", `${tag}.cem-map.json`));
   assert.equal(
     map.attributes.find((a: { name: string }) => a.name === "title").category,
     "ui",
@@ -464,9 +462,9 @@ for (const name of ["button", "hyperlink"] as const) {
     assert.equal(result.status, 0, result.stderr || result.stdout);
 
     const docs = JSON.parse(result.stdout.slice(result.stdout.indexOf("[")));
-    const connects = (
-      await read(cwd, "figma", `${tag}.figma.ts`)
-    ).match(/^figma\.connect\(/gm);
+    const connects = (await read(cwd, "figma", `${tag}.figma.ts`)).match(
+      /^figma\.connect\(/gm,
+    );
     assert.ok(connects?.length, "the file has figma.connect() calls");
     assert.equal(
       docs.length,
@@ -475,3 +473,92 @@ for (const name of ["button", "hyperlink"] as const) {
     );
   });
 }
+
+test("a text row written as an opening tag wraps the text in that element instead of a span", async (t) => {
+  const { cwd, tag } = await stage(t, "button");
+  t.mock.method(console, "log", () => {});
+  const tr = path.join(cwd, "figma", `${tag}.translate.md`);
+  const md = await readFile(tr, "utf-8");
+  await writeFile(
+    tr,
+    md.replace(
+      "| Label | TBD |",
+      '| Label | `<b-tag slot="ariaLabel" level="3">` |',
+    ),
+  );
+  assert.equal(await codeConnect({}, cwd), 0);
+
+  const ts = await read(cwd, "figma", `${tag}.figma.ts`);
+  assert.match(ts, /<b-tag slot="ariaLabel" level="3">\$\{label\}<\/b-tag>/);
+  assert.doesNotMatch(ts, /<span slot="ariaLabel">/);
+});
+
+test("a text row 'if' a Figma boolean is on only exists in the blocks where that boolean is on", async (t) => {
+  const { cwd, tag } = await stage(t, "button");
+  t.mock.method(console, "log", () => {});
+  const tr = path.join(cwd, "figma", `${tag}.translate.md`);
+  const md = await readFile(tr, "utf-8");
+  await writeFile(
+    tr,
+    md.replace(
+      "| Label | TBD |",
+      '| Label | `<b-tag slot="ariaLabel" level="3">` if `Icon Left` |',
+    ),
+  );
+  assert.equal(await codeConnect({}, cwd), 0);
+
+  const ts = await read(cwd, "figma", `${tag}.figma.ts`);
+  const blocks = ts.split(/^figma\.connect\(/m).slice(1);
+  const on = blocks.filter((b) => b.includes("'Icon Left': true"));
+  const off = blocks.filter((b) => b.includes("'Icon Left': false"));
+  assert.ok(on.length > 0 && on.length === off.length);
+  assert.equal(on.length + off.length, blocks.length);
+  for (const b of on) {
+    assert.match(b, /<b-tag slot="ariaLabel" level="3">\$\{label\}<\/b-tag>/);
+  }
+  for (const b of off) {
+    assert.doesNotMatch(b, /b-tag/);
+    assert.doesNotMatch(b, /label:/);
+  }
+
+  const result = await parseWithCodeConnect(t, cwd, tag);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+});
+
+test("a text row 'if' a boolean that Figma does not have is an error", async (t) => {
+  const { cwd, tag } = await stage(t, "button");
+  t.mock.method(console, "log", () => {});
+  const err = captureError(t);
+  const tr = path.join(cwd, "figma", `${tag}.translate.md`);
+  const md = await readFile(tr, "utf-8");
+  await writeFile(
+    tr,
+    md.replace(
+      "| Label | TBD |",
+      '| Label | `<b-tag slot="ariaLabel">` if `No Such Boolean` |',
+    ),
+  );
+  assert.equal(await codeConnect({}, cwd), 2);
+  assert.match(err(), /Figma boolean property "No Such Boolean" not found/);
+});
+
+test("a text row for the default slot 'if' a Figma boolean is on writes the bare text, only in the blocks where it is on", async (t) => {
+  const { cwd, tag } = await stage(t, "button");
+  t.mock.method(console, "log", () => {});
+  const tr = path.join(cwd, "figma", `${tag}.translate.md`);
+  const md = await readFile(tr, "utf-8");
+  await writeFile(
+    tr,
+    md.replace("| Label | TBD |", "| Label | `(default)` if `Icon Left` |"),
+  );
+  assert.equal(await codeConnect({}, cwd), 0);
+
+  const ts = await read(cwd, "figma", `${tag}.figma.ts`);
+  const blocks = ts.split(/^figma\.connect\(/m).slice(1);
+  for (const b of blocks.filter((b) => b.includes("'Icon Left': true"))) {
+    assert.match(b, /\n {6}\$\{defaultSlot\}\n/);
+  }
+  for (const b of blocks.filter((b) => b.includes("'Icon Left': false"))) {
+    assert.doesNotMatch(b, /defaultSlot/);
+  }
+});

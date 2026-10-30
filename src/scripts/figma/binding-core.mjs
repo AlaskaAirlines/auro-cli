@@ -178,6 +178,24 @@ export function loadComponent(
           return;
         }
         if (section === "text") {
+          // `<tag slot="x">`, `(default)` or a slot name, followed by if `Show X`: the text is only written when that Figma BOOLEAN property is on
+          const cond = (cells[1] ?? "")
+            .trim()
+            .match(
+              /^`(<[a-z][\w-]*(?:\s[^<>`]*)?>|\(default\)|[\w.-]+)`\s+if\s+`([^`]+)`$/i,
+            );
+          const isTag = cond?.[1].startsWith("<");
+          if (cond && (!isTag || /\sslot="[^"]+"/.test(cond[1]))) {
+            text.push({
+              prop: cells[0],
+              slot: isTag ? cond[1].match(/\sslot="([^"]+)"/)[1] : cond[1],
+              wrapper: isTag ? cond[1] : undefined,
+              when: cond[2],
+              note: (cells[2] ?? "").replace(/\s*<!--.*?-->\s*/g, " ").trim(),
+              where,
+            });
+            return;
+          }
           const tr = unq(cells[1] ?? "");
           const note = (cells[2] ?? "")
             .replace(/\s*<!--.*?-->\s*/g, " ")
@@ -187,9 +205,21 @@ export function loadComponent(
             warnings.push(`${where}: TBD translation left unmapped`);
           else if (/^(?:\(default\)|[\w.-]+)$/.test(tr))
             text.push({ prop: cells[0], slot: tr, note, where });
-          else
+          else if (
+            /^<[a-z][\w-]*(?:\s[^<>]*)?>$/i.test(tr) &&
+            /\sslot="[^"]+"/.test(tr)
+          ) {
+            // an opening tag with slot="<name>": the text is written inside that element instead of a <span>
+            text.push({
+              prop: cells[0],
+              slot: tr.match(/\sslot="([^"]+)"/)[1],
+              wrapper: tr,
+              note,
+              where,
+            });
+          } else
             errors.push(
-              `${where}: unrecognised translation ${cells[1]} (expected a slot name or n/a)`,
+              `${where}: unrecognised translation ${cells[1]} (expected a slot name, an opening tag with slot="<name>", either one followed by if "<Figma boolean>", or n/a)`,
             );
           return;
         }
@@ -361,6 +391,11 @@ export function loadComponent(
       errors.push(`${x.where}: Figma text property "${x.prop}" not found`);
     if (x.slot && !slotByNorm.has(norm(x.slot)))
       errors.push(`${x.where}: slot "${x.slot}" is not a slot of ${tag}`);
+    if (
+      x.when &&
+      !props.some((p) => p.type === "BOOLEAN" && norm(p.name) === norm(x.when))
+    )
+      errors.push(`${x.where}: Figma boolean property "${x.when}" not found`);
   }
   for (const x of other)
     if (
@@ -502,6 +537,12 @@ export function loadComponent(
           nodeId: p.nodeId,
           figma: p.name,
           slot: slotByNorm.get(norm(row.slot)).name,
+          wrapper: row.wrapper,
+          when: row.when
+            ? props.find(
+                (q) => q.type === "BOOLEAN" && norm(q.name) === norm(row.when),
+              )?.name
+            : undefined,
           basis: "translate",
         });
       continue;

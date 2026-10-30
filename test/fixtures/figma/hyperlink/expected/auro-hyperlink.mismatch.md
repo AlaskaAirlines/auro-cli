@@ -1,7 +1,7 @@
 <!-- build-mismatch:begin summary -->
 # auro-hyperlink — what matches by name and what does not, before translate
 
-Sources: CEM from `origin/main` (auro-hyperlink.cem-map.json) and Figma component sets **Hyperlink/CTA Button** (node 5640:15548), **Hyperlink/Hyperlink-Inline** (node 21546:558), **Hyperlink/Hyperlink-Nav** (node 21546:579). Pairing: exact name equality after lowercasing and trimming, and nothing else. This is the gap before `auro-hyperlink.translate.md`: nothing from that file is applied or noted here, and every item in PART 2 and PART 3 gets a row in it. Scope: attributes and slots only.
+Sources: CEM from `origin/main` (auro-hyperlink.cem-map.json) and Figma component sets **Hyperlink/CTA Button** (node 25506:7722), **Hyperlink/Hyperlink-Inline** (node 25533:14911), **Hyperlink/Hyperlink-Nav** (node 25533:14950). Pairing: exact name equality after lowercasing and trimming, and nothing else. This is the gap before `auro-hyperlink.translate.md`: nothing from that file is applied or noted here, and every item in PART 2 and PART 3 gets a row in it. Scope: attributes and slots only.
 
 Matched by name: 1 of 19 Figma properties (`Type`), with 0 extra state blocks. Design-related code attributes with no Figma counterpart: **5 of 6**; functionality-related ones are listed separately in PART 3 (5 of 5) (1 more excluded as deprecated or private). Figma properties with no code counterpart: **18 of 19**.
 <!-- build-mismatch:end summary -->

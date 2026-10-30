@@ -126,7 +126,7 @@ export function run(argv, runCtx) {
       .filter((x) => x.kind === "slot")
       .map(
         (x) =>
-          `| \`${x.slot}\` | Figma **${fig(x.nodeId, x.figma)}** (text) | \`<span slot="${x.slot}">\` |`,
+          `| \`${x.slot}\` | Figma **${fig(x.nodeId, x.figma)}** (text) | \`${x.wrapper ?? `<span slot="${x.slot}">`}\` |`,
       );
     const enumGaps = [...coveredValues].flatMap(([attr, cov]) => {
       const a = attrByNorm.get(norm(attr));

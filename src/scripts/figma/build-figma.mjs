@@ -103,10 +103,26 @@ export function run(argv, runCtx) {
         warnings.push(
           `${n.doc.name} (node ${n.nodeId}) has no bindings: no property matches a CEM attribute or slot and translate.md has no row for it`,
         );
-      for (const b of nodeStates.length
+      // A slot row written "`<tag>` if `Show X`" only exists while that BOOLEAN is on: one block per on/off combination, each restricted to it
+      const whens = [...new Set(nodeBound.map((x) => x.when).filter(Boolean))];
+      const combos = whens.reduce(
+        (acc, w) =>
+          acc.flatMap((c) => [
+            { ...c, [w]: true },
+            { ...c, [w]: false },
+          ]),
+        [{}],
+      );
+      for (const [b, combo] of (nodeStates.length
         ? nodeStates
-        : [{ prop: null, option: null, attr: null }]) {
+        : [{ prop: null, option: null, attr: null }]
+      ).flatMap((b) => combos.map((c) => [b, c]))) {
         blockCount++;
+        const blockBound = nodeBound.filter((x) => !x.when || combo[x.when]);
+        const restrictions = [
+          ...(b.prop ? [`${q(b.prop)}: ${q(b.option)}`] : []),
+          ...Object.entries(combo).map(([w, on]) => `${q(w)}: ${on}`),
+        ];
         const propLines = [];
         const argNames = [];
         const tagAttrs = [];
@@ -114,7 +130,7 @@ export function run(argv, runCtx) {
         const childSlots = []; // the slot each entry of children is the content of (null for an insert)
         const inserts = [];
         if (b.attr) tagAttrs.push(b.attr);
-        for (const x of nodeBound) {
+        for (const x of blockBound) {
           if (x.kind === "enum") {
             const vals = Object.entries(x.pairs)
               .map(
@@ -158,14 +174,28 @@ export function run(argv, runCtx) {
             const isDefault = x.slot === "(default)";
             let v = x.slot.replace(/[^a-zA-Z0-9]/g, "");
             if (isDefault) v = "defaultSlot";
+            // several rows can write into one slot (Heading and Subhead both go in `header`), so name the variable after the Figma property
+            else if (x.wrapper)
+              v = x.figma
+                .replace(/[^a-zA-Z0-9 ]/g, "")
+                .split(/\s+/)
+                .map((w, i) =>
+                  i ? w.charAt(0).toUpperCase() + w.slice(1) : w.toLowerCase(),
+                )
+                .join("");
             if (!v || /^\d/.test(v) || RESERVED.has(v) || argNames.includes(v))
               v = `slot${v.charAt(0).toUpperCase()}${v.slice(1)}`;
             while (argNames.includes(v)) v += "_";
             propLines.push(`    ${v}: figma.string(${q(x.figma)}),`);
             argNames.push(v);
-            // The default slot is plain content; a named slot needs a wrapper carrying slot="<name>".
+            // The default slot is plain content; a named slot needs a wrapper carrying slot="<name>" (a <span>, or the element a translate row gives).
+            const wrapTag = x.wrapper?.match(/^<([^\s>]+)/)?.[1];
             children.push(
-              isDefault ? `\${${v}}` : `<span slot="${x.slot}">\${${v}}</span>`,
+              isDefault
+                ? `\${${v}}`
+                : x.wrapper
+                  ? `${x.wrapper}\${${v}}</${wrapTag}>`
+                  : `<span slot="${x.slot}">\${${v}}</span>`,
             );
             childSlots.push(x.slot);
           }
@@ -189,9 +219,11 @@ export function run(argv, runCtx) {
           ? `    ${open}\n${children.map((c) => `      ${c}`).join("\n")}\n    </${map.tag}>`
           : `    ${open}</${map.tag}>`;
         out.push(
-          `// ${b.prop ? `${n.doc.name} / ${b.prop}=${b.option}` : n.doc.name}`,
+          `// ${[...(b.prop ? [`${b.prop}=${b.option}`] : []), ...Object.entries(combo).map(([w, on]) => `${w}=${on}`)].reduce((t, r) => `${t}${t === n.doc.name ? " / " : ", "}${r}`, n.doc.name)}`,
           `figma.connect(${q(`${n.base}?node-id=${n.dashed}`)}, {`,
-          ...(b.prop ? [`  variant: { ${q(b.prop)}: ${q(b.option)} },`] : []),
+          ...(restrictions.length
+            ? [`  variant: { ${restrictions.join(", ")} },`]
+            : []),
           "  props: {",
           ...propLines,
           "  },",

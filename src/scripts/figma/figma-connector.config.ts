@@ -44,6 +44,9 @@ export const FIGMA_COMPONENTS: Record<string, string[]> = {
   "auro-radio": ["2158-10682"],
   "auro-radio-group": ["2158-10718"],
   "auro-select": ["3626-13755"],
+  "auro-card": [
+    "https://www.figma.com/design/VpUz89Ov6ImBpY5YvzYbZW/Auro-toolkit?node-id=12656-3392&t=vq0NuRufVrj8RavN-11",
+  ],
 };
 
 /**

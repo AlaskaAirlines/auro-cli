@@ -23,7 +23,7 @@
 // Exit codes: 0 ok, 2 bad input, a missing token, a failed request, or a filled cell that is not an icon of the package.
 import fs from "node:fs";
 import path from "node:path";
-import { escCell, ExitError, guard, splitRow } from "./binding-core.mjs";
+import { ExitError, escCell, guard, splitRow } from "./binding-core.mjs";
 
 const ICONS_PACKAGE = path.join(
   "node_modules",
@@ -118,7 +118,12 @@ export function run(argv, ctx) {
       const table = [];
       for (let i = h + 1; i < e; i++)
         if (lines[i].startsWith("|")) table.push(i);
-      return { h, e, table, data: table.filter((i) => isData(splitRow(lines[i]))) };
+      return {
+        h,
+        e,
+        table,
+        data: table.filter((i) => isData(splitRow(lines[i]))),
+      };
     };
     const row = (c) => `| \`${escCell(c.raw)}\` | TBD | |`;
     const unmark = (l) => l.replace(MARK, "");
@@ -172,7 +177,9 @@ export function run(argv, ctx) {
       }
     }
     const have = new Set(data.map((i) => unq(splitRow(lines[i])[0])));
-    const missing = unmatched.filter((c) => !have.has(c.raw) && !have.has(c.name));
+    const missing = unmatched.filter(
+      (c) => !have.has(c.raw) && !have.has(c.name),
+    );
     if (missing.length) {
       added += missing.length;
       if (h < 0) {
@@ -184,7 +191,11 @@ export function run(argv, ctx) {
     } else if (h >= 0 && !data.length) {
       // a table left with no rows is removed, like build-translate does
       const { h: h2, e: e2 } = scan();
-      if (lines.slice(h2 + 1, e2).every((l) => l.trim() === "" || l.startsWith("|"))) {
+      if (
+        lines
+          .slice(h2 + 1, e2)
+          .every((l) => l.trim() === "" || l.startsWith("|"))
+      ) {
         lines.splice(h2, e2 - h2);
         while (lines.at(-1) === "") lines.pop();
       }
@@ -225,7 +236,9 @@ export function run(argv, ctx) {
       handMapped.push({ ...c, category: cat, name: nm });
     }
     matched.push(...handMapped);
-    matched.sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+    matched.sort(
+      (a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id),
+    );
 
     // ---------- the generated Code Connect file ----------
     const slug = encodeURIComponent(file.name.replace(/\s+/g, "-"));
@@ -239,7 +252,7 @@ export function run(argv, ctx) {
       ...matched.flatMap((c) => [
         `// ${c.raw.trim()}`,
         `figma.connect('${url(c.id)}', {`,
-        `  example: () => html\`<auro-icon customColor category="${c.category}" name="${c.name}"></auro-icon>\`,`,
+        `  example: () => html\`<auro-icon category="${c.category}" name="${c.name}"></auro-icon>\`,`,
         `  imports: ["import '@aurodesignsystem/auro-icon';"],`,
         "})",
         "",
