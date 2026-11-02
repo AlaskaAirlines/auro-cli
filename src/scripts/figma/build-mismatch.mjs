@@ -141,15 +141,17 @@ export function run(argv, runCtx) {
     );
 
     const noFigma = nodes.length === 0;
+    // The icon library has Figma components (one per icon, mapped by build-icons) but none with properties for the code attributes.
+    const icons = noFigma && ctx.iconLibrary;
     const gapSummary = `${design ? `Design-related code attributes with no Figma counterpart: **${designAttrs.length} of ${eligible.filter(isDesign).length}**; functionality-related ones are listed separately in PART 3 (${functionAttrs.length} of ${eligible.length - eligible.filter(isDesign).length})` : `Code attributes with no Figma counterpart: **${unAttrs.length} of ${eligible.length}**`} (${excluded.length} more excluded as deprecated or private${ctx.categorized ? `, ${notBound.length} more not bound because their category is not ui and they are not design-related` : ""}).`;
     const mdBlocks = {
       summary: [
         noFigma
-          ? `# ${map.tag} — what is not addressed (no Figma component yet)`
+          ? `# ${map.tag} — what is not addressed (${icons ? "no Figma properties for the code attributes yet" : "no Figma component yet"})`
           : `# ${map.tag} — what matches by name and what does not, before translate`,
         "",
         noFigma
-          ? `Sources: CEM from \`origin/main\` (${path.basename(cemMapPath)}). There is no Figma component for ${map.tag} yet, so nothing can be bound and no \`${map.tag}.figma.ts\` is generated. This report lists every code attribute and slot that Figma will need to cover. Scope: attributes and slots only.`
+          ? `Sources: CEM from \`origin/main\` (${path.basename(cemMapPath)}). ${icons ? `The Figma file has one component per icon, and \`${map.tag}.figma.ts\` maps each to \`<${map.tag} category="…" name="…">\`. Those components expose no properties or variants for the other code attributes and slots, so nothing else can be bound.` : `There is no Figma component for ${map.tag} yet, so nothing can be bound and no \`${map.tag}.figma.ts\` is generated.`} This report lists every code attribute and slot that Figma will need to cover. Scope: attributes and slots only.`
           : `Sources: CEM from \`origin/main\` (${path.basename(cemMapPath)}) and Figma component set${nodes.length > 1 ? "s" : ""} ${nodes.map((n) => `**${n.doc.name}** (node ${n.nodeId})`).join(", ")}. Pairing: exact name equality after lowercasing and trimming, and nothing else. This is the gap before \`${path.basename(translatePath)}\`: nothing from that file is applied or noted here, and every item in PART 2 and PART 3 gets a row in it. Scope: attributes and slots only.`,
         "",
         noFigma
@@ -188,7 +190,9 @@ export function run(argv, runCtx) {
         "",
         ...(noFigma
           ? [
-              "- none: no Figma component, so no `figma.connect` block is emitted",
+              icons
+                ? `- none bound by property: the \`figma.connect\` blocks in \`${map.tag}.figma.ts\` set \`category\` and \`name\` from the component name only, not from a Figma property`
+                : "- none: no Figma component, so no `figma.connect` block is emitted",
             ]
           : stateBlockLines.length
             ? stateBlockLines
@@ -206,7 +210,9 @@ export function run(argv, runCtx) {
           : "# PART 2 — NOT matched by name (before translate)",
         "",
         noFigma
-          ? "Everything below is missing in Figma: there is no Figma component for this element yet."
+          ? (icons
+              ? "Everything below is missing in Figma: the icon components have no properties or variants for these attributes and slots."
+              : "Everything below is missing in Figma: there is no Figma component for this element yet.")
           : `Everything below has no Figma counterpart with an equal name. Each item has a row in \`${path.basename(translatePath)}\` (mapped, \`n/a\` or \`TBD\`); build-translate adds the missing ones.`,
         "",
         `## ${design ? "Design-related code attributes" : "Code attributes"} with no Figma counterpart`,
