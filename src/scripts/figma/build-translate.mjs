@@ -33,8 +33,16 @@ export function run(argv, runCtx) {
       ["check", "prune"],
       { baseline: true, translateOptional: true },
     );
-    const { args, tag, norm, translatePath, attrByNorm, props, mappedSlots } =
-      ctx;
+    const {
+      args,
+      tag,
+      norm,
+      translatePath,
+      attrByNorm,
+      props,
+      mappedSlots,
+      instanceLayers,
+    } = ctx;
     const { coveredValues, unAttrs, unOptions, unSlots, unFigma } = gaps(ctx);
     const slotNames = new Set(ctx.map.slots.map((s) => norm(s.name)));
 
@@ -155,7 +163,11 @@ export function run(argv, runCtx) {
         ];
     const isData = (c) =>
       !c.every((x) => /^:?-+:?$/.test(x)) &&
-      !["Figma property", "Attribute", "Setting"].includes(c[0]);
+      !["Figma property", "Attribute", "Setting"].includes(c[0]) &&
+      // the "Code slots" table header; a Figma property can be called Slot too
+      !(c[0] === "Slot" && /^Translation\b/.test(c[1] ?? ""));
+    // a row of the Figma boolean table named `layer: <instance layer>` wraps a nested instance layer, not a Figma property
+    const layerOf = (c) => unq(c[0]).match(/^layer:\s*(.+)$/i)?.[1].trim();
     const cellsOf = splitRow;
     let added = 0;
     let removed = 0;
@@ -203,7 +215,10 @@ export function run(argv, runCtx) {
       attrs: (c) => !attrValue(c),
       slots: (c) => !slotNames.has(norm(unq(c[0]))),
       text: (c) => !figmaProp(c, true),
-      other: (c) => !figmaProp(c, false),
+      other: (c) =>
+        layerOf(c)
+          ? !instanceLayers.has(norm(layerOf(c)))
+          : !figmaProp(c, false),
     };
     const reasonOf = (name, c) =>
       gone[name](c)
@@ -245,7 +260,13 @@ export function run(argv, runCtx) {
       const want = new Set(rows[name].map((r) => r.key));
       let { e, tableIdx, data } = scan();
       {
-        const dead = data.filter((i) => !want.has(sec.key(cellsOf(lines[i]))));
+        // a layer row is never one of the wanted placeholder rows; it is only dead once its layer is gone
+        const dead = data.filter((i) => {
+          const c = cellsOf(lines[i]);
+          return name === "other" && layerOf(c)
+            ? gone.other(c)
+            : !want.has(sec.key(c));
+        });
         const removable = [];
         for (const i of dead) {
           const c = cellsOf(lines[i]);

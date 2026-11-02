@@ -2,12 +2,29 @@
 //
 // The URLs come from ctx.figmaNodes: the Figma connector config (figma-connector.config.ts).
 // Needs a Figma personal access token in FIGMA_ACCESS_TOKEN. The saved file keeps only what the build scripts use (file name, version,
-// last-modified time, and each node's name, type and componentPropertyDefinitions), so it is small and has no expiring links.
+// last-modified time, and each node's name, type, componentPropertyDefinitions and instance layer names), so it is small and has no expiring links.
 // The other build scripts never fetch: re-run this one, then the others, when the Figma file changes.
 // Exit codes: 0 ok, 2 bad input, a missing token, or a failed request.
 import fs from "node:fs";
 import path from "node:path";
 import { guard, loadComponent } from "./binding-core.mjs";
+
+// Names of the instance layers of a component set (a nested Hyperlink/Hyperlink-Inline, say), sorted and without duplicates. What is
+// inside an instance is not listed: it belongs to that component's own set. A translate row can wrap such a layer (`layer: <name>`).
+function instanceLayerNames(doc) {
+  const names = new Set();
+  const walk = (node) => {
+    for (const c of node.children ?? []) {
+      if (c.type === "INSTANCE") {
+        if (c.name) names.add(c.name);
+        continue;
+      }
+      walk(c);
+    }
+  };
+  walk(doc);
+  return [...names].sort();
+}
 
 export function run(argv, ctx) {
   return guard("fetch-figma", async () => {
@@ -54,6 +71,7 @@ export function run(argv, ctx) {
                 name: doc.name,
                 type: doc.type,
                 componentPropertyDefinitions: doc.componentPropertyDefinitions,
+                instanceLayers: instanceLayerNames(doc),
               },
             },
           },

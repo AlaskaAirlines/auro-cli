@@ -29,6 +29,7 @@ export function run(argv, runCtx) {
       genDir,
       map,
       nodes,
+      props,
       bound,
       stateBlocks,
     } = loadComponent("build-figma", argv, runCtx, ["check", "validate"]);
@@ -113,15 +114,36 @@ export function run(argv, runCtx) {
           ]),
         [{}],
       );
-      for (const [b, combo] of (nodeStates.length
+      // A row written "... for `Property = Option`" only exists in that variant option: one block per option of that property
+      // (every option, so the blocks that have no such row are still written), each restricted to it
+      const onlyProps = [
+        ...new Set(nodeBound.map((x) => x.only?.prop).filter(Boolean)),
+      ];
+      const optionCombos = onlyProps.reduce(
+        (acc, p) =>
+          acc.flatMap((c) =>
+            props
+              .find((d) => d.type === "VARIANT" && d.name === p)
+              .variantOptions.map((o) => ({ ...c, [p]: o })),
+          ),
+        [{}],
+      );
+      for (const [b, combo, opts] of (nodeStates.length
         ? nodeStates
         : [{ prop: null, option: null, attr: null }]
-      ).flatMap((b) => combos.map((c) => [b, c]))) {
+      ).flatMap((b) =>
+        combos.flatMap((c) => optionCombos.map((o) => [b, c, o])),
+      )) {
         blockCount++;
-        const blockBound = nodeBound.filter((x) => !x.when || combo[x.when]);
+        const blockBound = nodeBound.filter(
+          (x) =>
+            (!x.when || combo[x.when]) &&
+            (!x.only || opts[x.only.prop] === x.only.option),
+        );
         const restrictions = [
           ...(b.prop ? [`${q(b.prop)}: ${q(b.option)}`] : []),
           ...Object.entries(combo).map(([w, on]) => `${q(w)}: ${on}`),
+          ...Object.entries(opts).map(([p, o]) => `${q(p)}: ${q(o)}`),
         ];
         const propLines = [];
         const argNames = [];
@@ -170,6 +192,26 @@ export function run(argv, runCtx) {
             );
             argNames.push(v);
             inserts.push({ v, slot: x.slot, position: x.position });
+          } else if (x.kind === "content" || x.kind === "children") {
+            // what a SLOT property holds (figma.slot) or a nested instance layer renders (figma.children), through its own Code Connect
+            // mapping, inside the wrapper element that carries slot="<name>"
+            let v = x.figma
+              .replace(/[^a-zA-Z0-9]+/g, " ")
+              .trim()
+              .split(/\s+/)
+              .map((w, i) =>
+                i ? w.charAt(0).toUpperCase() + w.slice(1) : w.toLowerCase(),
+              )
+              .join("");
+            if (!v || /^\d/.test(v) || RESERVED.has(v)) v = `slot${v}`;
+            while (argNames.includes(v)) v += "_";
+            propLines.push(
+              `    ${v}: figma.${x.kind === "content" ? "slot" : "children"}(${q(x.figma)}),`,
+            );
+            argNames.push(v);
+            const wrapTag = x.wrapper.match(/^<([^\s>]+)/)[1];
+            children.push(`${x.wrapper}\${${v}}</${wrapTag}>`);
+            childSlots.push(x.slot);
           } else {
             const isDefault = x.slot === "(default)";
             let v = x.slot.replace(/[^a-zA-Z0-9]/g, "");
@@ -219,7 +261,7 @@ export function run(argv, runCtx) {
           ? `    ${open}\n${children.map((c) => `      ${c}`).join("\n")}\n    </${map.tag}>`
           : `    ${open}</${map.tag}>`;
         out.push(
-          `// ${[...(b.prop ? [`${b.prop}=${b.option}`] : []), ...Object.entries(combo).map(([w, on]) => `${w}=${on}`)].reduce((t, r) => `${t}${t === n.doc.name ? " / " : ", "}${r}`, n.doc.name)}`,
+          `// ${[...(b.prop ? [`${b.prop}=${b.option}`] : []), ...Object.entries(combo).map(([w, on]) => `${w}=${on}`), ...Object.entries(opts).map(([p, o]) => `${p}=${o}`)].reduce((t, r) => `${t}${t === n.doc.name ? " / " : ", "}${r}`, n.doc.name)}`,
           `figma.connect(${q(`${n.base}?node-id=${n.dashed}`)}, {`,
           ...(restrictions.length
             ? [`  variant: { ${restrictions.join(", ")} },`]

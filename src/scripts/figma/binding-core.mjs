@@ -156,7 +156,27 @@ export function loadComponent(
             const ins = (cells[1] ?? "")
               .trim()
               .match(/^`(<.+>|instance\(.+\))`\s+(before|after)\s+`([^`]+)`$/);
+            // `<tag slot="x">` [for `Property = Option`]: wraps what a Figma SLOT property holds, or (name written `layer: <name>`) what a
+            // nested instance layer renders through its own Code Connect mapping, in that element. `for` limits it to one variant option.
+            const wrap = (cells[1] ?? "")
+              .trim()
+              .match(
+                /^`(<[a-z][\w-]*\s[^<>`]*\bslot="([^"]+)"[^<>`]*>)`(?:\s+for\s+`([^`=]+?)\s*=\s*([^`]+)`)?$/i,
+              );
+            const layerName = name.match(/^layer:\s*(.+)$/i)?.[1].trim();
             if (/^n\/a\b/i.test(tr)) other.push({ prop: name, note, where });
+            else if (wrap)
+              other.push({
+                prop: layerName ?? name,
+                layer: !!layerName,
+                wrapper: wrap[1],
+                wrapSlot: wrap[2],
+                only: wrap[3]
+                  ? { prop: wrap[3].trim(), option: wrap[4].trim() }
+                  : undefined,
+                note,
+                where,
+              });
             else if (ins)
               other.push({
                 prop: name,
@@ -397,8 +417,23 @@ export function loadComponent(
     )
       errors.push(`${x.where}: Figma boolean property "${x.when}" not found`);
   }
-  for (const x of other)
-    if (
+  // instance layers of each component set by lowercased name (a nested instance such as Hyperlink/Hyperlink-Inline has no property)
+  const instanceLayers = new Map();
+  const layersByNode = new Map(); // nodeId -> lowercased names of its instance layers
+  for (const n of nodes) {
+    layersByNode.set(n.nodeId, new Set());
+    for (const name of n.doc.instanceLayers ?? []) {
+      instanceLayers.set(norm(name), name);
+      layersByNode.get(n.nodeId).add(norm(name));
+    }
+  }
+  for (const x of other) {
+    if (x.layer) {
+      if (!instanceLayers.has(norm(x.prop)))
+        errors.push(
+          `${x.where}: instance layer "${x.prop}" not found in the Figma component set`,
+        );
+    } else if (
       !props.some(
         (p) =>
           p.type !== "VARIANT" &&
@@ -409,6 +444,29 @@ export function loadComponent(
       errors.push(
         `${x.where}: Figma boolean or instance property "${x.prop}" not found`,
       );
+    if (!x.wrapper) continue;
+    if (
+      !x.layer &&
+      !props.some((p) => p.type === "SLOT" && norm(p.name) === norm(x.prop))
+    )
+      errors.push(
+        `${x.where}: "${x.prop}" is not a Figma SLOT property (a wrapper row needs one, or a name written \`layer: <instance layer>\`)`,
+      );
+    if (!slotByNorm.has(norm(x.wrapSlot)))
+      errors.push(`${x.where}: slot "${x.wrapSlot}" is not a slot of ${tag}`);
+    if (
+      x.only &&
+      !props.some(
+        (p) =>
+          p.type === "VARIANT" &&
+          norm(p.name) === norm(x.only.prop) &&
+          p.variantOptions.includes(x.only.option),
+      )
+    )
+      errors.push(
+        `${x.where}: "${x.only.option}" is not an option of the Figma variant property "${x.only.prop}"`,
+      );
+  }
   for (const x of slotRows) {
     if (!slotByNorm.has(norm(x.slot)))
       errors.push(`${x.where}: slot "${x.slot}" is not a slot of ${tag}`);
@@ -520,6 +578,14 @@ export function loadComponent(
   const usedByNode = new Map(); // nodeId -> attributes already bound in that node (a second binding of the same attribute gets a suffixed key)
   const bound = []; // {kind:'enum'|'boolean'|'slot', ...}
   const stateBlocks = []; // {prop, option, attr}
+  // a wrapper row's `for Property = Option`, with the Figma property written as the component set spells it
+  const onlyOf = (o) =>
+    o && {
+      prop: props.find(
+        (q) => q.type === "VARIANT" && norm(q.name) === norm(o.prop),
+      ).name,
+      option: o.option,
+    };
 
   for (const p of props) {
     const used =
@@ -547,8 +613,23 @@ export function loadComponent(
         });
       continue;
     }
-    const otherRow = other.find((x) => norm(x.prop) === norm(p.name));
+    const otherRow = other.find((x) => !x.layer && norm(x.prop) === norm(p.name));
     if (otherRow) {
+      // a SLOT property written with a wrapper row: what the slot holds (rendered by its own Code Connect mappings) goes in that element
+      if (otherRow.wrapper && p.type === "SLOT") {
+        const target = slotByNorm.get(norm(otherRow.wrapSlot));
+        if (target)
+          bound.push({
+            kind: "content",
+            nodeId: p.nodeId,
+            figma: p.name,
+            wrapper: otherRow.wrapper,
+            slot: target.name,
+            only: onlyOf(otherRow.only),
+            basis: "translate",
+          });
+        continue;
+      }
       // a row owns the property: n/a leaves it unbound, an insert row binds a BOOLEAN to markup placed next to a slot
       if (otherRow.insert && p.type === "BOOLEAN") {
         const target = slotByNorm.get(norm(otherRow.insert.slot));
@@ -713,10 +794,28 @@ export function loadComponent(
     }
   }
 
+  // a `layer: <name>` wrapper row: the nested instance layer, rendered through its own Code Connect mapping, goes in the element
+  for (const x of other)
+    if (x.layer && x.wrapper)
+      for (const n of nodes) {
+        const target = slotByNorm.get(norm(x.wrapSlot));
+        if (target && layersByNode.get(n.nodeId).has(norm(x.prop)))
+          bound.push({
+            kind: "children",
+            nodeId: n.nodeId,
+            figma: instanceLayers.get(norm(x.prop)),
+            wrapper: x.wrapper,
+            slot: target.name,
+            only: onlyOf(x.only),
+            basis: "translate",
+          });
+      }
+
   return {
     args,
     ctx,
     tag,
+    instanceLayers,
     norm,
     display,
     q,
