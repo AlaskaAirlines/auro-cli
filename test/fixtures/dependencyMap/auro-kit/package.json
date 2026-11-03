@@ -1,0 +1,10 @@
+{
+  "name": "@aurodesignsystem/auro-kit",
+  "workspaces": [
+    "components/*"
+  ],
+  "devDependencies": {
+    "@aurodesignsystem/auro-button": "^12.4.0",
+    "@aurodesignsystem/auro-icon": "^9.2.0"
+  }
+}

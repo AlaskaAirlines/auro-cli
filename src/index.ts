@@ -21,6 +21,7 @@ import "#commands/component.ts";
 import "#commands/docs.ts";
 import "#commands/ado.ts";
 import "#commands/rc-workflow.ts";
+import "#commands/deps.ts";
 
 program
   .name("auro")

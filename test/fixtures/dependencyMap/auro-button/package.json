@@ -1,0 +1,8 @@
+{
+  "name": "@aurodesignsystem/auro-button",
+  "repository": "https://github.com/AlaskaAirlines/auro-button",
+  "devDependencies": {
+    "@aurodesignsystem/auro-icon": "^9.1.0",
+    "@aurodesignsystem/auro-library": "^5.0.0"
+  }
+}
