@@ -1,0 +1,9 @@
+{
+  "name": "@aurodesignsystem/auro-icon",
+  "repository": {
+    "url": "git+https://github.com/AlaskaAirlines/auro-icon.git"
+  },
+  "devDependencies": {
+    "@aurodesignsystem/auro-library": "^5.0.0"
+  }
+}
