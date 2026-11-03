@@ -1,37 +1,4 @@
 /**
- * Build a Custom Elements Manifest analyzer plugin that turns custom JSDoc tags
- * on a property or slot into custom fields on its CEM entries.
- *
- * The analyzer (v0.11.0) drops JSDoc tags it does not recognize. Plugins built
- * with this helper read their tags from Lit `static get properties()` /
- * `static properties` entries, class field declarations, get/set accessors,
- * and `this.<name> = …` assignments, convert them with `toFields`, and write the result onto the
- * matching field in `members` and, when the field has one, its entry in
- * `attributes`.
- *
- * Slots, CSS parts, and CSS custom properties are each declared with a single tag
- * (`@slot`, `@csspart`, `@cssprop`), so their tags are written inline in the
- * description instead, for example `@slot label - The label. {@category a11y}` or
- * `@csspart link - The link. {@relevantWhen type === 'cta'}`. Inline tags are
- * removed from the entry's CEM description and converted with the same `toFields`.
- *
- * Tag values may be written with or without a leading colon (`@category a11y`
- * or `@category: a11y`). Fields are applied in the module link phase, before the
- * analyzer applies inheritance, so subclasses carry them too. An optional
- * `packageLinkPhase` runs after inheritance, for checks that need the full set
- * of members.
- *
- * @param {object} options - Plugin options.
- * @param {string} options.name - Plugin name, also used to prefix warnings.
- * @param {string[]} options.tagNames - JSDoc tag names to collect, without the `@`.
- * @param {(tags: Array<{ name: string, text: string }>, context: { warn: (message: string) => void }) => Record<string, unknown>} options.toFields
- *   Converts the collected tags into the fields to add. Return an empty object to add nothing.
- * @param {(context: { customElementsManifest: object, warn: (message: string) => void }) => void} [options.packageLinkPhase]
- *   Optional hook that runs after inheritance has been applied.
- * @returns {{ name: string, analyzePhase: Function, moduleLinkPhase: Function, packageLinkPhase?: Function }}
- *   A Custom Elements Manifest analyzer plugin.
- */
-/**
  * The declaration entries whose tags are written inline in their description,
  * with the label used for each kind in warnings.
  */
@@ -41,6 +8,45 @@ export const INLINE_TAG_ENTRIES = [
   { key: "cssProperties", label: "CSS custom property" },
 ];
 
+/**
+ * Creates a Custom Elements Manifest analyzer plugin that turns custom JSDoc
+ * tags on a property, slot, CSS part, or CSS custom property into custom fields
+ * on its CEM entries.
+ *
+ * The analyzer (v0.11.0) drops JSDoc tags it doesn't recognize. Plugins built
+ * with this helper read their tags from Lit `static get properties()` /
+ * `static properties` entries, class field declarations, get/set accessors,
+ * and `this.<name> = …` assignments, convert them with `toFields`, and write
+ * the result onto the matching field in `members` and, when the field has one,
+ * its entry in `attributes`.
+ *
+ * Slots, CSS parts, and CSS custom properties each take a single declaring tag
+ * (`@slot`, `@csspart`, `@cssprop`), so you write their tags inline in the
+ * description instead, for example `@slot label - The label. {@category a11y}`
+ * or `@csspart link - The link. {@relevantWhen type === 'cta'}`. The plugin
+ * removes inline tags from the entry's CEM description and converts them with
+ * the same `toFields`.
+ *
+ * You can write tag values with or without a leading colon (`@category a11y`
+ * or `@category: a11y`). The plugin applies fields in the module link phase,
+ * before the analyzer applies inheritance, so subclasses carry them too. An
+ * optional `packageLinkPhase` runs after inheritance, for checks that need the
+ * full set of members.
+ *
+ * The generated `docs/api.md` only shows the fields listed in `TAG_COLUMNS` in
+ * `src/scripts/docs/docs-generator.ts`. When you add a tag plugin, add its
+ * fields there too.
+ *
+ * @param {object} options - The plugin options.
+ * @param {string} options.name - The plugin name, also used to prefix warnings.
+ * @param {string[]} options.tagNames - The JSDoc tag names to collect, without the `@`.
+ * @param {(tags: Array<{ name: string, text: string }>, context: { warn: (message: string) => void }) => Record<string, unknown>} options.toFields
+ *   A function that converts the collected tags into the fields to add. Return an empty object to add nothing.
+ * @param {(context: { customElementsManifest: object, warn: (message: string) => void }) => void} [options.packageLinkPhase]
+ *   An optional hook that runs after the analyzer applies inheritance.
+ * @returns {{ name: string, analyzePhase: Function, moduleLinkPhase: Function, packageLinkPhase?: Function }}
+ *   A Custom Elements Manifest analyzer plugin.
+ */
 export function createPropertyTagPlugin({
   name,
   tagNames,

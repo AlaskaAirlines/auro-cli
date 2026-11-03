@@ -25,7 +25,57 @@ interface MergedTableData {
   type: string;
   default: string;
   description: string;
+  tags: TagFieldEntry;
 }
+
+/** A CEM entry as read by the tag columns. */
+type TagFieldEntry = Record<string, unknown>;
+
+const isFiniteNumber = (value: unknown): value is number =>
+  typeof value === "number" && Number.isFinite(value);
+
+/**
+ * The custom CEM fields that the tag plugins in `src/scripts/cem` add to
+ * properties, attributes, slots, CSS shadow parts, and CSS custom properties,
+ * and the column that shows each one. The generator only adds a column to a
+ * table when at least one of its rows has a value. List every field a tag
+ * plugin adds here, or it won't appear in `api.md`.
+ */
+const TAG_COLUMNS: { header: string; render: (entry: TagFieldEntry) => string }[] = [
+  {
+    header: "Category",
+    render: ({ category }) => (typeof category === "string" ? category : ""),
+  },
+  {
+    header: "Required",
+    render: ({ requiredWhen }) => {
+      if (typeof requiredWhen !== "string" || !requiredWhen) {
+        return "";
+      }
+      return requiredWhen === "always" ? "Yes" : `\`${requiredWhen}\``;
+    },
+  },
+  {
+    header: "Relevant when",
+    render: ({ relevantWhen }) =>
+      typeof relevantWhen === "string" && relevantWhen ? `\`${relevantWhen}\`` : "",
+  },
+  {
+    header: "Range",
+    render: ({ minimum, maximum }) => {
+      if (isFiniteNumber(minimum) && isFiniteNumber(maximum)) {
+        return `${minimum}–${maximum}`;
+      }
+      if (isFiniteNumber(minimum)) {
+        return `≥ ${minimum}`;
+      }
+      if (isFiniteNumber(maximum)) {
+        return `≤ ${maximum}`;
+      }
+      return "";
+    },
+  },
+];
 
 export default class Docs {
   private static manifest: Package = { schemaVersion: "1.0.0", readme: "", modules: [] };
@@ -168,6 +218,7 @@ export default class Docs {
       "Slots",
       [["name", "(default)"], "description"],
       element.slots as unknown as Record<string, unknown>[],
+      true,
     );
     if (slotsTable) {
       sections.push(slotsTable.trim());
@@ -178,6 +229,7 @@ export default class Docs {
       "CSS shadow parts",
       ["name", "description"],
       element.cssParts as unknown as Record<string, unknown>[],
+      true,
     );
     if (cssPartsTable) {
       sections.push(cssPartsTable.trim());
@@ -188,6 +240,7 @@ export default class Docs {
       "CSS custom properties",
       ["name", "description"],
       element.cssProperties as unknown as Record<string, unknown>[],
+      true,
     );
     if (cssPropertiesTable) {
       sections.push(cssPropertiesTable.trim());
@@ -201,7 +254,7 @@ export default class Docs {
    */
   static renderPropertiesAttributesTable(element: CustomElementDeclaration): string {
     
-    const { getType, escapeMarkdown } = Docs;
+    const { getType, escapeMarkdown, addTagColumns } = Docs;
     
     const properties = element.members?.filter(
       (m: ClassMember) => 
@@ -222,6 +275,13 @@ export default class Docs {
         const returnType = 'return' in prop && prop.return ? getType(prop.return) : "";
         const displayType = returnType || propType;
         
+        // The tag plugins write each field to both the property and its attribute; the property wins.
+        const attribute = attributes.find(
+          (attr: Attribute) =>
+            attr.fieldName === prop.name ||
+            ('attribute' in prop && attr.name === prop.attribute),
+        );
+
         mergedData.push({
           name: prop.name,
           properties: prop.name,
@@ -230,6 +290,7 @@ export default class Docs {
           type: displayType,
           default: ('default' in prop ? prop.default as string : '') || "",
           description: prop.description || "",
+          tags: { ...attribute, ...prop },
         });
       }
       processedNames.add(prop.name);
@@ -249,6 +310,7 @@ export default class Docs {
           type: getType(attr) || "",
           default: attr.default || "",
           description: attr.description || "",
+          tags: attr as unknown as TagFieldEntry,
         });
       }
     });
@@ -280,7 +342,9 @@ export default class Docs {
       ];
     });
 
-    const table = markdownTable([headers, ...rows]);
+    const table = markdownTable(
+      addTagColumns(headers, rows, mergedData.map((item: MergedTableData) => item.tags)),
+    );
 
     return `### Properties and attributes
 
@@ -312,14 +376,16 @@ ${table}
 
   /**
    * Renders a markdown table of data, plucking the given properties from each item in `data`.
+   * With `tagColumns`, also shows the tag plugin fields (see `addTagColumns`).
    */
   static renderTable(
     name: string, 
     properties: (string | string[])[], 
-    data?: Array<Record<string, unknown>>
+    data?: Array<Record<string, unknown>>,
+    tagColumns = false,
   ): string {
 
-    const { escapeMarkdown, get, capitalize } = Docs;
+    const { escapeMarkdown, get, capitalize, addTagColumns } = Docs;
 
     if (data === undefined || data.length === 0) {
       return "";
@@ -348,12 +414,55 @@ ${table}
           })
       );
 
-    const table = markdownTable([headers, ...rows]);
+    const table = markdownTable(
+      tagColumns ? addTagColumns(headers, rows, filteredData) : [headers, ...rows],
+    );
 
     return `### ${name}
 
 ${table}
 `;
+  }
+
+  /**
+   * Adds a column before the last (Description) column for each `TAG_COLUMNS` field
+   * that at least one entry has, then groups the rows by `category`, in the order each
+   * category first appears, with uncategorized rows last. `rows[i]` is the row for `entries[i]`.
+   * Returns the header row followed by the body rows.
+   */
+  static addTagColumns(headers: string[], rows: string[][], entries: TagFieldEntry[]): string[][] {
+    const columns = TAG_COLUMNS
+      .map(({ header, render }) => ({
+        header,
+        cells: entries.map((entry: TagFieldEntry) => Docs.escapeMarkdown(render(entry))),
+      }))
+      .filter(({ cells }) => cells.some(Boolean));
+
+    const insertAt = headers.length - 1;
+    const withColumns = (row: string[], cells: string[]): string[] => [
+      ...row.slice(0, insertAt),
+      ...cells,
+      ...row.slice(insertAt),
+    ];
+
+    const categories = entries.map(({ category }) =>
+      typeof category === "string" && category ? category : undefined,
+    );
+    const order = [...new Set(categories.filter(Boolean))];
+    const rank = (index: number): number => {
+      const category = categories[index];
+      return category === undefined ? order.length : order.indexOf(category);
+    };
+
+    const body = rows
+      .map((row: string[], index: number) => ({
+        row: withColumns(row, columns.map(({ cells }) => cells[index] ?? "")),
+        rank: rank(index),
+      }))
+      .sort((a, b) => a.rank - b.rank)
+      .map(({ row }) => row);
+
+    return [withColumns(headers, columns.map(({ header }) => header)), ...body];
   }
 
   /**
