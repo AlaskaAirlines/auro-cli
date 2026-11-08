@@ -82,6 +82,20 @@ test("in watch mode a docs failure still starts the server and watcher", async (
   assert.deepEqual(ran, ["docs", "serve", "watchDocs"]);
 });
 
+test("passes --manifest to the api step", async (t) => {
+  mockExit(t);
+  quiet(t);
+  const { steps } = stubSteps();
+  const received: unknown[] = [];
+  steps.api = async (options) => {
+    received.push(options);
+  };
+
+  await runDocs({ api: true, manifest: "../../custom-elements.json" }, steps);
+
+  assert.deepEqual(received, [{ manifestPath: "../../custom-elements.json" }]);
+});
+
 test("exits 1 when an earlier step fails, even in watch mode", async (t) => {
   mockExit(t);
   quiet(t);
