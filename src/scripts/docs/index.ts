@@ -24,11 +24,16 @@ export async function cem() {
   }
 }
 
-export async function api() {
+/**
+ * Generate `docs/api.md` from a Custom Elements Manifest.
+ * @param options - Generation options.
+ * @param options.manifestPath - The manifest to read. Defaults to `./custom-elements.json`.
+ */
+export async function api({ manifestPath }: { manifestPath?: string } = {}) {
   const docsSpinner = ora("Generating API md file...").start();
 
   try {
-    await Docs.generate();
+    await Docs.generate(manifestPath ? { manifestPath } : {});
     docsSpinner.succeed("API md file generated successfully!");
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);

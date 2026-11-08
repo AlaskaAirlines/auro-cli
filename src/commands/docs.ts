@@ -8,6 +8,10 @@ let docsCommand = program
   .description("Generate API documentation")
   .option("-c, --cem", "Generate Custom Elements Manifest (CEM) file", false)
   .option("-a, --api", "Creates api md file from CEM", false)
+  .option(
+    "--manifest <path>",
+    "Path to the custom-elements.json that --api reads (default: ./custom-elements.json). In a monorepo, point it at the root manifest; only this package's elements are documented",
+  )
   .option("-w, --watch", "Watch for changes and rebuild docs", false)
   .option("-r, --readme-template <url>", "URL to the README template file")
   .option("--skip-readme", "Skip README.md processing", false)
@@ -18,6 +22,7 @@ let docsCommand = program
 export interface DocsOptions {
   cem?: boolean;
   api?: boolean;
+  manifest?: string;
   watch?: boolean;
   serve?: boolean;
   readmeTemplate?: string;
@@ -52,7 +57,7 @@ export async function runDocs(
     }
 
     if (options.api) {
-      await steps.api();
+      await steps.api({ manifestPath: options.manifest });
     }
 
     try {
