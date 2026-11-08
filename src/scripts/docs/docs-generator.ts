@@ -103,7 +103,20 @@ export default class Docs {
       }
     }
 
+    const packageDir = process.cwd();
+    const isShared = Docs.isSharedManifest(manifestPath, packageDir);
+
+    if (isShared) {
+      Docs.manifest = Docs.scopeManifest(Docs.manifest, manifestPath, packageDir);
+    }
+
     const elements = getElements();
+
+    if (isShared && elements.length === 0) {
+      throw new Error(
+        `${manifestPath} has no custom elements under ${packageDir}. Check the path, and that the manifest was generated after this package's source changed.`,
+      );
+    }
 
     // Create docs directory if it doesn't exist
     const docsDir = outDir;
@@ -116,6 +129,87 @@ export default class Docs {
     const apiFilename = path.join(docsDir, outFile);
     fs.writeFileSync(apiFilename, apiMarkdown);
     console.log(`Generated combined API documentation at ${apiFilename}`);
+  }
+
+  /**
+   * Checks whether the manifest lives outside `packageDir`, as a monorepo's
+   * root `custom-elements.json` does, so it can describe more than this package.
+   *
+   * @param manifestPath - The manifest path, relative to `packageDir` or absolute.
+   * @param packageDir - The package folder whose `api.md` is being generated.
+   * @returns `true` when the manifest's folder isn't `packageDir`.
+   */
+  static isSharedManifest(manifestPath: string, packageDir: string): boolean {
+    return path.dirname(path.resolve(packageDir, manifestPath)) !== path.resolve(packageDir);
+  }
+
+  /**
+   * Narrows a manifest that covers several packages, such as a monorepo's root
+   * `custom-elements.json`, to the package in `packageDir`.
+   *
+   * It keeps only the modules whose `path` (relative to the manifest's folder)
+   * is inside `packageDir`. When `packageDir` has `scripts/wca/auro-*.js` entry
+   * points, it also keeps only the custom elements whose tag names match those
+   * files, so internal sub-elements, such as a datepicker's calendar cells, stay
+   * out of `api.md`. Declarations that aren't custom elements are left as they are.
+   *
+   * @param manifest - The parsed manifest.
+   * @param manifestPath - The manifest path, relative to `packageDir` or absolute.
+   * @param packageDir - The package folder whose `api.md` is being generated.
+   * @returns A copy of the manifest with only this package's modules and elements.
+   * @throws If the manifest isn't in `packageDir` or one of its parent folders.
+   */
+  static scopeManifest(manifest: Package, manifestPath: string, packageDir: string): Package {
+    const manifestDir = path.dirname(path.resolve(packageDir, manifestPath));
+    const relativeDir = path.relative(manifestDir, path.resolve(packageDir));
+
+    if (relativeDir === "") {
+      return manifest;
+    }
+
+    if (relativeDir.startsWith("..") || path.isAbsolute(relativeDir)) {
+      throw new Error(
+        `${manifestPath} isn't in ${packageDir} or one of its parent folders, so it can't describe this package.`,
+      );
+    }
+
+    const prefix = `${relativeDir.split(path.sep).join("/")}/`;
+    const wcaTags = Docs.wcaTagNames(packageDir);
+    const isDocumented = (dec: Declaration): boolean =>
+      wcaTags.size === 0 ||
+      !("customElement" in dec && dec.customElement === true) ||
+      ("tagName" in dec && typeof dec.tagName === "string" && wcaTags.has(dec.tagName));
+
+    const modules = manifest.modules
+      .filter((module) => (module.path ?? "").replace(/^\.\//u, "").startsWith(prefix))
+      .map((module) => ({
+        ...module,
+        declarations: module.declarations?.filter(isDocumented),
+      }));
+
+    return { ...manifest, modules };
+  }
+
+  /**
+   * Lists the tag names that have a WCA entry point in `packageDir`, taken from
+   * the `scripts/wca/auro-*.js` file names (`auro-select.js` → `auro-select`).
+   *
+   * @param packageDir - The package folder to look in.
+   * @returns The tag names, or an empty set when there's no `scripts/wca` folder.
+   */
+  static wcaTagNames(packageDir: string): Set<string> {
+    const wcaDir = path.join(packageDir, "scripts", "wca");
+
+    if (!fs.existsSync(wcaDir)) {
+      return new Set();
+    }
+
+    return new Set(
+      fs
+        .readdirSync(wcaDir)
+        .filter((file) => /^auro-.+\.js$/u.test(file))
+        .map((file) => file.slice(0, -".js".length)),
+    );
   }
 
   /**
