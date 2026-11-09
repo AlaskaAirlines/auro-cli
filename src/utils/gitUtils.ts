@@ -46,8 +46,15 @@ export class Git {
       // Use the provided branch parameter, or fall back to current branch if not specified
       let branch = sourceBranch;
       if (!branch) {
-        const currentBranch = await git.branchLocal();
-        branch = currentBranch.current;
+        // In GitHub Actions PR context, GITHUB_HEAD_REF contains the actual PR branch name.
+        // branchLocal().current returns "pull/<n>/merge" in detached HEAD state, which is
+        // not a valid remote-tracking ref (it maps to refs/remotes/pull/<n>/merge, not origin/).
+        if (process.env.GITHUB_ACTIONS && process.env.GITHUB_HEAD_REF) {
+          branch = process.env.GITHUB_HEAD_REF;
+        } else {
+          const currentBranch = await git.branchLocal();
+          branch = currentBranch.current;
+        }
       }
 
       // ---- Get target branch (main) and PR commits ----
